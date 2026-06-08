@@ -6,6 +6,70 @@ function cleanText(value?: string | null) {
   return (value ?? "").trim();
 }
 
+function titleCaseSlug(value: string) {
+  return decodeURIComponent(value)
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toLocaleUpperCase());
+}
+
+function lastUrlSegment(value?: string | null) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    const parts = url.pathname.split("/").filter(Boolean);
+    return parts.at(-1) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function collectTitleCandidates(item: SeriesCatalog) {
+  const raw = item as SeriesCatalog & Record<string, unknown>;
+  const candidates: unknown[] = [
+    item.display_title,
+    raw.title,
+    raw.name,
+    raw.english_title,
+    raw.title_english,
+    raw.preferred_title,
+    raw.main_title,
+  ];
+
+  const titles = raw.titles;
+  if (Array.isArray(titles)) candidates.push(...titles);
+  else if (titles && typeof titles === "object") candidates.push(...Object.values(titles));
+
+  const aliases = raw.aliases ?? raw.alternative_titles ?? raw.synonyms;
+  if (Array.isArray(aliases)) candidates.push(...aliases);
+  else if (aliases && typeof aliases === "object") candidates.push(...Object.values(aliases));
+
+  const animePlanetSlug = item.source?.animeplanet?.id ?? lastUrlSegment(item.source?.animeplanet?.url);
+  if (animePlanetSlug) candidates.push(titleCaseSlug(animePlanetSlug));
+
+  const readSlug = lastUrlSegment(item.links?.read_en);
+  if (readSlug && !/^(info|list|detail|series)$/i.test(readSlug)) candidates.push(titleCaseSlug(readSlug));
+
+  return candidates
+    .flatMap((candidate) => {
+      if (typeof candidate === "string") return [candidate];
+      if (candidate && typeof candidate === "object") return Object.values(candidate).filter((value): value is string => typeof value === "string");
+      return [];
+    })
+    .map(cleanText)
+    .filter((candidate) => candidate && !PLACEHOLDER_TITLE.test(candidate));
+}
+
+export function resolveDisplayTitle(item: SeriesCatalog, fallback?: SeriesCatalog) {
+  const title =
+    collectTitleCandidates(item)[0] ??
+    (fallback ? collectTitleCandidates(fallback)[0] : null) ??
+    cleanText(item.display_title);
+  return title || "Unknown Title";
+}
+
 function normalizedCover(value?: string | null) {
   if (!value) return "";
   try {
@@ -66,9 +130,7 @@ function mergeRecord(left: SeriesCatalog, right: SeriesCatalog) {
       ...(left.merged_ids ?? []),
       ...(right.merged_ids ?? []),
     ]),
-    display_title: PLACEHOLDER_TITLE.test(cleanText(preferred.display_title))
-      ? secondary.display_title
-      : preferred.display_title,
+    display_title: resolveDisplayTitle(preferred, secondary),
     stats: {
       popularity: newestNumber(left.stats?.popularity, right.stats?.popularity, rightIsNewer),
       favourites: newestNumber(left.stats?.favourites, right.stats?.favourites, rightIsNewer),
@@ -107,6 +169,10 @@ export function normalizeCatalog(
   catalog: SeriesCatalog[],
   history: HistoryMap,
 ): { catalog: SeriesCatalog[]; history: HistoryMap } {
+  const globalHistoryFirstDate =
+    Object.values(history)
+      .flatMap((entries) => entries.map((entry) => entry.d))
+      .sort()[0] ?? null;
   const parent = new Map<number, number>();
   const find = (id: number): number => {
     const value = parent.get(id) ?? id;
@@ -147,12 +213,13 @@ export function normalizeCatalog(
     const merged = records.reduce(mergeRecord);
     const ids = unique(records.flatMap((record) => [record.id, ...(record.merged_ids ?? [])]));
     const entries = mergeHistoryEntries(ids.map((id) => history[String(id)] ?? []));
-    const firstSeen =
-      entries[0]?.d ??
+    const explicitFirstSeen =
       merged.first_seen_at?.slice(0, 10) ??
       merged.created_at?.slice(0, 10) ??
       merged.added_at?.slice(0, 10) ??
       null;
+    const historyFirstSeen = entries[0]?.d && entries[0].d !== globalHistoryFirstDate ? entries[0].d : null;
+    const firstSeen = explicitFirstSeen ?? historyFirstSeen;
     const published = { ...(merged.published ?? {}) };
     const hasActualStartDate = Boolean(published.start_date && !published.start_date_is_estimated);
     if (!hasActualStartDate) {
@@ -163,6 +230,7 @@ export function normalizeCatalog(
     const canonical = {
       ...merged,
       merged_ids: ids,
+      display_title: resolveDisplayTitle(merged),
       first_seen_at: firstSeen,
       published,
       year: published.start_date ? Number(published.start_date.slice(0, 4)) : merged.year,

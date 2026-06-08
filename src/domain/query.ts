@@ -76,6 +76,11 @@ function expandTagIds(ids: number[], tags: TagNode[]) {
   return [...expanded];
 }
 
+function dateTimeValue(value?: string | null) {
+  const parsed = value ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : -Infinity;
+}
+
 export function tagRoot(tag: TagNode) {
   return tag.path?.split(" > ")[0] || "Other";
 }
@@ -272,6 +277,9 @@ export function runFeedQuery(args: {
       }
       if (av !== bv) return av > bv ? -1 : 1;
     }
+    const updatedDiff = dateTimeValue(b.last_updated_at) - dateTimeValue(a.last_updated_at);
+    if (updatedDiff !== 0) return updatedDiff;
+    if (a.id !== b.id) return b.id - a.id;
     return a.display_title.localeCompare(b.display_title);
   });
 

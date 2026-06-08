@@ -22,6 +22,9 @@ const base: SeriesCatalog = {
 };
 
 const history: HistoryMap = {
+  "99": [
+    { d: "2026-05-15", p: 50, f: 5, s: 70, r: 10, rp: 40, pp: 20, ds: 25, dp: 40 },
+  ],
   "1": [
     { d: "2026-05-20", p: 70, f: 7, s: 70, r: 10, rp: 40, pp: 20, ds: 30, dp: 45 },
   ],
@@ -51,6 +54,16 @@ describe("catalog normalization", () => {
     expect(normalized.catalog[0].year).toBe(2026);
   });
 
+  it("does not turn the global history start into every old title release date", () => {
+    const oldHistory: HistoryMap = {
+      "1": [
+        { d: "2026-05-15", p: 70, f: 7, s: 70, r: 10, rp: 40, pp: 20, ds: 30, dp: 45 },
+      ],
+    };
+    const normalized = normalizeCatalog([base], oldHistory);
+    expect(normalized.catalog[0].published?.start_date).toBeNull();
+  });
+
   it("drops estimated release dates when no first-seen date exists", () => {
     const normalized = normalizeCatalog([{ ...base, id: 5 }], {});
     expect(normalized.catalog[0].published?.start_date).toBeNull();
@@ -66,6 +79,22 @@ describe("catalog normalization", () => {
     const normalized = normalizeCatalog([actual], {});
     expect(normalized.catalog[0].published?.start_date).toBe("2021-08-05");
     expect(normalized.catalog[0].year).toBe(2021);
+  });
+
+  it("derives a usable title from source slugs when the backend title is a placeholder", () => {
+    const normalized = normalizeCatalog([
+      {
+        ...base,
+        id: 7,
+        display_title: "Unknown Title",
+        source: {
+          anilist: null,
+          mangaupdates: null,
+          animeplanet: { id: "the-demonic-warrior", rating: null, url: "https://www.anime-planet.com/manga/the-demonic-warrior" },
+        },
+      },
+    ], {});
+    expect(normalized.catalog[0].display_title).toBe("The Demonic Warrior");
   });
 
   it("formats years without thousands separators and derives current growth", () => {

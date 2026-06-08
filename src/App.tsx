@@ -37,9 +37,10 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT } from "./domain/defaults";
-import { isFutureDate } from "./domain/dates";
+import { isFutureDate, resolveRollingWindow } from "./domain/dates";
 import { buildSensitiveTagGroups, isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
-import { formatMetricValue, METRIC_DEFINITIONS, metricDefinition, metricValue } from "./domain/metrics";
+import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition, metricValue } from "./domain/metrics";
+import { resolveDisplayTitle } from "./domain/catalog";
 import { decodeSharePayload, exportCsv, makeShareUrl, type SharePayload } from "./domain/share";
 import type {
   AppSettings,
@@ -68,6 +69,7 @@ const NAV_ITEMS = [
 
 const SORT_OPTIONS: MetricId[] = METRIC_DEFINITIONS.map((definition) => definition.id);
 const RANGE_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.filterable);
+const resetPageScroll = () => window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 
@@ -233,6 +235,7 @@ function HomePage() {
     setSwipeOffset(-direction * width);
     window.setTimeout(() => {
       store.setActiveFeedId(store.feeds[nextIndex].id);
+      resetPageScroll();
       setSwipeAnimating(false);
       setSwipeOffset(direction * width);
       requestAnimationFrame(() => {
@@ -344,7 +347,10 @@ function FeedTabs() {
           key={feed.id}
           ref={store.activeFeedId === feed.id ? activeRef : null}
           className={`feed-tab ${store.activeFeedId === feed.id ? "active" : ""}`}
-          onClick={() => store.setActiveFeedId(feed.id)}
+          onClick={() => {
+            store.setActiveFeedId(feed.id);
+            resetPageScroll();
+          }}
         >
           <span className="feed-tab-title">{feed.name}</span>
         </button>
@@ -479,6 +485,7 @@ function TitleCollection({
     sessionStorage.setItem(countKey, String(visibleCount));
   }, [countKey, visibleCount]);
   const visibleItems = items.slice(0, visibleCount);
+  const metricWindow = useMemo(() => resolveRollingWindow(feed.filters.rolling, latestDate), [feed.filters.rolling, latestDate]);
 
   if (items.length === 0) {
     return (
@@ -503,6 +510,7 @@ function TitleCollection({
             view={feed.view}
             history={history}
             latestDate={latestDate}
+            metricWindow={metricWindow}
           />
         ))}
       </div>
@@ -573,12 +581,14 @@ function TitleCard({
   view,
   history,
   latestDate,
+  metricWindow,
 }: {
   series: SeriesCatalog;
   rank: number;
   view: FeedViewSettings;
   history: HistoryMap;
   latestDate?: string | null;
+  metricWindow?: { from: string; to: string } | null;
 }) {
   return (
     <div className="title-card-wrap">
@@ -587,7 +597,7 @@ function TitleCard({
           <Cover series={series} />
           {view.visible.rank && <span className="rank">{rank}</span>}
           <div className="poster-metrics">
-            <TitleMetrics series={series} view={view} compact history={history} latestDate={latestDate} />
+            <TitleMetrics series={series} view={view} compact history={history} latestDate={latestDate} metricWindow={metricWindow} />
           </div>
         </div>
         <div className="title-meta">
@@ -598,22 +608,52 @@ function TitleCard({
   );
 }
 
+function isGrowthMetric(metric: MetricId) {
+  return metric.includes("Growth") || metric.includes("Delta");
+}
+
+function formatRawMetricValue(metric: MetricId, value: number) {
+  if (!Number.isFinite(value)) return "n/a";
+  if (metric === "fanFavouriteRaw" || metric === "fanFavouriteDelta") return `${value.toFixed(1)}%`;
+  if (metric.includes("Percentile") || metric.includes("Percent")) return `${value.toFixed(0)}%`;
+  if (metric === "meanScore" || metric === "fanFavouriteDiscoveryScore" || metric === "fanFavouriteDiscoveryPercentile") {
+    return value.toFixed(metric === "meanScore" ? 0 : 1);
+  }
+  return value.toLocaleString();
+}
+
+function formatFeedMetricValue(
+  series: SeriesCatalog,
+  metric: MetricId,
+  history: HistoryMap,
+  latestDate?: string | null,
+  metricWindow?: { from: string; to: string } | null,
+) {
+  if (metricWindow && isGrowthMetric(metric)) {
+    const value = historyDeltaForWindow(series.id, metric, history, metricWindow.from, metricWindow.to);
+    if (value != null) return formatRawMetricValue(metric, value);
+  }
+  return formatMetricValue(series, metric, history, latestDate);
+}
+
 function TitleMetrics({
   series,
   view,
   compact = false,
   history,
   latestDate,
+  metricWindow,
 }: {
   series: SeriesCatalog;
   view: FeedViewSettings;
   compact?: boolean;
   history: HistoryMap;
   latestDate?: string | null;
+  metricWindow?: { from: string; to: string } | null;
 }) {
   const metricSlots: MetricId[] = (view.metricSlots?.length ? view.metricSlots : (["fanFavouriteRaw", "popularity", "favourites"] as MetricId[])).slice(0, 3);
   const values = metricSlots
-    .map((metric) => ({ metric, value: formatMetricValue(series, metric, history, latestDate) }))
+    .map((metric) => ({ metric, value: formatFeedMetricValue(series, metric, history, latestDate, metricWindow) }))
     .filter((item) => item.value !== "n/a");
   return (
     <div className={`metrics ${compact ? "compact-metrics" : ""}`}>
@@ -632,18 +672,40 @@ function FeedsPage() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
   const [dragGhost, setDragGhost] = useState<{ feed: Feed; covers: SeriesCatalog[]; x: number; y: number } | null>(null);
+  const [coverMap, setCoverMap] = useState<Map<string, SeriesCatalog[]>>(new Map());
+  const [coversLoading, setCoversLoading] = useState(true);
 
-  const feedItems = (feed: Feed) =>
-    runFeedQuery({
-      feed,
-      series: store.catalog,
-      tags: store.tags,
-      history: store.history,
-      labels: store.labels,
-      settings: store.settings,
-      metaHistoryFirst: store.syncMeta?.historyFirstDate,
-      metaHistoryLast: store.syncMeta?.historyLastDate,
-    }).items;
+  useEffect(() => {
+    let cancelled = false;
+    setCoversLoading(true);
+    const handle = window.setTimeout(() => {
+      const next = new Map<string, SeriesCatalog[]>();
+      for (const feed of store.feeds) {
+        next.set(
+          feed.id,
+          runFeedQuery({
+            feed,
+            series: store.catalog,
+            tags: store.tags,
+            history: store.history,
+            labels: store.labels,
+            settings: store.settings,
+            metaHistoryFirst: store.syncMeta?.historyFirstDate,
+            metaHistoryLast: store.syncMeta?.historyLastDate,
+          }).items.slice(0, 4),
+        );
+      }
+      if (!cancelled) {
+        setCoverMap(next);
+        setCoversLoading(false);
+      }
+    }, 24);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [store.catalog, store.feeds, store.history, store.labels, store.settings, store.syncMeta, store.tags]);
+
   return (
     <div className="page">
       <div className="row">
@@ -656,15 +718,19 @@ function FeedsPage() {
       <p className="muted tiny">Hold the grip and drag a feed to change Home swipe order.</p>
       <div className="feed-cover-grid">
         {store.feeds.map((feed) => {
-          const covers = feedItems(feed).slice(0, 4);
+          const covers = coverMap.get(feed.id) ?? [];
           return (
             <FeedCoverCard
               key={feed.id}
               feed={feed}
               covers={covers}
+              loading={coversLoading && covers.length === 0}
               dragging={draggingId === feed.id}
               over={overId === feed.id}
-              onOpen={() => store.setActiveFeedId(feed.id)}
+              onOpen={() => {
+                store.setActiveFeedId(feed.id);
+                resetPageScroll();
+              }}
               onEdit={() => setEditorFeed(feed)}
               onDelete={() => store.deleteFeed(feed.id)}
               onDragStart={(event) => {
@@ -715,6 +781,7 @@ function FeedsPage() {
 function FeedCoverCard({
   feed,
   covers,
+  loading,
   dragging,
   over,
   onOpen,
@@ -726,6 +793,7 @@ function FeedCoverCard({
 }: {
   feed: Feed;
   covers: SeriesCatalog[];
+  loading: boolean;
   dragging: boolean;
   over: boolean;
   onOpen: () => void;
@@ -739,7 +807,7 @@ function FeedCoverCard({
   return (
     <article className={`feed-cover-card ${dragging ? "dragging" : ""} ${over ? "drag-over" : ""}`} data-feed-id={feed.id}>
       <Link className="feed-cover-link" to="/" onClick={onOpen}>
-        <MosaicCover items={covers} title={feed.name} />
+        {loading ? <div className="mosaic-cover mosaic-loading" aria-hidden="true" /> : <MosaicCover items={covers} title={feed.name} />}
         <strong className="feed-card-title">{feed.name}</strong>
         {feed.showDescription && feed.description && <span className="feed-card-description">{feed.description}</span>}
       </Link>
@@ -1820,6 +1888,7 @@ function TitleDetailPage() {
   const series = detail && catalogItem
     ? {
         ...detail,
+        display_title: resolveDisplayTitle(detail, catalogItem),
         stats: catalogItem.stats,
         analytics: catalogItem.analytics,
         source: catalogItem.source ?? detail.source,
@@ -1829,7 +1898,9 @@ function TitleDetailPage() {
         artists: catalogItem.artists?.length ? catalogItem.artists : detail.artists,
         links: { ...(detail.links ?? {}), ...(catalogItem.links ?? {}) },
       }
-    : detail ?? catalogItem;
+    : detail
+      ? { ...detail, display_title: resolveDisplayTitle(detail) }
+      : catalogItem;
   if (!series) {
     return (
       <div className="page">

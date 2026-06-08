@@ -176,6 +176,27 @@ describe("runFeedQuery", () => {
     expect(result.items.map((item) => item.id)).toEqual([3, 2, 1]);
   });
 
+  it("uses update/id fallback instead of alphabetical order when non-AniList sort values are missing", () => {
+    const feed = createFeed("missing non anilist values");
+    feed.filters.sourceMode = "non-anilist";
+    feed.filters.sourceModes = ["non-anilist"];
+    feed.sort = [{ id: "release", metric: "releaseDate", direction: "desc" }];
+    const result = runFeedQuery({
+      feed,
+      series: [
+        { ...baseSeries[2], id: 500, display_title: "Alpha", published: null, last_updated_at: "2026-06-01T00:00:00.000Z" },
+        { ...baseSeries[2], id: 600, display_title: "Zulu", published: null, last_updated_at: "2026-06-08T00:00:00.000Z" },
+      ],
+      tags,
+      history: {},
+      labels: [],
+      settings: { ...DEFAULT_SETTINGS, nonAniListPlacement: "mixed" },
+      metaHistoryFirst: null,
+      metaHistoryLast: null,
+    });
+    expect(result.items.map((item) => item.id)).toEqual([600, 500]);
+  });
+
   it("keeps future release dates inactive for sorting and rolling filters", () => {
     const feed = createFeed("future release");
     feed.filters.sourceMode = "mixed";
