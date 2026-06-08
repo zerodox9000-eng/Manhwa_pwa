@@ -11,7 +11,8 @@ import type {
 import { isDateWithin, resolveRollingWindow } from "./dates";
 import { chapterNumber, historyDeltaForWindow, metricValue } from "./metrics";
 
-const SENSITIVE_MATCH = /\b(Boys Love|Girls Love|Smut|Hentai|Yaoi|Yuri|Shounen Ai|Shoujo Ai|Danmei|Bara)\b/i;
+const SENSITIVE_MATCH =
+  /\b(Boys['’ ]?Love|Girls['’ ]?Love|BL|GL|Smut|Hentai|Yaoi|Yuri|Shounen Ai|Shoujo Ai|Danmei|Bara|Baihe|Tanbi)\b/i;
 
 export function hasAniList(series: SeriesCatalog) {
   return Boolean(

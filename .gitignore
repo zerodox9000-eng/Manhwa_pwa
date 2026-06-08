@@ -14,6 +14,7 @@ test-results
 playwright-report
 qa-detail.png
 *.local
+.codex-remote-attachments/
 
 # Editor directories and files
 .vscode/*

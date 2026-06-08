@@ -1,0 +1,1467 @@
+[
+  {
+    "id": "default-feed-1",
+    "name": "Most ♥️ Series ",
+    "createdAt": "2026-05-25T01:25:29.631Z",
+    "updatedAt": "2026-06-07T05:25:59.305Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "query": "",
+      "includeTagIds": [],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": 500,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": [],
+      "sourceModes": [
+        "anilist"
+      ],
+      "metricRanges": [
+        {
+          "id": "46217025-543d-4362-b5e2-8c6284bbc63b",
+          "metric": "fanFavouriteRaw",
+          "min": 3,
+          "max": null
+        }
+      ]
+    },
+    "sort": [
+      {
+        "id": "bafeff07-f735-4f96-9250-c40c38947ece",
+        "metric": "fanFavouriteRaw",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteRaw"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-2",
+    "name": "Possible Hidden Gems ",
+    "createdAt": "2026-06-03T23:27:24.154Z",
+    "updatedAt": "2026-06-05T11:45:42.402Z",
+    "filters": {
+      "sourceMode": "mixed",
+      "sourceModes": [
+        "anilist",
+        "non-anilist"
+      ],
+      "query": "",
+      "includeTagIds": [],
+      "excludeTagIds": [
+        4,
+        180,
+        10,
+        41
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": 500,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [
+        {
+          "id": "a80edde9-bf88-44f2-aae8-a4d5f81ebd94",
+          "metric": "fanFavouriteRaw",
+          "min": 2,
+          "max": 3
+        }
+      ],
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "761ef101-c890-4f11-aa22-e902849d2481",
+        "metric": "fanFavouriteRaw",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteRaw"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-3",
+    "name": "Before Mainstream ",
+    "createdAt": "2026-06-02T03:38:19.377Z",
+    "updatedAt": "2026-06-05T12:14:56.636Z",
+    "filters": {
+      "sourceMode": "mixed",
+      "sourceModes": [
+        "anilist",
+        "non-anilist"
+      ],
+      "query": "",
+      "includeTagIds": [],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": 100,
+      "maxPopularity": 5000,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [
+        {
+          "id": "0d281578-f392-4e7b-bf3b-c4dbb7e46e1e",
+          "metric": "fanFavouriteRaw",
+          "min": 2,
+          "max": null
+        }
+      ],
+      "dateField": "none",
+      "rolling": {
+        "mode": "last",
+        "amount": 1,
+        "unit": "weeks",
+        "from": "2026-05-17",
+        "to": "2026-05-30"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "d0e12964-9148-4b0b-98ee-cdad4f00a7ea",
+        "metric": "popularityGrowth",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteRaw"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-4",
+    "name": "Discovery ",
+    "createdAt": "2026-05-25T01:03:02.774Z",
+    "updatedAt": "2026-06-05T15:48:26.291Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "query": "",
+      "includeTagIds": [],
+      "excludeTagIds": [
+        4,
+        180,
+        10,
+        41
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": 1000,
+      "maxPopularity": 5000,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "dateField": "none",
+      "rolling": {
+        "mode": "last",
+        "amount": 1,
+        "unit": "weeks",
+        "from": "2026-01-01",
+        "to": "2026-05-25"
+      },
+      "labelIds": [],
+      "sourceModes": [
+        "anilist"
+      ],
+      "metricRanges": [
+        {
+          "id": "d5f303f7-36e6-4c3c-bfdf-8059b708ca68",
+          "metric": "fanFavouriteRaw",
+          "min": 2,
+          "max": null
+        }
+      ]
+    },
+    "sort": [
+      {
+        "id": "1c7661e7-0154-4d46-a255-11d288c82630",
+        "metric": "discoveryPercentileDelta",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "large",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteRaw"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-5",
+    "name": "Trending Mainstream ",
+    "createdAt": "2026-06-01T01:59:18.757Z",
+    "updatedAt": "2026-06-07T06:20:00.289Z",
+    "filters": {
+      "sourceMode": "mixed",
+      "sourceModes": [
+        "anilist",
+        "non-anilist"
+      ],
+      "query": "",
+      "includeTagIds": [],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": 5000,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [
+        {
+          "id": "92b2fa91-6eec-49a0-8a6f-946eeb58c6fe",
+          "metric": "fanFavouriteRaw",
+          "min": 2,
+          "max": null
+        }
+      ],
+      "dateField": "none",
+      "rolling": {
+        "mode": "last",
+        "amount": 1,
+        "unit": "weeks"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "94700ed1-e9dc-46fa-a0dd-52742bb4ec79",
+        "metric": "popularityGrowthPercent",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteRaw"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-6",
+    "name": "Trending Upcoming ",
+    "createdAt": "2026-06-01T01:57:46.036Z",
+    "updatedAt": "2026-06-07T06:07:43.885Z",
+    "filters": {
+      "sourceMode": "mixed",
+      "sourceModes": [
+        "anilist",
+        "non-anilist"
+      ],
+      "query": "",
+      "includeTagIds": [],
+      "excludeTagIds": [
+        4,
+        180,
+        10,
+        41
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": 1000,
+      "maxPopularity": 5000,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [
+        {
+          "id": "5d5475fb-066b-486d-b833-97e173b2fb1e",
+          "metric": "fanFavouriteRaw",
+          "min": 2,
+          "max": null
+        }
+      ],
+      "dateField": "none",
+      "rolling": {
+        "mode": "last",
+        "amount": 1,
+        "unit": "weeks"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "3935d711-92ac-4c1f-b314-c1605b567e08",
+        "metric": "popularityGrowthPercent",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteRaw"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-7",
+    "name": "Trending Underground ",
+    "createdAt": "2026-06-01T02:09:32.946Z",
+    "updatedAt": "2026-06-07T07:50:01.675Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [],
+      "excludeTagIds": [
+        4,
+        180,
+        10,
+        41
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": 500,
+      "maxPopularity": 1000,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [
+        {
+          "id": "d885f80a-9249-4067-bc2d-568f0efaf23b",
+          "metric": "fanFavouriteRaw",
+          "min": 2,
+          "max": null
+        }
+      ],
+      "dateField": "none",
+      "rolling": {
+        "mode": "last",
+        "amount": 1,
+        "unit": "weeks"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "6aa1f7fa-3901-47c8-a0e8-b6e1da9f688d",
+        "metric": "popularityGrowthPercent",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteRaw"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-8",
+    "name": "Trending Unknowns ",
+    "createdAt": "2026-05-25T01:08:11.194Z",
+    "updatedAt": "2026-06-05T12:09:14.963Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "query": "",
+      "includeTagIds": [],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": 500,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "dateField": "none",
+      "rolling": {
+        "mode": "last",
+        "amount": 1,
+        "unit": "weeks",
+        "from": "2026-05-24",
+        "to": "2026-05-30"
+      },
+      "labelIds": [],
+      "sourceModes": [
+        "anilist"
+      ],
+      "metricRanges": []
+    },
+    "sort": [
+      {
+        "id": "626b1955-1884-47f5-be2a-2b50f5d6b028",
+        "metric": "popularityGrowth",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "large",
+      "listDensity": "standard",
+      "metricSlots": [
+        "popularity"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-9",
+    "name": "Recently Completed ",
+    "createdAt": "2026-05-25T04:37:10.872Z",
+    "updatedAt": "2026-06-08T02:55:31.380Z",
+    "filters": {
+      "sourceMode": "mixed",
+      "query": "",
+      "includeTagIds": [],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [
+        "completed"
+      ],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": [],
+      "sourceModes": [
+        "non-anilist",
+        "anilist"
+      ],
+      "metricRanges": []
+    },
+    "sort": [
+      {
+        "id": "772b2802-4ac8-4071-889a-82f2e1cd81d1",
+        "metric": "endDate",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "endDate"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-10",
+    "name": "New ",
+    "createdAt": "2026-06-01T01:35:08.025Z",
+    "updatedAt": "2026-06-08T03:10:31.205Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [],
+      "excludeTagIds": [
+        4,
+        180,
+        10,
+        41
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 1,
+        "unit": "weeks"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "96d7fc84-695e-4bb7-ab1d-42cf5baf6d7a",
+        "metric": "releaseDate",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "releaseDate"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-11",
+    "name": "Non AniList ",
+    "createdAt": "2026-05-31T20:08:47.554Z",
+    "updatedAt": "2026-06-08T02:56:55.011Z",
+    "filters": {
+      "sourceMode": "non-anilist",
+      "sourceModes": [
+        "non-anilist"
+      ],
+      "query": "",
+      "includeTagIds": [],
+      "excludeTagIds": [
+        4,
+        180,
+        10,
+        41
+      ],
+      "tagMatch": "all",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "years"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "86e0b27f-26b0-4807-aed6-76d65b2b983e",
+        "metric": "releaseDate",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "year",
+        "releaseDate"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-12",
+    "name": "Most Fav Unknowns",
+    "createdAt": "2026-06-01T08:36:02.866Z",
+    "updatedAt": "2026-06-05T12:12:19.181Z",
+    "filters": {
+      "sourceMode": "mixed",
+      "sourceModes": [
+        "anilist",
+        "non-anilist"
+      ],
+      "query": "",
+      "includeTagIds": [],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": 500,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "07849e0c-3777-4c40-bf81-284b40298416",
+        "metric": "favourites",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteRaw",
+        "popularity",
+        "favourites"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-13",
+    "name": "Seinen",
+    "createdAt": "2026-05-28T23:50:54.656Z",
+    "updatedAt": "2026-05-31T20:28:48.102Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "query": "",
+      "includeTagIds": [
+        8
+      ],
+      "excludeTagIds": [
+        40,
+        4,
+        180,
+        41,
+        331,
+        1936,
+        1937,
+        1938,
+        1939,
+        38,
+        43
+      ],
+      "tagMatch": "all",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": 500,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": [],
+      "sourceModes": [
+        "anilist"
+      ],
+      "metricRanges": []
+    },
+    "sort": [
+      {
+        "id": "e36ddc03-6b4f-48bb-ae8b-cc93aa1a6f7f",
+        "metric": "fanRatioPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteRaw"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": true,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-14",
+    "name": "Shounen",
+    "createdAt": "2026-05-29T05:35:12.477Z",
+    "updatedAt": "2026-05-31T20:30:22.167Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "query": "",
+      "includeTagIds": [
+        38
+      ],
+      "excludeTagIds": [
+        8,
+        43,
+        40,
+        4,
+        180,
+        41,
+        10,
+        331,
+        1936,
+        1937,
+        1938,
+        1939
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": 500,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": [],
+      "sourceModes": [
+        "anilist"
+      ],
+      "metricRanges": []
+    },
+    "sort": [
+      {
+        "id": "65495ba4-0747-42a6-bae5-9952ab7589b5",
+        "metric": "fanRatioPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteRaw"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-15",
+    "name": "Josei",
+    "createdAt": "2026-05-29T05:57:04.524Z",
+    "updatedAt": "2026-05-31T20:30:34.347Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "query": "",
+      "includeTagIds": [
+        43
+      ],
+      "excludeTagIds": [
+        8,
+        38,
+        40,
+        4,
+        180,
+        41,
+        10,
+        331,
+        1936,
+        1937,
+        1938,
+        1939
+      ],
+      "tagMatch": "all",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": 500,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": [],
+      "sourceModes": [
+        "anilist"
+      ],
+      "metricRanges": []
+    },
+    "sort": [
+      {
+        "id": "b2f131ff-da06-4876-8682-20263e1f516e",
+        "metric": "fanRatioPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteRaw"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  },
+  {
+    "id": "default-feed-16",
+    "name": "Shoujo",
+    "createdAt": "2026-05-29T05:31:24.097Z",
+    "updatedAt": "2026-05-31T20:30:00.156Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "query": "",
+      "includeTagIds": [
+        40
+      ],
+      "excludeTagIds": [
+        8,
+        38,
+        43,
+        4,
+        180,
+        41,
+        10,
+        331,
+        1936,
+        1937,
+        1938,
+        1939
+      ],
+      "tagMatch": "all",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": 500,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": [],
+      "sourceModes": [
+        "anilist"
+      ],
+      "metricRanges": []
+    },
+    "sort": [
+      {
+        "id": "e85f3779-5b0c-48db-8a61-cceaa3e07115",
+        "metric": "fanRatioPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 3,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteRaw"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": false,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": false,
+        "favourites": false,
+        "meanScore": false,
+        "fanFavouriteRatio": true,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "description": "",
+    "showDescription": false
+  }
+]

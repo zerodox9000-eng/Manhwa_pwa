@@ -158,7 +158,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     popularityGrowth: "Popularity Growth",
     favouritesGrowth: "Favourites Growth",
   },
-  bottomNavItems: ["home", "feeds", "search", "recommendations", "folders", "settings"],
+  bottomNavItems: ["home", "feeds", "search", "recommendations", "settings"],
   controlPlacement: "toolbar",
   restoreLastSession: true,
   nonAniListPlacement: "bottom",
@@ -172,6 +172,8 @@ export function createFeed(name = "New Feed"): Feed {
   return {
     id: crypto.randomUUID(),
     name,
+    description: "",
+    showDescription: false,
     createdAt: now,
     updatedAt: now,
     filters: {

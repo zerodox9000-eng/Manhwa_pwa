@@ -1,19 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Manhwa Lib icon">
-  <defs>
-    <linearGradient id="paint" x1="88" y1="64" x2="428" y2="456" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#ff0a73"/>
-      <stop offset=".54" stop-color="#6d5dfc"/>
-      <stop offset="1" stop-color="#16d7b1"/>
-    </linearGradient>
-    <filter id="shadow" x="32" y="32" width="448" height="448" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#000" flood-opacity=".35"/>
-    </filter>
-  </defs>
-  <rect x="24" y="24" width="464" height="464" rx="132" fill="#08090d"/>
-  <g filter="url(#shadow)">
-    <rect x="76" y="58" width="360" height="396" rx="86" fill="url(#paint)"/>
-    <rect x="108" y="96" width="296" height="320" rx="58" fill="#0f1017" opacity=".94"/>
-    <path d="M144 348V164h48l64 93 64-93h48v184h-48V244l-48 69h-32l-48-69v104h-48Z" fill="#f8fbff"/>
-    <path d="M176 386h160" stroke="#f8fbff" stroke-width="18" stroke-linecap="round" opacity=".35"/>
-  </g>
+  <rect width="512" height="512" rx="128" fill="#ff006e"/>
+  <path d="M108 72h296c20 0 36 16 36 36v296c0 20-16 36-36 36H108c-20 0-36-16-36-36V108c0-20 16-36 36-36Z" fill="#111218"/>
+  <path d="M128 126h256v260H128z" fill="#f6f7fb"/>
+  <path d="M162 338V174h43l51 73 51-73h43v164h-43v-96l-39 56h-24l-39-56v96h-43Z" fill="#111218"/>
+  <rect x="162" y="354" width="188" height="14" rx="7" fill="#ff006e"/>
 </svg>

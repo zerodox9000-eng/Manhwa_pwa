@@ -89,23 +89,31 @@ export function metricValue(series: SeriesCatalog, metric: MetricId, history: Hi
   if (metric === "endDate") return parseDate(series.published?.end_date)?.getTime() ?? -Infinity;
 
   const entries = history[String(series.id)] ?? [];
-  const latest = latestDate ? closestHistory(entries, latestDate, "before") : entries.at(-1);
   const earliest = entries[0];
-  if (!latest || !earliest) return -Infinity;
+  if (!earliest) return -Infinity;
 
   const delta = (a: number | null | undefined, b: number | null | undefined) =>
     a == null || b == null ? -Infinity : a - b;
   const percent = (a: number | null | undefined, b: number | null | undefined) =>
     a == null || b == null || b === 0 ? -Infinity : ((a - b) / b) * 100;
 
-  if (metric === "popularityGrowth") return delta(latest.p, earliest.p);
-  if (metric === "popularityGrowthPercent") return percent(latest.p, earliest.p);
-  if (metric === "favouritesGrowth") return delta(latest.f, earliest.f);
-  if (metric === "favouritesGrowthPercent") return percent(latest.f, earliest.f);
-  if (metric === "meanScoreDelta") return delta(latest.s, earliest.s);
-  if (metric === "fanFavouriteDelta") return delta(latest.r, earliest.r);
-  if (metric === "discoveryScoreDelta") return delta(latest.ds, earliest.ds);
-  if (metric === "discoveryPercentileDelta") return delta(latest.dp, earliest.dp);
+  const latestHistory = latestDate ? closestHistory(entries, latestDate, "before") : entries.at(-1);
+  const current = {
+    p: stats.popularity ?? latestHistory?.p,
+    f: stats.favourites ?? latestHistory?.f,
+    s: stats.meanScore ?? latestHistory?.s,
+    r: analytics.fanFavouriteRaw ?? latestHistory?.r,
+    ds: analytics.fanFavouriteDiscoveryScore ?? latestHistory?.ds,
+    dp: analytics.fanFavouriteDiscoveryPercentile ?? latestHistory?.dp,
+  };
+  if (metric === "popularityGrowth") return delta(current.p, earliest.p);
+  if (metric === "popularityGrowthPercent") return percent(current.p, earliest.p);
+  if (metric === "favouritesGrowth") return delta(current.f, earliest.f);
+  if (metric === "favouritesGrowthPercent") return percent(current.f, earliest.f);
+  if (metric === "meanScoreDelta") return delta(current.s, earliest.s);
+  if (metric === "fanFavouriteDelta") return delta(current.r, earliest.r);
+  if (metric === "discoveryScoreDelta") return delta(current.ds, earliest.ds);
+  if (metric === "discoveryPercentileDelta") return delta(current.dp, earliest.dp);
   return -Infinity;
 }
 
@@ -122,5 +130,6 @@ export function formatMetricValue(series: SeriesCatalog, metric: MetricId, histo
     const raw = metric === "releaseDate" ? series.published?.start_date : series.published?.end_date;
     return raw ?? "n/a";
   }
+  if (metric === "year") return String(Math.trunc(Number(value)));
   return Number(value).toLocaleString();
 }

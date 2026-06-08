@@ -1,6 +1,7 @@
 import { inflate } from "pako";
 import { db, saveSyncMeta } from "../db/appDb";
 import { DATA_SOURCE_CANDIDATES } from "../domain/defaults";
+import { normalizeCatalog } from "../domain/catalog";
 import type { HistoryMap, SeriesCatalog, SeriesDetail, SyncMeta, TagNode } from "../domain/types";
 
 function bytesToText(bytes: Uint8Array) {
@@ -134,7 +135,7 @@ export async function syncFrontendData(
     "data/query-index.json.gz"
   );
 
-  const catalog = mergeLiveCatalog(liveCatalog, localCatalog);
+  const mergedCatalog = mergeLiveCatalog(liveCatalog, localCatalog);
 
   onProgress?.("Downloading tags");
 
@@ -150,13 +151,17 @@ export async function syncFrontendData(
 
   onProgress?.("Downloading history");
 
-  const history = await fetchJson<HistoryMap>(
+  const rawHistory = await fetchJson<HistoryMap>(
     source,
     "stats/history.json",
     true
   );
 
   onProgress?.("Saving offline data");
+
+  const normalized = normalizeCatalog(mergedCatalog, rawHistory);
+  const catalog = normalized.catalog;
+  const history = normalized.history;
 
   const historyDates = [
     ...new Set(

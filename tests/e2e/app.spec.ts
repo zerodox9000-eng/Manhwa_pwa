@@ -83,7 +83,15 @@ async function mockBackendData(page: Page) {
   await page.route("**/stats/history.json.gz", async (route) => {
     await route.fulfill({
       status: 200,
-      body: gzipJson({}),
+      body: gzipJson({
+        "1252": [
+          { d: "2026-05-01", p: 29000, f: 1000, s: 75, r: 3.44, rp: 80, pp: 98, ds: 86, dp: 92 },
+          { d: "2026-06-01", p: 30200, f: 1130, s: 76, r: 3.74, rp: 92, pp: 99, ds: 91, dp: 95 },
+        ],
+        "4": [
+          { d: "2026-05-01", p: 900, f: 30, s: 68, r: 3.33, rp: 40, pp: 60, ds: 70, dp: 55 },
+        ],
+      }),
       headers: { "content-type": "application/gzip" },
     });
   });
@@ -97,50 +105,43 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("mobile grid, folder, detail, search, and recommendation workflow works", async ({ page }) => {
+test("mobile feeds, search, detail, recommendations, and navigation state work", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByText("Build your first feed")).toBeVisible();
-  await page.getByRole("button", { name: "Create feed" }).click();
-  await page.getByLabel("Feed name").fill("QA Feed");
-  await page.getByRole("button", { name: "Save feed" }).click();
+  await expect(page.getByRole("heading", { name: "Most ♥️ Series" })).toBeVisible();
   await expect(page.getByTestId("title-card").first()).toBeVisible();
   await expect(page.locator(".compact-metrics").first()).toContainText("Fan%");
+  await expect(page.locator(".bottom-nav")).not.toContainText("Folders");
 
   await page.getByRole("link", { name: "Search" }).click();
-  const searchInput = page.getByPlaceholder("Search without keyboard collapse");
+  const searchInput = page.getByPlaceholder("Search titles");
   await searchInput.fill("Solo Leveling");
   await expect(searchInput).toBeFocused();
   await expect(page.getByTestId("title-card").first()).toBeVisible();
-  await expect(page.getByText(/Titles \(1\)/)).toBeVisible();
-
-  await page.getByRole("link", { name: "Folders" }).click();
-  await page.getByPlaceholder("Folder name").fill("Favorites");
-  await page.getByRole("button", { name: "Create", exact: true }).click();
-  await expect(page.getByText("Favorites")).toBeVisible();
-
+  await searchInput.press("Enter");
+  await page.getByRole("link", { name: "Settings" }).click();
   await page.getByRole("link", { name: "Search" }).click();
-  await page.getByPlaceholder("Search without keyboard collapse").fill("Solo Leveling");
+  await expect(page.getByPlaceholder("Search titles")).toHaveValue("Solo Leveling");
+  await page.getByPlaceholder("Search titles").fill("");
+  await expect(page.getByRole("button", { name: "Solo Leveling" })).toBeVisible();
+  await page.getByRole("button", { name: "Solo Leveling" }).click();
   await page.getByTestId("title-card").first().click();
   await expect(page.getByRole("heading", { name: "Solo Leveling: Ragnarok" })).toBeVisible();
+  await expect(page.locator(".detail-stat-grid")).toContainText("30,298");
   await page.getByRole("button", { name: "Detail settings" }).click();
-  await page.getByRole("button", { name: "description" }).click();
+  await expect(page.getByText("Show the full available synopsis.")).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
   await expect(page.getByText("QA detail description.")).toBeVisible();
-  await expect(page.getByText("Fan%")).toBeVisible();
-  await page.getByRole("button", { name: "Add to folder" }).click();
-
-  await page.getByRole("link", { name: "Folders" }).click();
-  await page.getByRole("link", { name: /Favorites/ }).click();
-  await expect(page.getByText("1 manual titles")).toBeVisible();
-  await expect(page.getByTestId("title-card").first()).toBeVisible();
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByPlaceholder("Search titles")).toHaveValue("Solo Leveling");
 
   await page.getByRole("link", { name: "Recs" }).click();
   await page.getByLabel("Base title").fill("Solo");
-  await page.getByRole("button", { name: /Solo Leveling: Ragnarok/ }).click();
+  await page.locator(".recommendation-pick").first().click();
   await expect(page.getByText("Most similar and loved")).toBeVisible();
   await expect(page.getByTestId("title-card").first()).toBeVisible();
-  await page.getByRole("button", { name: "Save as folder" }).first().click();
-  await page.getByRole("link", { name: "Folders" }).click();
-  await expect(page.getByText("Most similar and loved")).toBeVisible();
+
+  await page.getByRole("link", { name: "Feeds" }).click();
+  await expect(page.locator(".feed-cover-card").first()).toBeVisible();
+  await expect(page.locator(".mosaic-cover").first()).toHaveCSS("aspect-ratio", "0.72 / 1");
 });

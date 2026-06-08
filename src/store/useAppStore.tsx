@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { DEFAULT_SETTINGS } from "../domain/defaults";
+import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import type {
   AppSettings,
   AppStateSnapshot,
@@ -31,7 +32,7 @@ interface StoreState {
   setActiveFeedId: (id: string | null) => void;
   upsertFeed: (feed: Feed) => void;
   deleteFeed: (id: string) => void;
-  reorderFeeds: (id: string, direction: -1 | 1) => void;
+  moveFeed: (id: string, targetId: string) => void;
   upsertFolder: (folder: Folder) => void;
   deleteFolder: (id: string) => void;
   upsertLabel: (label: UserLabel) => void;
@@ -83,6 +84,8 @@ function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
 function normalizeFeed(feed: Feed): Feed {
   return {
     ...feed,
+    description: feed.description ?? "",
+    showDescription: feed.showDescription ?? false,
     filters: {
       ...feed.filters,
       sourceMode: feed.filters.sourceMode ?? "mixed",
@@ -118,12 +121,15 @@ const AppStoreContext = createContext<StoreState | null>(null);
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const local = useMemo(loadLocalSnapshot, []);
+  const hasSavedState = useMemo(() => localStorage.getItem(STORAGE_KEY) != null, []);
   const [ready, setReady] = useState(false);
   const [catalog, setCatalog] = useState<SeriesCatalog[]>([]);
   const [tags, setTags] = useState<TagNode[]>([]);
   const [history, setHistory] = useState<HistoryMap>({});
   const [syncMeta, setSyncMeta] = useState<SyncMeta | null>(null);
-  const [feeds, setFeeds] = useState<Feed[]>((local.feeds ?? []).map(normalizeFeed));
+  const [feeds, setFeeds] = useState<Feed[]>(
+    (hasSavedState ? local.feeds ?? [] : (defaultFeedsJson as Feed[])).map(normalizeFeed),
+  );
   const [folders, setFolders] = useState<Folder[]>(local.folders ?? []);
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
   const [settings, setSettings] = useState<AppSettings>(mergeSettings(local.settings));
@@ -192,13 +198,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setActiveFeedId((current) => (current === id ? null : current));
   }, []);
 
-  const reorderFeeds = useCallback((id: string, direction: -1 | 1) => {
+  const moveFeed = useCallback((id: string, targetId: string) => {
     setFeeds((current) => {
       const index = current.findIndex((feed) => feed.id === id);
-      const next = index + direction;
-      if (index < 0 || next < 0 || next >= current.length) return current;
+      const targetIndex = current.findIndex((feed) => feed.id === targetId);
+      if (index < 0 || targetIndex < 0 || index === targetIndex) return current;
       const copy = [...current];
-      [copy[index], copy[next]] = [copy[next], copy[index]];
+      const [moved] = copy.splice(index, 1);
+      copy.splice(targetIndex, 0, moved);
       return copy;
     });
   }, []);
@@ -266,7 +273,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setActiveFeedId,
       upsertFeed,
       deleteFeed,
-      reorderFeeds,
+      moveFeed,
       upsertFolder,
       deleteFolder,
       upsertLabel,
@@ -289,7 +296,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       syncStatus,
       upsertFeed,
       deleteFeed,
-      reorderFeeds,
+      moveFeed,
       upsertFolder,
       deleteFolder,
       upsertLabel,

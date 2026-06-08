@@ -1,13 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Manhwa Lib">
-  <defs>
-    <linearGradient id="paint" x1="10" y1="8" x2="54" y2="57" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#ff0a73"/>
-      <stop offset=".54" stop-color="#6d5dfc"/>
-      <stop offset="1" stop-color="#16d7b1"/>
-    </linearGradient>
-  </defs>
-  <rect x="3" y="3" width="58" height="58" rx="17" fill="#08090d"/>
-  <rect x="10" y="7" width="44" height="50" rx="12" fill="url(#paint)"/>
-  <rect x="14" y="12" width="36" height="41" rx="8" fill="#0f1017" opacity=".95"/>
-  <path d="M18 44V20h6l8 12 8-12h6v24h-6V31l-6 9h-4l-6-9v13h-6Z" fill="#f8fbff"/>
+  <rect width="64" height="64" rx="16" fill="#ff006e"/>
+  <rect x="9" y="8" width="46" height="48" rx="8" fill="#111218"/>
+  <rect x="15" y="15" width="34" height="34" fill="#f6f7fb"/>
+  <path d="M19 43V21h6l7 10 7-10h6v22h-6V31l-5 7h-4l-5-7v12h-6Z" fill="#111218"/>
+  <rect x="20" y="46" width="24" height="3" rx="1.5" fill="#ff006e"/>
 </svg>

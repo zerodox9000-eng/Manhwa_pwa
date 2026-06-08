@@ -1,9 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Switch from "@radix-ui/react-switch";
 import {
-  ArrowDown,
   ArrowLeft,
-  ArrowUp,
   Check,
   Copy,
   Database,
@@ -11,11 +9,10 @@ import {
   EllipsisVertical,
   ExternalLink,
   Filter,
-  FolderOpen,
+  GripVertical,
   Home,
   Import,
   Info,
-  ListPlus,
   Library,
   ListFilter,
   Plus,
@@ -39,7 +36,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import { createFeed, DEFAULT_FILTERS, DEFAULT_SORT, DEFAULT_VISIBLE_TITLE_FIELDS } from "./domain/defaults";
+import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT } from "./domain/defaults";
 import { isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
 import { formatMetricValue, METRIC_DEFINITIONS, metricDefinition, metricValue } from "./domain/metrics";
 import { decodeSharePayload, exportCsv, makeShareUrl, type SharePayload } from "./domain/share";
@@ -48,7 +45,7 @@ import type {
   ContentRating,
   Feed,
   FeedViewSettings,
-  Folder,
+  HistoryMap,
   MetricId,
   MetricRange,
   RecommendationShelf,
@@ -65,34 +62,11 @@ const NAV_ITEMS = [
   { id: "feeds", to: "/feeds", label: "Feeds", icon: ListFilter },
   { id: "search", to: "/search", label: "Search", icon: Search },
   { id: "recommendations", to: "/recommendations", label: "Recs", icon: Sparkles },
-  { id: "folders", to: "/folders", label: "Folders", icon: FolderOpen },
   { id: "settings", to: "/settings", label: "Settings", icon: Settings },
 ];
 
 const SORT_OPTIONS: MetricId[] = METRIC_DEFINITIONS.map((definition) => definition.id);
 const RANGE_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.filterable);
-
-const TITLE_FIELD_LABELS: Record<keyof FeedViewSettings["visible"], string> = {
-  cover: "Cover",
-  title: "Title",
-  rank: "Rank",
-  genreChips: "Genre chips",
-  status: "Status",
-  year: "Year",
-  chapters: "Chapters",
-  contentRating: "Content rating",
-  popularity: "Popularity",
-  favourites: "Favourites",
-  meanScore: "Mean score",
-  fanFavouriteRatio: "Fan favourite ratio",
-  discoveryScore: "Discovery score",
-  growthDelta: "Growth delta",
-  labels: "Labels",
-  sourceBadges: "Source badges",
-  quickActions: "Quick actions",
-  description: "Description",
-  links: "Links",
-};
 
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 
@@ -125,8 +99,6 @@ function AppFrame() {
           <Route path="/search" element={<SearchPage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />
           <Route path="/recommendations/:id" element={<RecommendationsPage />} />
-          <Route path="/folders" element={<FoldersPage />} />
-          <Route path="/folders/:id" element={<FolderDetailPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/learn" element={<LearnPage />} />
           <Route path="/title/:id" element={<TitleDetailPage />} />
@@ -171,6 +143,10 @@ function SessionRestorer() {
   useEffect(() => {
     if (!store.settings.restoreLastSession) return;
     const path = `${location.pathname}${location.search}`;
+    if (location.pathname.startsWith("/title/")) {
+      window.scrollTo({ top: 0, behavior: "instant" });
+      return;
+    }
     try {
       const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as { scroll?: Record<string, number> };
       const y = saved.scroll?.[path] ?? 0;
@@ -183,6 +159,7 @@ function SessionRestorer() {
   useEffect(() => {
     if (!store.settings.restoreLastSession) return;
     const path = `${location.pathname}${location.search}`;
+    if (location.pathname.startsWith("/title/")) return;
     const save = () => {
       try {
         const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
@@ -240,6 +217,7 @@ function BottomDrawer({
 function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
   const activeFeed = store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null;
 
   useEffect(() => {
@@ -266,7 +244,27 @@ function HomePage() {
           </button>
         </div>
       ) : (
-        <FeedView feed={activeFeed} />
+        <div
+          className="feed-swipe-surface"
+          onTouchStart={(event) => {
+            const touch = event.touches[0];
+            touchStart.current = { x: touch.clientX, y: touch.clientY };
+          }}
+          onTouchEnd={(event) => {
+            const start = touchStart.current;
+            touchStart.current = null;
+            if (!start || event.changedTouches.length === 0) return;
+            const touch = event.changedTouches[0];
+            const dx = touch.clientX - start.x;
+            const dy = touch.clientY - start.y;
+            if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.35) return;
+            const index = store.feeds.findIndex((item) => item.id === activeFeed.id);
+            const next = dx < 0 ? index + 1 : index - 1;
+            if (next >= 0 && next < store.feeds.length) store.setActiveFeedId(store.feeds[next].id);
+          }}
+        >
+          <FeedView feed={activeFeed} />
+        </div>
       )}
       <BottomDrawer title="Create Feed" open={editorOpen} onOpenChange={setEditorOpen}>
         <FeedEditor
@@ -287,7 +285,7 @@ function FeedTabs() {
   if (store.feeds.length === 0) return null;
   return (
     <div className="feed-tabs" aria-label="Feed tabs">
-      {store.feeds.map((feed, index) => (
+      {store.feeds.map((feed) => (
         <button
           type="button"
           key={feed.id}
@@ -295,7 +293,6 @@ function FeedTabs() {
           onClick={() => store.setActiveFeedId(feed.id)}
         >
           <span className="feed-tab-title">{feed.name}</span>
-          <span className="feed-tab-meta">#{index + 1} in Home</span>
         </button>
       ))}
     </div>
@@ -306,6 +303,8 @@ function FeedView({ feed }: { feed: Feed }) {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [feedSearch, setFeedSearch] = useState("");
   const runtimeFeed = useMemo(
@@ -332,45 +331,26 @@ function FeedView({ feed }: { feed: Feed }) {
       }),
     [runtimeFeed, store.catalog, store.history, store.labels, store.settings, store.syncMeta, store.tags],
   );
-  const saveFeedAsFolder = () => {
-    const now = new Date().toISOString();
-    store.upsertFolder({
-      id: crypto.randomUUID(),
-      name: `${feed.name} Folder`,
-      kind: "manual",
-      titleIds: query.items.map((item) => item.id),
-      createdAt: now,
-      updatedAt: now,
-    });
-  };
-
   return (
     <>
       <section className="section">
         <div className="row feed-view-header">
           <div className="feed-view-title">
-            <h1 style={{ margin: 0 }}>{feed.name}</h1>
-            <div className="muted tiny">
-              {query.items.length.toLocaleString()} titles
-              {store.syncMeta ? ` / synced ${new Date(store.syncMeta.lastSync ?? "").toLocaleString()}` : ""}
-            </div>
+            <h1 className="single-line-title">{feed.name}</h1>
+            {feed.showDescription && feed.description && <p className="feed-description">{feed.description}</p>}
           </div>
           <span className="spacer" />
-          <button className="icon-button" type="button" onClick={() => setSearchOpen((open) => !open)} aria-label="Search in feed">
-            <Search size={18} />
+          <button className="icon-button" type="button" onClick={() => setMenuOpen((open) => !open)} aria-label="Feed menu">
+            <EllipsisVertical size={20} />
           </button>
-          <button className="icon-button" type="button" onClick={() => setEditorOpen(true)} aria-label="Filter feed">
-            <Filter size={18} />
-          </button>
-          <button className="icon-button" type="button" onClick={() => setEditorOpen(true)} aria-label="Sort and view feed">
-            <SlidersHorizontal size={18} />
-          </button>
-          <button className="icon-button" type="button" onClick={() => setShareOpen(true)} aria-label="Share feed">
-            <Share2 size={18} />
-          </button>
-          <button className="icon-button" type="button" onClick={saveFeedAsFolder} aria-label="Save feed as folder">
-            <FolderOpen size={18} />
-          </button>
+          {menuOpen && (
+            <div className="popover-menu feed-menu">
+              <button type="button" onClick={() => { setSearchOpen((open) => !open); setMenuOpen(false); }}><Search size={17} /> Search</button>
+              <button type="button" onClick={() => { setEditorOpen(true); setMenuOpen(false); }}><SlidersHorizontal size={17} /> Settings</button>
+              <button type="button" onClick={() => { setShareOpen(true); setMenuOpen(false); }}><Share2 size={17} /> Share</button>
+              <button type="button" onClick={() => { setInfoOpen(true); setMenuOpen(false); }}><Info size={17} /> Info</button>
+            </div>
+          )}
         </div>
         {searchOpen && (
           <div className="field feed-search">
@@ -384,7 +364,6 @@ function FeedView({ feed }: { feed: Feed }) {
             />
           </div>
         )}
-        <ActiveFilterChips feed={runtimeFeed} />
         {query.activeNotes.map((note) => (
           <p className="muted tiny" key={note}>
             {note}
@@ -394,7 +373,12 @@ function FeedView({ feed }: { feed: Feed }) {
           <p className="muted tiny">Some current exports do not include date fields in the catalog yet.</p>
         )}
       </section>
-      <TitleCollection items={query.items} feed={runtimeFeed} tags={store.tags} />
+      <TitleCollection
+        items={query.items}
+        feed={runtimeFeed}
+        history={store.history}
+        latestDate={store.syncMeta?.historyLastDate}
+      />
       <BottomDrawer title="Feed Settings" open={editorOpen} onOpenChange={setEditorOpen}>
         <FeedEditor
           feed={feed}
@@ -408,35 +392,37 @@ function FeedView({ feed }: { feed: Feed }) {
       <BottomDrawer title="Share Feed" open={shareOpen} onOpenChange={setShareOpen}>
         <SharePanel payload={{ kind: "feed", version: 1, feed }} />
       </BottomDrawer>
+      <BottomDrawer title="Feed Info" open={infoOpen} onOpenChange={setInfoOpen}>
+        <div className="settings-list">
+          <div className="setting-row"><span>Titles</span><strong>{query.items.length.toLocaleString()}</strong></div>
+          <div className="setting-row"><span>Last data refresh</span><strong>{store.syncMeta?.lastSync ? new Date(store.syncMeta.lastSync).toLocaleString() : "Not synced"}</strong></div>
+          <div className="setting-row"><span>Source</span><strong>{store.syncMeta?.source ?? "Offline cache"}</strong></div>
+        </div>
+      </BottomDrawer>
     </>
   );
 }
 
-function ActiveFilterChips({ feed }: { feed: Feed }) {
-  const chips = [
-    ...(feed.filters.sourceModes?.length ? feed.filters.sourceModes : [feed.filters.sourceMode]),
-    ...(feed.filters.query ? [`search: ${feed.filters.query}`] : []),
-    ...feed.filters.contentRatings,
-    ...feed.filters.statuses,
-    `${feed.view.gridColumns} columns`,
-  ];
-  return (
-    <div className="chips" style={{ marginTop: 12 }}>
-      {chips.map((chip) => (
-        <span className="chip" key={chip}>
-          {chip}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function TitleCollection({ items, feed, tags }: { items: SeriesCatalog[]; feed: Feed; tags: TagNode[] }) {
-  const [visibleCount, setVisibleCount] = useState(120);
-  const tagsById = useMemo(() => new Map(tags.map((tag) => [tag.id, tag])), [tags]);
+function TitleCollection({
+  items,
+  feed,
+  history,
+  latestDate,
+}: {
+  items: SeriesCatalog[];
+  feed: Feed;
+  history: HistoryMap;
+  latestDate?: string | null;
+}) {
+  const countKey = `manhwa-visible-count:${feed.id}`;
+  const [visibleCount, setVisibleCount] = useState(() => Number(sessionStorage.getItem(countKey)) || 120);
   useEffect(() => {
-    setVisibleCount(120);
-  }, [feed.id, items.length, feed.view.mode, feed.view.gridColumns, feed.view.listCoverSize]);
+    const saved = Number(sessionStorage.getItem(countKey)) || 120;
+    setVisibleCount(Math.max(120, Math.min(saved, Math.max(120, items.length))));
+  }, [countKey, items.length]);
+  useEffect(() => {
+    sessionStorage.setItem(countKey, String(visibleCount));
+  }, [countKey, visibleCount]);
   const visibleItems = items.slice(0, visibleCount);
 
   if (items.length === 0) {
@@ -455,7 +441,14 @@ function TitleCollection({ items, feed, tags }: { items: SeriesCatalog[]; feed: 
         style={{ "--grid-columns": feed.view.gridColumns } as React.CSSProperties}
       >
         {visibleItems.map((series, index) => (
-          <TitleCard key={series.id} series={series} rank={index + 1} view={feed.view} tagsById={tagsById} />
+          <TitleCard
+            key={series.id}
+            series={series}
+            rank={index + 1}
+            view={feed.view}
+            history={history}
+            latestDate={latestDate}
+          />
         ))}
       </div>
       <LoadMore visibleCount={visibleCount} total={items.length} onMore={() => setVisibleCount((count) => count + 120)} />
@@ -490,7 +483,7 @@ function Cover({ series }: { series: SeriesCatalog }) {
 }
 
 function MosaicCover({ items, title }: { items: SeriesCatalog[]; title: string }) {
-  const covers = items.filter((item) => item.cover).slice(0, 6);
+  const covers = items.filter((item) => item.cover).slice(0, 4);
   return (
     <div className="mosaic-cover" aria-hidden="true">
       {covers.length === 0 ? (
@@ -499,58 +492,6 @@ function MosaicCover({ items, title }: { items: SeriesCatalog[]; title: string }
         covers.map((item, index) => <img src={item.cover ?? ""} alt="" key={`${item.id}-${index}`} loading="lazy" />)
       )}
     </div>
-  );
-}
-
-function CollectionCard({
-  title,
-  meta,
-  covers,
-  to,
-  onOpen,
-  actions,
-}: {
-  title: string;
-  meta: string;
-  covers: SeriesCatalog[];
-  to: string;
-  onOpen?: () => void;
-  actions?: React.ReactNode;
-}) {
-  return (
-    <article className="collection-card">
-      <Link className="collection-card-main" to={to} onClick={onOpen}>
-        <MosaicCover items={covers} title={title} />
-        <strong>{title}</strong>
-        <span className="muted tiny">{meta}</span>
-      </Link>
-      {actions && <div className="collection-actions">{actions}</div>}
-    </article>
-  );
-}
-
-function HorizontalGridSection({
-  title,
-  children,
-  to,
-}: {
-  title: string;
-  children: React.ReactNode;
-  to?: string;
-}) {
-  return (
-    <section className="horizontal-section">
-      <div className="row section-row">
-        <h2 className="section-title">{title}</h2>
-        <span className="spacer" />
-        {to && (
-          <Link className="button ghost" to={to}>
-            View all
-          </Link>
-        )}
-      </div>
-      <div className="horizontal-grid">{children}</div>
-    </section>
   );
 }
 
@@ -575,56 +516,57 @@ function TitleCard({
   series,
   rank,
   view,
-  tagsById,
+  history,
+  latestDate,
 }: {
   series: SeriesCatalog;
   rank: number;
   view: FeedViewSettings;
-  tagsById: Map<number, TagNode>;
+  history: HistoryMap;
+  latestDate?: string | null;
 }) {
-  const visible = view.visible;
   return (
     <div className="title-card-wrap">
       <Link to={`/title/${series.id}`} className="title-card" data-testid="title-card">
-        {visible.cover && (
-          <div style={{ position: "relative" }}>
-            <Cover series={series} />
-            {visible.rank && <span className="rank">{rank}</span>}
-            <div className="poster-metrics">
-              <TitleMetrics series={series} view={view} compact />
-            </div>
+        <div className="poster-shell">
+          <Cover series={series} />
+          <div className="poster-metrics">
+            <TitleMetrics series={series} rank={rank} view={view} compact history={history} latestDate={latestDate} />
           </div>
-        )}
+        </div>
         <div className="title-meta">
-          {visible.title && <span className="title-name">{series.display_title}</span>}
-          {visible.genreChips && <GenreChips series={series} tagsById={tagsById} />}
-          {!visible.cover && <TitleMetrics series={series} view={view} />}
+          <span className="title-name">{series.display_title}</span>
         </div>
       </Link>
-      {visible.quickActions && <QuickTitleAction series={series} />}
     </div>
   );
 }
 
-function QuickTitleAction({ series }: { series: SeriesCatalog }) {
-  const copy = () => {
-    const url = `${window.location.origin}${window.location.pathname}#/title/${series.id}`;
-    void navigator.clipboard.writeText(url);
-  };
-  return (
-    <button className="quick-title-action" type="button" onClick={copy} aria-label={`Copy link for ${series.display_title}`}>
-      <Share2 size={15} />
-    </button>
-  );
-}
-
-function TitleMetrics({ series, view, compact = false }: { series: SeriesCatalog; view: FeedViewSettings; compact?: boolean }) {
+function TitleMetrics({
+  series,
+  rank,
+  view,
+  compact = false,
+  history,
+  latestDate,
+}: {
+  series: SeriesCatalog;
+  rank?: number;
+  view: FeedViewSettings;
+  compact?: boolean;
+  history: HistoryMap;
+  latestDate?: string | null;
+}) {
   const metricSlots: MetricId[] = (view.metricSlots?.length ? view.metricSlots : (["fanFavouriteRaw", "popularity", "favourites"] as MetricId[])).slice(0, 3);
+  const values = metricSlots
+    .map((metric) => ({ metric, value: formatMetricValue(series, metric, history, latestDate) }))
+    .filter((item) => item.value !== "n/a");
   return (
     <div className={`metrics ${compact ? "compact-metrics" : ""}`}>
-      {metricSlots.map((metric) => (
+      {view.visible.rank && rank != null && <span className="rank-stat"><b>#</b>{rank}</span>}
+      {values.map(({ metric, value }) => (
         <span key={metric}>
-          <b>{metricDefinition(metric).shortLabel}</b> {formatMetricValue(series, metric)}
+          <b>{metricDefinition(metric).shortLabel}</b> {value}
         </span>
       ))}
     </div>
@@ -634,14 +576,8 @@ function TitleMetrics({ series, view, compact = false }: { series: SeriesCatalog
 function FeedsPage() {
   const store = useAppStore();
   const [editorFeed, setEditorFeed] = useState<Feed | null>(null);
-  const [sortMode, setSortMode] = useState<"manual" | "created" | "updated" | "title">("manual");
-  const displayed = useMemo(() => {
-    const copy = [...store.feeds];
-    if (sortMode === "created") copy.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-    if (sortMode === "updated") copy.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    if (sortMode === "title") copy.sort((a, b) => a.name.localeCompare(b.name));
-    return copy;
-  }, [sortMode, store.feeds]);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
 
   const feedItems = (feed: Feed) =>
     runFeedQuery({
@@ -659,42 +595,37 @@ function FeedsPage() {
       <div className="row">
         <h1>Feeds</h1>
         <span className="spacer" />
-        <div className="segmented sort-segment">
-          {(["manual", "created", "updated", "title"] as const).map((mode) => (
-            <button className={`segment ${sortMode === mode ? "active" : ""}`} type="button" key={mode} onClick={() => setSortMode(mode)}>
-              {mode}
-            </button>
-          ))}
-        </div>
         <button className="icon-button" type="button" onClick={() => setEditorFeed(createFeed("New Feed"))} aria-label="Create feed">
           <Plus size={18} />
         </button>
       </div>
-      <div className="collection-grid">
-        {displayed.map((feed) => (
-          <CollectionCard
+      <p className="muted tiny">Hold the grip and drag a feed to change Home swipe order.</p>
+      <div className="feed-cover-grid">
+        {store.feeds.map((feed) => (
+          <FeedCoverCard
             key={feed.id}
-            title={feed.name}
-            meta={`${feedItems(feed).length.toLocaleString()} titles`}
-            covers={feedItems(feed).slice(0, 6)}
-            to="/"
+            feed={feed}
+            covers={feedItems(feed).slice(0, 4)}
+            dragging={draggingId === feed.id}
+            over={overId === feed.id}
             onOpen={() => store.setActiveFeedId(feed.id)}
-            actions={
-              <>
-                <button className="icon-button" type="button" onClick={() => store.reorderFeeds(feed.id, -1)} aria-label="Move up">
-                  <ArrowUp size={16} />
-                </button>
-                <button className="icon-button" type="button" onClick={() => store.reorderFeeds(feed.id, 1)} aria-label="Move down">
-                  <ArrowDown size={16} />
-                </button>
-                <button className="icon-button" type="button" onClick={() => setEditorFeed(feed)} aria-label="Edit feed">
-                  <SlidersHorizontal size={16} />
-                </button>
-                <button className="icon-button danger" type="button" onClick={() => store.deleteFeed(feed.id)} aria-label="Delete feed">
-                  <Trash2 size={16} />
-                </button>
-              </>
-            }
+            onEdit={() => setEditorFeed(feed)}
+            onDelete={() => store.deleteFeed(feed.id)}
+            onDragStart={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setDraggingId(feed.id);
+              setOverId(feed.id);
+            }}
+            onDragMove={(event) => {
+              if (!draggingId) return;
+              const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-feed-id]");
+              if (target?.dataset.feedId) setOverId(target.dataset.feedId);
+            }}
+            onDragEnd={() => {
+              if (draggingId && overId) store.moveFeed(draggingId, overId);
+              setDraggingId(null);
+              setOverId(null);
+            }}
           />
         ))}
       </div>
@@ -711,6 +642,62 @@ function FeedsPage() {
         )}
       </BottomDrawer>
     </div>
+  );
+}
+
+function FeedCoverCard({
+  feed,
+  covers,
+  dragging,
+  over,
+  onOpen,
+  onEdit,
+  onDelete,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+}: {
+  feed: Feed;
+  covers: SeriesCatalog[];
+  dragging: boolean;
+  over: boolean;
+  onOpen: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onDragStart: React.PointerEventHandler<HTMLButtonElement>;
+  onDragMove: React.PointerEventHandler<HTMLButtonElement>;
+  onDragEnd: React.PointerEventHandler<HTMLButtonElement>;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  return (
+    <article className={`feed-cover-card ${dragging ? "dragging" : ""} ${over ? "drag-over" : ""}`} data-feed-id={feed.id}>
+      <Link className="feed-cover-link" to="/" onClick={onOpen}>
+        <MosaicCover items={covers} title={feed.name} />
+        <strong className="feed-card-title">{feed.name}</strong>
+        {feed.showDescription && feed.description && <span className="feed-card-description">{feed.description}</span>}
+      </Link>
+      <button
+        className="feed-drag-handle"
+        type="button"
+        aria-label={`Reorder ${feed.name}`}
+        onPointerDown={onDragStart}
+        onPointerMove={onDragMove}
+        onPointerUp={onDragEnd}
+        onPointerCancel={onDragEnd}
+      >
+        <GripVertical size={18} />
+      </button>
+      <button className="feed-card-menu-button" type="button" onClick={() => setMenuOpen((open) => !open)} aria-label={`${feed.name} menu`}>
+        <EllipsisVertical size={18} />
+      </button>
+      {menuOpen && (
+        <div className="popover-menu card-menu">
+          <button type="button" onClick={() => { onEdit(); setMenuOpen(false); }}><SlidersHorizontal size={16} /> Edit</button>
+          <SharePanelButton payload={{ kind: "feed", version: 1, feed }} label="Share" />
+          <button className="danger-text" type="button" onClick={onDelete}><Trash2 size={16} /> Delete</button>
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -734,15 +721,6 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
   };
   const updateView = (patch: Partial<FeedViewSettings>) => {
     setDraft((current) => ({ ...current, view: { ...current.view, ...patch } }));
-  };
-  const toggleVisible = (key: keyof FeedViewSettings["visible"]) => {
-    setDraft((current) => ({
-      ...current,
-      view: {
-        ...current.view,
-        visible: { ...current.view.visible, [key]: !current.view.visible[key] },
-      },
-    }));
   };
   const toggleArrayValue = <T,>(values: T[], value: T) => (values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
   const toggleSourceMode = (mode: "anilist" | "non-anilist") => {
@@ -773,6 +751,22 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
         <label htmlFor="feed-name">Feed name</label>
         <input id="feed-name" className="input" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
       </div>
+      <div className="field">
+        <label htmlFor="feed-description">Description</label>
+        <textarea
+          id="feed-description"
+          className="textarea"
+          value={draft.description}
+          onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+          placeholder="Optional context for this feed"
+        />
+      </div>
+      <ToggleRow
+        label="Show description"
+        description="Show the description directly below the feed name."
+        value={draft.showDescription}
+        onChange={(showDescription) => setDraft({ ...draft, showDescription })}
+      />
 
       <h2 className="section-title">Filters</h2>
       <div className="field">
@@ -1012,13 +1006,17 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
         slots={draft.view.metricSlots ?? []}
         onChange={(metricSlots) => updateView({ metricSlots })}
       />
-      <div className="chips">
-        {(Object.keys(DEFAULT_VISIBLE_TITLE_FIELDS) as (keyof FeedViewSettings["visible"])[]).filter((key) => key !== "labels").map((key) => (
-          <button className={`chip chipbutton ${draft.view.visible[key] ? "active" : ""}`} type="button" key={key} onClick={() => toggleVisible(key)}>
-            {TITLE_FIELD_LABELS[key]}
-          </button>
-        ))}
-      </div>
+      <ToggleRow
+        label="Show rank"
+        description="Places the rank inside the cover stat strip."
+        value={draft.view.visible.rank}
+        onChange={(rank) =>
+          setDraft((current) => ({
+            ...current,
+            view: { ...current.view, visible: { ...current.view.visible, rank } },
+          }))
+        }
+      />
 
       <div className="toolbar">
         <button className="button" type="button" onClick={onCancel}>
@@ -1210,87 +1208,80 @@ function TagChipCloud({ tags, feed, onTagClick }: { tags: TagNode[]; feed: Feed;
 
 function SearchPage() {
   const store = useAppStore();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => sessionStorage.getItem("manhwa-search-query") ?? "");
+  const [history, setHistory] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("manhwa-search-history") ?? "[]") as string[];
+    } catch {
+      return [];
+    }
+  });
   const searchFeed = useMemo(() => {
     const feed = createFeed("Search results");
-    feed.filters.query = query;
     feed.filters.sourceMode = "mixed";
     feed.filters.sourceModes = ["anilist", "non-anilist"];
-    feed.filters.contentRatings = store.settings.contentRatings;
-    feed.view = { ...store.settings.defaultFeedView, gridColumns: 3 };
+    feed.filters.contentRatings = ["safe", "suggestive"];
+    feed.view = { ...feed.view, gridColumns: 3 };
     return feed;
-  }, [query, store.settings.contentRatings, store.settings.defaultFeedView]);
+  }, []);
   const results = useMemo(
     () =>
       query.trim()
-        ? runFeedQuery({
-            feed: searchFeed,
-            series: store.catalog,
-            tags: store.tags,
-            history: store.history,
-            labels: store.labels,
-            settings: store.settings,
-            metaHistoryFirst: store.syncMeta?.historyFirstDate,
-            metaHistoryLast: store.syncMeta?.historyLastDate,
-          }).items
+        ? store.catalog
+            .filter((item) => item.display_title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+            .sort((a, b) => a.display_title.localeCompare(b.display_title))
         : [],
-    [query, searchFeed, store],
+    [query, store.catalog],
   );
-  const matchingFeeds = store.feeds.filter((feed) => feed.name.toLowerCase().includes(query.trim().toLowerCase()));
-  const matchingFolders = store.folders.filter((folder) => folder.name.toLowerCase().includes(query.trim().toLowerCase()));
-  const shelfMatches = store.settings.recommendationShelves.filter((shelf) => shelf.name.toLowerCase().includes(query.trim().toLowerCase()));
-  const tagsById = useMemo(() => new Map(store.tags.map((tag) => [tag.id, tag])), [store.tags]);
+  useEffect(() => {
+    sessionStorage.setItem("manhwa-search-query", query);
+  }, [query]);
+  const remember = (value = query) => {
+    const clean = value.trim();
+    if (!clean) return;
+    const next = [clean, ...history.filter((item) => item.toLocaleLowerCase() !== clean.toLocaleLowerCase())].slice(0, 12);
+    setHistory(next);
+    localStorage.setItem("manhwa-search-history", JSON.stringify(next));
+  };
   return (
     <div className="page">
       <h1>Search</h1>
-      <div className="field">
-        <label>Title, tag, author, year</label>
+      <form className="field" onSubmit={(event) => { event.preventDefault(); remember(); }}>
+        <label>Title</label>
         <input
           className="input"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search without keyboard collapse"
+          placeholder="Search titles"
           autoComplete="off"
         />
-      </div>
+      </form>
       {query.trim() ? (
-        <>
-          <HorizontalGridSection title={`Titles (${results.length.toLocaleString()})`}>
-            {results.slice(0, 18).map((series, index) => (
-              <TitleCard key={series.id} series={series} rank={index + 1} view={searchFeed.view} tagsById={tagsById} />
-            ))}
-          </HorizontalGridSection>
-          <HorizontalGridSection title={`Feeds (${matchingFeeds.length})`} to="/feeds">
-            {matchingFeeds.map((feed) => (
-              <CollectionCard
-                key={feed.id}
-                title={feed.name}
-                meta="saved feed"
-                covers={results.slice(0, 6)}
-                to="/"
-                onOpen={() => store.setActiveFeedId(feed.id)}
-              />
-            ))}
-          </HorizontalGridSection>
-          <HorizontalGridSection title={`Folders (${matchingFolders.length})`} to="/folders">
-            {matchingFolders.map((folder) => (
-              <CollectionCard
-                key={folder.id}
-                title={folder.name}
-                meta={folder.kind === "manual" ? `${folder.titleIds.length} titles` : "smart folder"}
-                covers={store.catalog.filter((item) => folder.titleIds.includes(item.id)).slice(0, 6)}
-                to={`/folders/${folder.id}`}
-              />
-            ))}
-          </HorizontalGridSection>
-          <HorizontalGridSection title={`Recommendation drawers (${shelfMatches.length})`} to="/recommendations">
-            {shelfMatches.map((shelf) => (
-              <CollectionCard key={shelf.id} title={shelf.name} meta="recommendation drawer" covers={results.slice(0, 6)} to="/recommendations" />
-            ))}
-          </HorizontalGridSection>
-        </>
+        <TitleCollection
+          items={results}
+          feed={searchFeed}
+          history={store.history}
+          latestDate={store.syncMeta?.historyLastDate}
+        />
       ) : (
-        <p className="muted">Start typing to search titles, feeds, folders, and recommendation drawers.</p>
+        <section>
+          <div className="row">
+            <h2 className="section-title">Recent searches</h2>
+            <span className="spacer" />
+            {history.length > 0 && (
+              <button className="button ghost" type="button" onClick={() => { setHistory([]); localStorage.removeItem("manhwa-search-history"); }}>
+                Clear
+              </button>
+            )}
+          </div>
+          <div className="chips">
+            {history.map((item) => (
+              <button className="chip chipbutton" type="button" key={item} onClick={() => { setQuery(item); remember(item); }}>
+                {item}
+              </button>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );
@@ -1303,7 +1294,6 @@ function RecommendationsPage() {
   const [selectedId, setSelectedId] = useState<number | null>(Number(params.id) || null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingShelf, setEditingShelf] = useState<RecommendationShelf | null>(null);
-  const tagsById = useMemo(() => new Map(store.tags.map((tag) => [tag.id, tag])), [store.tags]);
   const selected =
     store.catalog.find((item) => item.id === selectedId) ??
     store.catalog.find((item) => item.id === Number(params.id)) ??
@@ -1324,17 +1314,6 @@ function RecommendationsPage() {
   };
   const deleteShelf = (id: string) => {
     store.updateSettings({ recommendationShelves: store.settings.recommendationShelves.filter((shelf) => shelf.id !== id) });
-  };
-  const saveAsFolder = (name: string, items: SeriesCatalog[]) => {
-    const now = new Date().toISOString();
-    store.upsertFolder({
-      id: crypto.randomUUID(),
-      name,
-      kind: "manual",
-      titleIds: items.slice(0, 200).map((item) => item.id),
-      createdAt: now,
-      updatedAt: now,
-    });
   };
   return (
     <div className="page">
@@ -1358,20 +1337,23 @@ function RecommendationsPage() {
         <input id="base-title" className="input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={selected?.display_title ?? "Search title"} />
       </div>
       {candidates.length > 0 && (
-        <HorizontalGridSection title="Pick a base title">
+        <section>
+          <h2 className="section-title">Pick a base title</h2>
+          <div className="title-grid columns-3 recommendation-picker">
           {candidates.map((series) => (
             <button
-              className={`collection-card pick-card ${selected?.id === series.id ? "active" : ""}`}
+              className={`recommendation-pick ${selected?.id === series.id ? "active" : ""}`}
               type="button"
               key={series.id}
-              onClick={() => setSelectedId(series.id)}
+              onClick={() => { setSelectedId(series.id); setSearch(""); }}
             >
-              <MosaicCover items={[series]} title={series.display_title} />
-              <strong>{series.display_title}</strong>
-              <span className="muted tiny">{formatMetricValue(series, "fanFavouriteRaw")} Fan%</span>
+              <Cover series={series} />
+              <strong className="title-name">{series.display_title}</strong>
+              <span className="muted tiny">Fan% {formatMetricValue(series, "fanFavouriteRaw", store.history, store.syncMeta?.historyLastDate)}</span>
             </button>
           ))}
-        </HorizontalGridSection>
+          </div>
+        </section>
       )}
       {selected && (
         <section className="selected-rec-base">
@@ -1385,33 +1367,37 @@ function RecommendationsPage() {
       )}
       {selected &&
         store.settings.recommendationShelves.map((shelf) => {
-          const items = recommendationItems(selected, shelf, store);
+          const items = recommendationItems(selected, shelf, store).slice(0, 20);
           const recFeed = createFeed(shelf.name);
-          recFeed.view = store.settings.defaultFeedView;
+          recFeed.id = `recommendation-${shelf.id}-${selected.id}`;
+          recFeed.view = { ...recFeed.view, gridColumns: 3 };
           return (
-            <HorizontalGridSection title={`${shelf.name} (${items.length})`} key={shelf.id}>
-              {items.slice(0, 18).map((series, index) => (
-                <TitleCard key={series.id} series={series} rank={index + 1} view={recFeed.view} tagsById={tagsById} />
-              ))}
-              <div className="drawer-actions-card">
-                <button className="button" type="button" onClick={() => saveAsFolder(shelf.name, items)}>
-                  <FolderOpen size={16} /> Save as folder
-                </button>
+            <section className="recommendation-section" key={shelf.id}>
+              <div className="row recommendation-heading">
+                <h2 className="section-title">{shelf.name}</h2>
+                <span className="spacer" />
                 <button
-                  className="button"
+                  className="icon-button"
                   type="button"
                   onClick={() => {
                     setEditingShelf(shelf);
                     setEditorOpen(true);
                   }}
+                  aria-label={`Edit ${shelf.name}`}
                 >
-                  <SlidersHorizontal size={16} /> Edit
+                  <SlidersHorizontal size={16} />
                 </button>
-                <button className="button danger" type="button" onClick={() => deleteShelf(shelf.id)}>
-                  <Trash2 size={16} /> Delete
+                <button className="icon-button danger" type="button" onClick={() => deleteShelf(shelf.id)} aria-label={`Delete ${shelf.name}`}>
+                  <Trash2 size={16} />
                 </button>
               </div>
-            </HorizontalGridSection>
+              <TitleCollection
+                items={items}
+                feed={recFeed}
+                history={store.history}
+                latestDate={store.syncMeta?.historyLastDate}
+              />
+            </section>
           );
         })}
       <BottomDrawer title={editingShelf ? "Edit Recommendation" : "Create Recommendation"} open={editorOpen} onOpenChange={setEditorOpen}>
@@ -1426,7 +1412,7 @@ function recommendationItems(base: SeriesCatalog, shelf: RecommendationShelf, st
   const filterFeed = createFeed(shelf.name);
   filterFeed.filters.sourceModes = shelf.sourceModes;
   filterFeed.filters.sourceMode = shelf.sourceModes.length === 2 ? "mixed" : shelf.sourceModes[0];
-  filterFeed.filters.contentRatings = store.settings.contentRatings;
+  filterFeed.filters.contentRatings = ["safe", "suggestive"];
   filterFeed.filters.metricRanges = shelf.metricRanges;
   const pool = runFeedQuery({
     feed: filterFeed,
@@ -1593,184 +1579,8 @@ function RecommendationShelfEditor({
   );
 }
 
-function FoldersPage() {
-  const store = useAppStore();
-  const [name, setName] = useState("");
-  const [smartFeedId, setSmartFeedId] = useState(store.feeds[0]?.id ?? "");
-  useEffect(() => {
-    if (!smartFeedId && store.feeds[0]) setSmartFeedId(store.feeds[0].id);
-  }, [smartFeedId, store.feeds]);
-  const createFolder = () => {
-    if (!name.trim()) return;
-    const now = new Date().toISOString();
-    const folder: Folder = {
-      id: crypto.randomUUID(),
-      name: name.trim(),
-      kind: "manual",
-      titleIds: [],
-      createdAt: now,
-      updatedAt: now,
-    };
-    store.upsertFolder(folder);
-    setName("");
-  };
-  const createSmartFolder = () => {
-    const feed = store.feeds.find((item) => item.id === smartFeedId);
-    if (!feed) return;
-    const now = new Date().toISOString();
-    store.upsertFolder({
-      id: crypto.randomUUID(),
-      name: `${feed.name} Smart Folder`,
-      kind: "smart",
-      titleIds: [],
-      feedId: feed.id,
-      createdAt: now,
-      updatedAt: now,
-    });
-  };
-  return (
-    <div className="page">
-      <div className="row">
-        <h1>Folders</h1>
-      </div>
-      <section className="panel form-panel">
-        <h2 className="section-title">Manual Folder</h2>
-        <div className="toolbar">
-          <input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Folder name" />
-          <button className="button primary" type="button" onClick={createFolder} disabled={!name.trim()}>
-            <Plus size={16} /> Create
-          </button>
-        </div>
-      </section>
-      <section className="panel form-panel">
-        <h2 className="section-title">Smart Folder From Feed</h2>
-        <div className="toolbar wrap">
-          <div className="chips">
-            {store.feeds.map((feed) => (
-              <button className={`chip chipbutton ${smartFeedId === feed.id ? "active" : ""}`} type="button" key={feed.id} onClick={() => setSmartFeedId(feed.id)}>
-                {feed.name}
-              </button>
-            ))}
-          </div>
-          <button className="button" type="button" onClick={createSmartFolder} disabled={!smartFeedId}>
-            <ListPlus size={16} /> Create smart
-          </button>
-        </div>
-      </section>
-      <div className="collection-grid">
-        {store.folders.map((folder) => (
-          <CollectionCard
-            key={folder.id}
-            title={folder.name}
-            meta={folder.kind === "manual" ? `${folder.titleIds.length} titles` : "smart folder"}
-            covers={store.catalog.filter((item) => folder.titleIds.includes(item.id)).slice(0, 6)}
-            to={`/folders/${folder.id}`}
-            actions={
-              <>
-                <SharePanelButton payload={{ kind: "folder", version: 1, folder }} />
-                <button className="icon-button danger" type="button" onClick={() => store.deleteFolder(folder.id)} aria-label="Delete folder">
-                  <Trash2 size={16} />
-                </button>
-              </>
-            }
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function FolderDetailPage() {
-  const store = useAppStore();
-  const navigate = useNavigate();
-  const params = useParams();
-  const folder = store.folders.find((item) => item.id === params.id);
-  const [manualDetails, setManualDetails] = useState<SeriesCatalog[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    if (!folder || folder.kind !== "manual") return;
-    const missingIds = folder.titleIds.filter((id) => !store.catalog.some((item) => item.id === id));
-    if (missingIds.length === 0) {
-      setManualDetails([]);
-      return;
-    }
-    void Promise.all(missingIds.map((id) => fetchSeriesDetail(store.settings.dataSourceUrl, id)))
-      .then((details) => {
-        if (!cancelled) setManualDetails(details);
-      })
-      .catch(() => {
-        if (!cancelled) setManualDetails([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [folder, store.catalog, store.settings.dataSourceUrl]);
-  if (!folder) {
-    return (
-      <div className="page">
-        <button className="button" type="button" onClick={() => navigate(-1)}>
-          <ArrowLeft size={16} /> Back
-        </button>
-        <div className="empty-state">Folder not found.</div>
-      </div>
-    );
-  }
-  const feed =
-    folder.kind === "smart"
-      ? store.feeds.find((item) => item.id === folder.feedId) ?? createFeed(folder.name)
-      : {
-          ...createFeed(folder.name),
-          view: store.settings.defaultFeedView,
-          filters: {
-            ...DEFAULT_FILTERS,
-            sourceMode: "mixed" as const,
-            sourceModes: ["anilist", "non-anilist"] as SourceMode[],
-            contentRatings: store.settings.contentRatings,
-            metricRanges: [],
-          },
-        };
-  const items =
-    folder.kind === "smart"
-      ? runFeedQuery({
-          feed,
-          series: store.catalog,
-          tags: store.tags,
-          history: store.history,
-          labels: store.labels,
-          settings: store.settings,
-          metaHistoryFirst: store.syncMeta?.historyFirstDate,
-          metaHistoryLast: store.syncMeta?.historyLastDate,
-        }).items
-      : [...store.catalog.filter((item) => folder.titleIds.includes(item.id)), ...manualDetails];
-  return (
-    <div className="page">
-      <button className="button" type="button" onClick={() => navigate(-1)}>
-        <ArrowLeft size={16} /> Back
-      </button>
-      <div className="row">
-        <div>
-          <h1>{folder.name}</h1>
-          <p className="muted">{folder.kind === "smart" ? "Smart folder" : `${items.length} manual titles`}</p>
-        </div>
-        <span className="spacer" />
-        <SharePanelButton payload={{ kind: "folder", version: 1, folder }} />
-      </div>
-      <TitleCollection items={items} feed={feed} tags={store.tags} />
-    </div>
-  );
-}
-
 function SettingsPage() {
   const store = useAppStore();
-  const updateDetail = (key: keyof AppSettings["detailVisible"]) =>
-    store.updateSettings({ detailVisible: { ...store.settings.detailVisible, [key]: !store.settings.detailVisible[key] } });
-  const updateDefaultVisible = (key: keyof FeedViewSettings["visible"]) =>
-    store.updateSettings({
-      defaultFeedView: {
-        ...store.settings.defaultFeedView,
-        visible: { ...store.settings.defaultFeedView.visible, [key]: !store.settings.defaultFeedView.visible[key] },
-      },
-    });
   return (
     <div className="page">
       <h1>Settings</h1>
@@ -1802,98 +1612,7 @@ function SettingsPage() {
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Safety & Content">
-        <div className="chips">
-          {(["safe", "suggestive", "erotica", "pornographic"] as ContentRating[]).map((rating) => (
-            <button
-              className={`chip chipbutton ${store.settings.contentRatings.includes(rating) ? "active" : ""}`}
-              type="button"
-              key={rating}
-              onClick={() =>
-                store.updateSettings({
-                  contentRatings: store.settings.contentRatings.includes(rating)
-                    ? store.settings.contentRatings.filter((item) => item !== rating)
-                    : [...store.settings.contentRatings, rating],
-                })
-              }
-            >
-              {rating}
-            </button>
-          ))}
-        </div>
-        <p className="muted tiny">BL, GL, Smut, Hentai, and their children are excluded by default through the feed tag gate. Include those tags inside a feed if you want them.</p>
-      </SettingsSection>
-
-      <SettingsSection title="Feed Defaults">
-        <div className="field-grid">
-          <div className="field">
-            <label>Default grid columns</label>
-            <div className="segmented compact-segments">
-              {[1, 2, 3, 4, 5].map((value) => (
-                <button
-                  className={`segment ${store.settings.defaultFeedView.gridColumns === value ? "active" : ""}`}
-                  key={value}
-                  type="button"
-                  onClick={() =>
-                    store.updateSettings({
-                      defaultFeedView: { ...store.settings.defaultFeedView, mode: "grid", gridColumns: value as FeedViewSettings["gridColumns"] },
-                    })
-                  }
-                >
-                  {value}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-        <MetricSlotPicker
-          slots={store.settings.defaultFeedView.metricSlots}
-          onChange={(metricSlots) => store.updateSettings({ defaultFeedView: { ...store.settings.defaultFeedView, metricSlots } })}
-        />
-        <div className="chips">
-          {(Object.keys(DEFAULT_VISIBLE_TITLE_FIELDS) as (keyof FeedViewSettings["visible"])[]).filter((key) => key !== "labels").map((key) => (
-            <button
-              className={`chip chipbutton ${store.settings.defaultFeedView.visible[key] ? "active" : ""}`}
-              type="button"
-              key={key}
-              onClick={() => updateDefaultVisible(key)}
-            >
-              {TITLE_FIELD_LABELS[key]}
-            </button>
-          ))}
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title="Detail Page Defaults">
-        <div className="chips">
-          {(Object.keys(store.settings.detailVisible) as (keyof AppSettings["detailVisible"])[]).filter((key) => key !== "labels").map((key) => (
-            <button className={`chip chipbutton ${store.settings.detailVisible[key] ? "active" : ""}`} type="button" key={key} onClick={() => updateDetail(key)}>
-              {key}
-            </button>
-          ))}
-        </div>
-      </SettingsSection>
-
-      <SettingsSection title="Navigation & Controls">
-        <div className="field">
-          <label>Feed controls placement</label>
-          <div className="segmented">
-            {([
-              ["drawer", "Drawer"],
-              ["toolbar", "Toolbar"],
-              ["fab", "Floating"],
-            ] as const).map(([value, label]) => (
-              <button
-                className={`segment ${store.settings.controlPlacement === value ? "active" : ""}`}
-                type="button"
-                key={value}
-                onClick={() => store.updateSettings({ controlPlacement: value })}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+      <SettingsSection title="Session">
         <ToggleRow label="Restore last session" description="Reopen at the prior route/feed/scroll when possible." value={store.settings.restoreLastSession} onChange={(restoreLastSession) => store.updateSettings({ restoreLastSession })} />
       </SettingsSection>
 
@@ -1915,7 +1634,7 @@ function SettingsPage() {
           onClick={() =>
             downloadText(
               "manhwa-library-feeds.csv",
-              exportCsv(store.feeds.map((feed) => ({ name: feed.name, sourceMode: feed.filters.sourceMode, view: feed.view.mode, createdAt: feed.createdAt }))),
+              exportCsv(store.feeds.map((feed) => ({ name: feed.name, description: feed.description, sourceMode: feed.filters.sourceMode, createdAt: feed.createdAt }))),
             )
           }
         >
@@ -1961,7 +1680,30 @@ function TitleDetailPage() {
   const [detail, setDetail] = useState<SeriesDetail | null>(null);
   const [status, setStatus] = useState("Loading detail");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showAllRecommendations, setShowAllRecommendations] = useState(false);
+  const detailLayoutKey = `manhwa-detail-layout:${store.activeFeedId ?? "default"}`;
+  const [visible, setVisible] = useState(() => {
+    try {
+      return {
+        ...DEFAULT_DETAIL_VISIBLE,
+        description: true,
+        authorsArtists: true,
+        links: true,
+        ...JSON.parse(localStorage.getItem(detailLayoutKey) ?? "{}"),
+      };
+    } catch {
+      return { ...DEFAULT_DETAIL_VISIBLE, description: true, authorsArtists: true, links: true };
+    }
+  });
   const tagsById = useMemo(() => new Map(store.tags.map((tag) => [tag.id, tag])), [store.tags]);
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [id]);
+
+  useEffect(() => {
+    localStorage.setItem(detailLayoutKey, JSON.stringify(visible));
+  }, [detailLayoutKey, visible]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1989,7 +1731,6 @@ function TitleDetailPage() {
         links: { ...(detail.links ?? {}), ...(catalogItem.links ?? {}) },
       }
     : detail ?? catalogItem;
-  const visible = store.settings.detailVisible;
   if (!series) {
     return (
       <div className="page">
@@ -2003,40 +1744,41 @@ function TitleDetailPage() {
 
   return (
     <div className="detail-page">
-      {series.cover && <img className="detail-bg" src={series.cover} alt="" />}
       <div className="detail-top-actions">
-        <button className="icon-button glass" type="button" onClick={() => navigate(-1)} aria-label="Back">
+        <button className="icon-button" type="button" onClick={() => navigate(-1)} aria-label="Back">
           <ArrowLeft size={22} />
         </button>
         <span className="spacer" />
-        <TitleActions series={series} compact />
-        <Link className="icon-button glass" to={`/recommendations/${series.id}`} aria-label="Recommendations">
+        <Link className="icon-button" to={`/recommendations/${series.id}`} aria-label="Recommendations">
           <Sparkles size={20} />
         </Link>
-        <button className="icon-button glass" type="button" onClick={() => setSettingsOpen(true)} aria-label="Detail settings">
+        <button className="icon-button" type="button" onClick={() => setSettingsOpen(true)} aria-label="Detail settings">
           <EllipsisVertical size={20} />
         </button>
       </div>
-      <section className="detail-hero komikku-detail">
+      <section className="detail-identity">
         {visible.cover && (series.cover ? <img className="detail-cover" src={series.cover} alt="" /> : <div className="detail-cover cover-fallback">No cover</div>)}
-        <div className="detail-main-copy">
+        <div className="detail-copy">
           {visible.title && <h1 className="detail-title">{series.display_title}</h1>}
-          <div className="detail-meta-lines">
-            {visible.authorsArtists && <span>{[...(series.authors ?? []), ...(series.artists ?? [])].filter(Boolean).slice(0, 2).join(" / ")}</span>}
-            {visible.status && series.status && <span>{series.status}</span>}
-            {visible.year && series.year && <span>{series.year}</span>}
-          </div>
-          <div className="big-stat-grid">
-            {(["fanFavouriteRaw", "popularity", "favourites"] as MetricId[]).map((metric) => (
-              <div className="big-stat" key={metric}>
-                <span>{metricDefinition(metric).shortLabel}</span>
-                <strong>{formatMetricValue(series, metric)}</strong>
-              </div>
-            ))}
-          </div>
-          {visible.genreTags && <GenreChips series={series} tagsById={tagsById} />}
+          {visible.authorsArtists && (
+            <p className="detail-creators">{uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable"}</p>
+          )}
+          <p className="detail-facts">
+            {[visible.year && series.year ? String(series.year) : "", visible.status ? series.status ?? "" : "", visible.chapters && series.total_chapters ? `${series.total_chapters} chapters` : ""]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
         </div>
       </section>
+      <section className="detail-stat-grid">
+        {(["fanFavouriteRaw", "popularity", "favourites"] as MetricId[]).map((metric) => (
+          <div className="detail-stat" key={metric}>
+            <strong>{formatMetricValue(series, metric, store.history, store.syncMeta?.historyLastDate)}</strong>
+            <span>{metricDefinition(metric).shortLabel}</span>
+          </div>
+        ))}
+      </section>
+      {visible.genreTags && <section className="detail-block"><GenreChips series={series} tagsById={tagsById} /></section>}
       <section className="detail-block detail-links">
         <DetailLinks series={series} />
       </section>
@@ -2044,14 +1786,6 @@ function TitleDetailPage() {
         <section className="detail-block">
           <h2 className="section-title">Description</h2>
           <p>{detail.description}</p>
-        </section>
-      )}
-      {visible.authorsArtists && detail && (
-        <section className="detail-block">
-          <h2 className="section-title">Creators</h2>
-          <p className="muted">
-            {[...(detail.authors ?? []), ...(detail.artists ?? [])].filter(Boolean).join(", ") || "No creator data"}
-          </p>
         </section>
       )}
       {visible.allTags && (
@@ -2069,11 +1803,36 @@ function TitleDetailPage() {
           </div>
         </section>
       )}
+      <section className="detail-block detail-recommendations">
+        <div className="row">
+          <h2 className="section-title">Recommendations</h2>
+          <span className="spacer" />
+          <button className="button ghost" type="button" onClick={() => setShowAllRecommendations((value) => !value)}>
+            {showAllRecommendations ? "Show less" : "Show more"}
+          </button>
+        </div>
+        {store.settings.recommendationShelves.slice(0, showAllRecommendations ? undefined : 1).map((shelf) => {
+          const items = recommendationItems(series, shelf, store).slice(0, showAllRecommendations ? 20 : 6);
+          const recFeed = createFeed(shelf.name);
+          recFeed.id = `detail-rec-${series.id}-${shelf.id}`;
+          recFeed.view.gridColumns = 3;
+          return (
+            <div className="detail-rec-section" key={shelf.id}>
+              <h3>{shelf.name}</h3>
+              <TitleCollection items={items} feed={recFeed} history={store.history} latestDate={store.syncMeta?.historyLastDate} />
+            </div>
+          );
+        })}
+      </section>
       <BottomDrawer title="Detail Settings" open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DetailSettingsDrawer />
+        <DetailSettingsDrawer visible={visible} onChange={setVisible} />
       </BottomDrawer>
     </div>
   );
+}
+
+function uniqueNames(...groups: (string[] | undefined)[]) {
+  return [...new Set(groups.flat().filter(Boolean))];
 }
 
 function DetailLinks({ series }: { series: SeriesCatalog }) {
@@ -2096,79 +1855,36 @@ function DetailLinks({ series }: { series: SeriesCatalog }) {
   );
 }
 
-function TitleActions({ series, compact = false }: { series: SeriesCatalog; compact?: boolean }) {
-  const store = useAppStore();
-  const [folderId, setFolderId] = useState(store.folders[0]?.id ?? "");
-  const manualFolders = store.folders.filter((folder) => folder.kind === "manual");
-  useEffect(() => {
-    if (!folderId && manualFolders[0]) setFolderId(manualFolders[0].id);
-  }, [folderId, manualFolders]);
-  const addToFolder = () => {
-    const folder = manualFolders.find((item) => item.id === folderId);
-    if (!folder) return;
-    store.upsertFolder({
-      ...folder,
-      titleIds: folder.titleIds.includes(series.id) ? folder.titleIds : [...folder.titleIds, series.id],
-      updatedAt: new Date().toISOString(),
-    });
-  };
-  if (compact) {
-    return (
-      <button className="icon-button glass" type="button" onClick={addToFolder} disabled={!folderId} aria-label="Add to folder">
-        <Plus size={20} />
-      </button>
-    );
-  }
+function DetailSettingsDrawer({
+  visible,
+  onChange,
+}: {
+  visible: AppSettings["detailVisible"];
+  onChange: React.Dispatch<React.SetStateAction<AppSettings["detailVisible"]>>;
+}) {
+  const fields: [keyof AppSettings["detailVisible"], string, string][] = [
+    ["cover", "Cover", "Show the title artwork."],
+    ["title", "Title", "Show the primary title."],
+    ["description", "Description", "Show the full available synopsis."],
+    ["genreTags", "Genres", "Show the main genre row."],
+    ["allTags", "All tags", "Show every catalog tag."],
+    ["authorsArtists", "Creators", "Show authors and artists."],
+    ["links", "External links", "Show MangaBaka, AniList, and other sources."],
+    ["status", "Status", "Show publication status."],
+    ["year", "Year", "Show release year."],
+    ["chapters", "Chapters", "Show chapter count when available."],
+  ];
   return (
-    <section className="detail-actions">
-      <h2 className="section-title">Library Actions</h2>
-      <div className="field-grid">
-        <div className="field">
-          <label>Add to manual folder</label>
-          <div className="row wrap">
-            <div className="chips">
-              {manualFolders.length === 0 && <span className="muted tiny">Create a manual folder first.</span>}
-              {manualFolders.map((folder) => (
-                <button className={`chip chipbutton ${folderId === folder.id ? "active" : ""}`} type="button" key={folder.id} onClick={() => setFolderId(folder.id)}>
-                  {folder.name}
-                </button>
-              ))}
-            </div>
-            <button className="button" type="button" onClick={addToFolder} disabled={!folderId}>
-              Add
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function DetailSettingsDrawer() {
-  const store = useAppStore();
-  const updateDetail = (key: keyof AppSettings["detailVisible"]) =>
-    store.updateSettings({ detailVisible: { ...store.settings.detailVisible, [key]: !store.settings.detailVisible[key] } });
-  return (
-    <div>
-      <p className="muted">These detail toggles become the default detail layout for every title.</p>
-      <div className="chips">
-        {(Object.keys(store.settings.detailVisible) as (keyof AppSettings["detailVisible"])[]).filter((key) => key !== "labels").map((key) => (
-          <button className={`chip chipbutton ${store.settings.detailVisible[key] ? "active" : ""}`} type="button" key={key} onClick={() => updateDetail(key)}>
-            {key}
-          </button>
-        ))}
-      </div>
-      <div className="learn-item">
-        <h2 className="section-title">Stats</h2>
-        <div className="settings-list">
-          {METRIC_DEFINITIONS.filter((metric) => metric.id !== "title").map((metric) => (
-            <div className="setting-row" key={metric.id}>
-              <strong>{metric.shortLabel} - {metric.label}</strong>
-              <span className="muted tiny">{metric.help}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+    <div className="settings-list detail-toggle-list">
+      {fields.map(([key, label, description]) => (
+        <ToggleRow
+          key={key}
+          label={label}
+          description={description}
+          value={visible[key]}
+          onChange={(value) => onChange((current) => ({ ...current, [key]: value }))}
+        />
+      ))}
     </div>
   );
 }
@@ -2180,11 +1896,11 @@ function LearnPage() {
       <div className="learn-grid">
         <LearnItem title="MangaBaka">
           MangaBaka is the catalog backbone: titles, covers, chapters, status, dates, content rating, links, and the detailed tag
-          hierarchy come from the backend export.
+          hierarchy come from the backend export. <a href="https://mangabaka.org" target="_blank" rel="noreferrer">Open MangaBaka</a>.
         </LearnItem>
         <LearnItem title="AniList Metrics">
           Popularity, favourites, and mean score are used only for AniList-mapped titles. Non-AniList titles can still be browsed
-          through common filters such as text, tags, year, chapters, status, and folders.
+          through common filters such as title, tags, year, chapters, and status. <a href="https://anilist.co" target="_blank" rel="noreferrer">Open AniList</a>.
         </LearnItem>
         <LearnItem title="Discovery Metrics">
           Fan% is favourites divided by popularity. Discovery score combines fandom attachment and popularity confidence so niche titles do not unfairly dominate.
@@ -2196,8 +1912,12 @@ function LearnPage() {
           Safe and suggestive content are enabled by default. BL, GL, Smut, Hentai, and their child tags are excluded unless a feed explicitly includes those tags.
         </LearnItem>
         <LearnItem title="Offline And Sharing">
-          Catalog, tags, history, feeds, folders, settings, and opened details are cached locally. Share links contain compressed
+          Catalog, tags, history, feeds, settings, and opened details are cached locally. Share links contain compressed
           config data and open an import preview before changing anything.
+        </LearnItem>
+        <LearnItem title="Other Sources">
+          Non-AniList titles prefer <a href="https://www.mangaupdates.com" target="_blank" rel="noreferrer">MangaUpdates</a>, then{" "}
+          <a href="https://www.anime-planet.com/manga" target="_blank" rel="noreferrer">Anime-Planet</a>. Available English reading links appear last.
         </LearnItem>
         <LearnItem title="Live Data Sync">
           The app now merges live backend catalog stats with query-only enriched fields so cover stats and detail stats use the current backend values.
@@ -2234,10 +1954,22 @@ function ImportPage() {
     }
   }, [params]);
 
+  useEffect(() => {
+    if (payload?.kind !== "feed") return;
+    const previousTitle = document.title;
+    const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+    const previousDescription = description?.content;
+    document.title = `${payload.feed.name} · Manhwa Lib`;
+    if (description) description.content = `Add the ${payload.feed.name} feed to Manhwa Lib.`;
+    return () => {
+      document.title = previousTitle;
+      if (description && previousDescription) description.content = previousDescription;
+    };
+  }, [payload]);
+
   const apply = (mode: "merge" | "replace") => {
     if (!payload) return;
     if (payload.kind === "feed") store.importSnapshot({ feeds: [payload.feed] }, "merge");
-    if (payload.kind === "folder") store.importSnapshot({ folders: [payload.folder] }, "merge");
     if (payload.kind === "settings") store.importSnapshot({ settings: payload.settings as AppSettings }, mode);
     if (payload.kind === "labels") store.importSnapshot({ labels: payload.labels }, mode);
     if (payload.kind === "full") store.importSnapshot(payload.snapshot, mode);
@@ -2252,8 +1984,8 @@ function ImportPage() {
       ) : (
         <div className="empty-state">
           <Import size={28} />
-          <strong>{payload.kind} share</strong>
-          <span className="muted">Review before adding. Shared feeds and folders are added as new local items.</span>
+          <strong>{payload.kind === "feed" ? payload.feed.name : `${payload.kind} share`}</strong>
+          <span className="muted">{payload.kind === "feed" ? "Review this feed before adding it to your library." : "Review before applying this shared configuration."}</span>
           <div className="toolbar">
             <button className="button primary" type="button" onClick={() => apply("merge")}>
               Add
@@ -2289,13 +2021,25 @@ function SharePanelButton({ payload, label = "Share" }: { payload: SharePayload;
 
 function SharePanel({ payload }: { payload: SharePayload }) {
   const url = useMemo(() => makeShareUrl(payload), [payload]);
+  const title = payload.kind === "feed" ? payload.feed.name : "Manhwa Lib configuration";
+  const share = async () => {
+    if (navigator.share) {
+      await navigator.share({ title, text: `${title} · Manhwa Lib`, url });
+      return;
+    }
+    await navigator.clipboard.writeText(url);
+  };
   return (
     <div>
+      <h2 className="share-title">{title}</h2>
       <p className="muted">Same-domain compressed share link. No URL shortener, no tracker.</p>
       <textarea className="textarea" readOnly value={url} />
       <div className="toolbar">
-        <button className="button primary" type="button" onClick={() => void navigator.clipboard.writeText(url)}>
-          <Copy size={16} /> Copy link
+        <button className="button primary" type="button" onClick={() => void share()}>
+          <Share2 size={16} /> Share
+        </button>
+        <button className="button" type="button" onClick={() => void navigator.clipboard.writeText(url)}>
+          <Copy size={16} /> Copy
         </button>
       </div>
     </div>
@@ -2305,8 +2049,6 @@ function SharePanel({ payload }: { payload: SharePayload }) {
 function makeSnapshot(store: ReturnType<typeof useAppStore>) {
   return {
     feeds: store.feeds,
-    folders: store.folders,
-    labels: store.labels,
     settings: store.settings,
     activeFeedId: store.activeFeedId,
     lastRoute: window.location.hash,

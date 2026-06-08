@@ -33,6 +33,7 @@ export interface PublishedDates {
 
 export interface SeriesCatalog {
   id: number;
+  merged_ids?: number[];
   display_title: string;
   cover: string | null;
   year: number | null;
@@ -43,6 +44,9 @@ export interface SeriesCatalog {
   stats: AniListStats;
   analytics: AnalyticsStats;
   published?: PublishedDates | null;
+  first_seen_at?: string | null;
+  created_at?: string | null;
+  added_at?: string | null;
   last_updated_at?: string | null;
   authors?: string[];
   artists?: string[];
@@ -188,6 +192,8 @@ export interface FeedViewSettings {
 export interface Feed {
   id: string;
   name: string;
+  description: string;
+  showDescription: boolean;
   createdAt: string;
   updatedAt: string;
   filters: FeedFilters;
@@ -285,8 +291,8 @@ export interface SyncMeta {
 
 export interface AppStateSnapshot {
   feeds: Feed[];
-  folders: Folder[];
-  labels: UserLabel[];
+  folders?: Folder[];
+  labels?: UserLabel[];
   settings: AppSettings;
   activeFeedId: string | null;
   lastRoute: string;
