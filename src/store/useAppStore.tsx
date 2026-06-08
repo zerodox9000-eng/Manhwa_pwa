@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { DEFAULT_SETTINGS } from "../domain/defaults";
+import { DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS } from "../domain/defaults";
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import type {
   AppSettings,
@@ -13,7 +13,7 @@ import type {
   UserLabel,
 } from "../domain/types";
 import { db, loadSyncMeta } from "../db/appDb";
-import { loadCachedData, syncFrontendData } from "../services/dataService";
+import { loadBundledCatalog, loadCachedData, syncFrontendData } from "../services/dataService";
 
 const STORAGE_KEY = "manhwa-library-state-v1";
 
@@ -51,6 +51,13 @@ function loadLocalSnapshot(): Partial<AppStateSnapshot> {
 }
 
 function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
+  const savedShelves = settings?.recommendationShelves?.filter(
+    (shelf) => shelf.id !== "latest-similar" && shelf.id !== "completed-similar",
+  );
+  const recommendationShelves = savedShelves?.length ? [...savedShelves] : [...DEFAULT_SETTINGS.recommendationShelves];
+  for (const shelf of DEFAULT_SETTINGS.recommendationShelves) {
+    if (!recommendationShelves.some((item) => item.id === shelf.id)) recommendationShelves.push(shelf);
+  }
   return {
     ...DEFAULT_SETTINGS,
     ...settings,
@@ -67,9 +74,7 @@ function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
         labels: false,
       },
     },
-    recommendationShelves: settings?.recommendationShelves?.length
-      ? settings.recommendationShelves
-      : DEFAULT_SETTINGS.recommendationShelves,
+    recommendationShelves,
     detailVisible: {
       ...DEFAULT_SETTINGS.detailVisible,
       ...settings?.detailVisible,
@@ -82,6 +87,9 @@ function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
 }
 
 function normalizeFeed(feed: Feed): Feed {
+  const excludeTagIds = feed.filters.excludeTagIds?.length
+    ? feed.filters.excludeTagIds
+    : DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS;
   return {
     ...feed,
     description: feed.description ?? "",
@@ -99,6 +107,7 @@ function normalizeFeed(feed: Feed): Feed {
               : ["anilist", "non-anilist"],
       contentRatings: feed.filters.contentRatings ?? DEFAULT_SETTINGS.contentRatings,
       metricRanges: feed.filters.metricRanges ?? [],
+      excludeTagIds,
       labelIds: [],
       query: "",
     },
@@ -146,6 +155,20 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setTags(cachedTags);
       setHistory(cachedHistory);
       setSyncMeta(meta);
+      if (cachedCatalog.length === 0) {
+        const bundledCatalog = await loadBundledCatalog();
+        if (bundledCatalog.length > 0) {
+          setCatalog(bundledCatalog);
+          setSyncMeta({
+            lastSync: new Date().toISOString(),
+            totalSeries: bundledCatalog.length,
+            historyFirstDate: null,
+            historyLastDate: null,
+            versionHash: `bundled-${bundledCatalog.length}`,
+            source: "Bundled query index",
+          });
+        }
+      }
       setReady(true);
       const hasLiveMergedCatalog = meta?.versionHash?.includes("live-merged");
       const hasQueryDates = cachedCatalog.some((item) => item.published?.start_date || item.published?.end_date);

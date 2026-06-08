@@ -8,11 +8,11 @@ import type {
   TagNode,
   UserLabel,
 } from "./types";
-import { isDateWithin, resolveRollingWindow } from "./dates";
+import { isDateWithin, isFutureDate, resolveRollingWindow } from "./dates";
 import { chapterNumber, historyDeltaForWindow, metricValue } from "./metrics";
 
 const SENSITIVE_MATCH =
-  /\b(Boys['’ ]?Love|Girls['’ ]?Love|BL|GL|Smut|Hentai|Yaoi|Yuri|Shounen Ai|Shoujo Ai|Danmei|Bara|Baihe|Tanbi)\b/i;
+  /\b(Boys['’ ]?Love|Girls['’ ]?Love|Smut|Hentai|Yaoi|Yuri|Shounen Ai|Shoujo Ai|Danmei|Bara|Baihe|Tanbi)\b/i;
 
 export function hasAniList(series: SeriesCatalog) {
   return Boolean(
@@ -209,6 +209,7 @@ export function runFeedQuery(args: {
         missingDateData = true;
         return false;
       }
+      if (isFutureDate(dateValue)) return false;
       if (!isDateWithin(dateValue, window.from, window.to)) return false;
     }
 
@@ -228,6 +229,12 @@ export function runFeedQuery(args: {
       if (window && rule.metric.includes("Growth")) {
         av = historyDeltaForWindow(a.id, rule.metric, history, window.from, window.to) ?? av;
         bv = historyDeltaForWindow(b.id, rule.metric, history, window.from, window.to) ?? bv;
+      }
+      const aMissing = typeof av !== "string" && (av === -Infinity || av == null || Number.isNaN(Number(av)));
+      const bMissing = typeof bv !== "string" && (bv === -Infinity || bv == null || Number.isNaN(Number(bv)));
+      if (aMissing || bMissing) {
+        if (aMissing && bMissing) continue;
+        return aMissing ? 1 : -1;
       }
       if (av === bv) continue;
       const direction = rule.direction === "asc" ? 1 : -1;

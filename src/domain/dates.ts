@@ -12,6 +12,18 @@ export function toDateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+export function todayKey() {
+  const now = new Date();
+  return toDateKey(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())));
+}
+
+export function isFutureDate(value?: string | null) {
+  const date = parseDate(value);
+  const today = parseDate(todayKey());
+  if (!date || !today) return false;
+  return date.getTime() > today.getTime();
+}
+
 export function addDuration(date: Date, amount: number, unit: RollingWindow["unit"], direction = 1) {
   const copy = new Date(date);
   const value = amount * direction;

@@ -277,6 +277,7 @@ export interface AppSettings {
   sharingDefault: "feed" | "folder" | "settings" | "full";
   sfwShareDefault: boolean;
   includeAppNameInShare: boolean;
+  searchSensitiveTags: boolean;
 }
 
 export interface SyncMeta {

@@ -1,5 +1,5 @@
 import type { HistoryMap, MetricId, SeriesCatalog } from "./types";
-import { parseDate } from "./dates";
+import { isFutureDate, parseDate } from "./dates";
 
 export interface MetricDefinition {
   id: MetricId;
@@ -85,8 +85,14 @@ export function metricValue(series: SeriesCatalog, metric: MetricId, history: Hi
   if (metric === "popularityPercentile") return analytics.popularityPercentile ?? -Infinity;
   if (metric === "fanFavouriteDiscoveryScore") return analytics.fanFavouriteDiscoveryScore ?? -Infinity;
   if (metric === "fanFavouriteDiscoveryPercentile") return analytics.fanFavouriteDiscoveryPercentile ?? -Infinity;
-  if (metric === "releaseDate") return parseDate(series.published?.start_date)?.getTime() ?? -Infinity;
-  if (metric === "endDate") return parseDate(series.published?.end_date)?.getTime() ?? -Infinity;
+  if (metric === "releaseDate") {
+    const date = series.published?.start_date;
+    return isFutureDate(date) ? -Infinity : parseDate(date)?.getTime() ?? -Infinity;
+  }
+  if (metric === "endDate") {
+    const date = series.published?.end_date;
+    return isFutureDate(date) ? -Infinity : parseDate(date)?.getTime() ?? -Infinity;
+  }
 
   const entries = history[String(series.id)] ?? [];
   const earliest = entries[0];
@@ -128,6 +134,7 @@ export function formatMetricValue(series: SeriesCatalog, metric: MetricId, histo
   }
   if (metric === "releaseDate" || metric === "endDate") {
     const raw = metric === "releaseDate" ? series.published?.start_date : series.published?.end_date;
+    if (isFutureDate(raw)) return "n/a";
     return raw ?? "n/a";
   }
   if (metric === "year") return String(Math.trunc(Number(value)));

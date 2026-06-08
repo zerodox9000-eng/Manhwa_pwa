@@ -8,6 +8,14 @@ function bytesToText(bytes: Uint8Array) {
   return new TextDecoder("utf-8").decode(bytes);
 }
 
+function decodeJsonBytes(bytes: Uint8Array) {
+  try {
+    return bytesToText(inflate(bytes));
+  } catch {
+    return bytesToText(bytes);
+  }
+}
+
 async function fetchJson<T>(base: string, path: string, preferGzip = true): Promise<T> {
   const targets = preferGzip ? [`${path}.gz`, path] : [path];
   let lastError: unknown;
@@ -22,7 +30,7 @@ async function fetchJson<T>(base: string, path: string, preferGzip = true): Prom
 
       if (target.endsWith(".gz")) {
         const buffer = await response.arrayBuffer();
-        return JSON.parse(bytesToText(inflate(new Uint8Array(buffer)))) as T;
+        return JSON.parse(decodeJsonBytes(new Uint8Array(buffer))) as T;
       }
 
       return (await response.json()) as T;
@@ -44,7 +52,7 @@ async function fetchLocalJson<T>(path: string): Promise<T | null> {
 
     if (path.endsWith(".gz")) {
       const buffer = await response.arrayBuffer();
-      return JSON.parse(bytesToText(inflate(new Uint8Array(buffer)))) as T;
+      return JSON.parse(decodeJsonBytes(new Uint8Array(buffer))) as T;
     }
 
     return (await response.json()) as T;
@@ -221,6 +229,14 @@ export async function loadCachedData() {
   ) as HistoryMap;
 
   return { catalog, tags, history };
+}
+
+export async function loadBundledCatalog() {
+  const catalog = await fetchLocalJson<SeriesCatalog[]>(
+    "data/query-index.json.gz"
+  );
+  if (!catalog?.length) return [];
+  return normalizeCatalog(catalog, {}).catalog;
 }
 
 export async function fetchSeriesDetail(source: string, id: number) {

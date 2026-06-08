@@ -18,6 +18,7 @@ export const PAGES_EXPORT_BASE =
 export const DATA_SOURCE_CANDIDATES = [PAGES_EXPORT_BASE, RAW_EXPORT_BASE];
 
 export const SAFE_RATINGS = ["safe", "suggestive"] as const;
+export const DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS = [4, 180, 41, 10];
 
 export const DEFAULT_VISIBLE_TITLE_FIELDS: VisibleTitleFields = {
   cover: true,
@@ -77,7 +78,7 @@ export const DEFAULT_FILTERS: FeedFilters = {
   sourceModes: ["anilist", "non-anilist"],
   query: "",
   includeTagIds: [],
-  excludeTagIds: [],
+  excludeTagIds: [...DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS],
   tagMatch: "any",
   contentRatings: ["safe", "suggestive"],
   statuses: [],
@@ -118,21 +119,12 @@ export const DEFAULT_RECOMMENDATION_SHELVES: RecommendationShelf[] = [
     metricRanges: [],
   },
   {
-    id: "latest-similar",
-    name: "Latest similar releases",
-    statusMode: "any",
-    dateMode: "latest",
-    sourceModes: ["anilist", "non-anilist"],
-    sort: [{ id: "rec-release", metric: "releaseDate", direction: "desc" }],
-    metricRanges: [],
-  },
-  {
-    id: "completed-similar",
-    name: "Completed similar",
+    id: "completed-most-loved",
+    name: "Completed most loved",
     statusMode: "completed",
     dateMode: "any",
     sourceModes: ["anilist", "non-anilist"],
-    sort: [{ id: "rec-complete-fan", metric: "fanFavouriteRaw", direction: "desc" }],
+    sort: [{ id: "rec-complete-loved", metric: "fanFavouriteRaw", direction: "desc" }],
     metricRanges: [],
   },
 ];
@@ -165,6 +157,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   sharingDefault: "feed",
   sfwShareDefault: true,
   includeAppNameInShare: true,
+  searchSensitiveTags: false,
 };
 
 export function createFeed(name = "New Feed"): Feed {

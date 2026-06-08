@@ -6,13 +6,6 @@ function cleanText(value?: string | null) {
   return (value ?? "").trim();
 }
 
-function normalizedTitle(value?: string | null) {
-  return cleanText(value)
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
-}
-
 function normalizedCover(value?: string | null) {
   if (!value) return "";
   try {
@@ -131,12 +124,10 @@ export function normalizeCatalog(
 
   for (const item of catalog) {
     parent.set(item.id, item.id);
-    const title = normalizedTitle(item.display_title);
     const cover = normalizedCover(item.cover);
     const keys = [
       ...sourceKeys(item),
       cover ? `cover:${cover}` : "",
-      title && !PLACEHOLDER_TITLE.test(item.display_title) ? `title:${title}` : "",
     ].filter(Boolean);
     for (const key of keys) {
       const owner = keyOwner.get(key);

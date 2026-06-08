@@ -37,7 +37,8 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT } from "./domain/defaults";
-import { isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
+import { isFutureDate } from "./domain/dates";
+import { buildSensitiveTagSet, isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
 import { formatMetricValue, METRIC_DEFINITIONS, metricDefinition, metricValue } from "./domain/metrics";
 import { decodeSharePayload, exportCsv, makeShareUrl, type SharePayload } from "./domain/share";
 import type {
@@ -218,11 +219,37 @@ function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [swipeAnimating, setSwipeAnimating] = useState(false);
   const activeFeed = store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null;
 
   useEffect(() => {
     if (!store.activeFeedId && store.feeds[0]) store.setActiveFeedId(store.feeds[0].id);
   }, [store]);
+
+  const animateFeedChange = (nextIndex: number, direction: 1 | -1) => {
+    const width = window.innerWidth || 360;
+    setSwipeAnimating(true);
+    setSwipeOffset(-direction * width);
+    window.setTimeout(() => {
+      store.setActiveFeedId(store.feeds[nextIndex].id);
+      setSwipeAnimating(false);
+      setSwipeOffset(direction * width);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setSwipeAnimating(true);
+          setSwipeOffset(0);
+          window.setTimeout(() => setSwipeAnimating(false), 220);
+        });
+      });
+    }, 190);
+  };
+
+  const settleSwipe = () => {
+    setSwipeAnimating(true);
+    setSwipeOffset(0);
+    window.setTimeout(() => setSwipeAnimating(false), 180);
+  };
 
   return (
     <div className="page">
@@ -245,23 +272,45 @@ function HomePage() {
         </div>
       ) : (
         <div
-          className="feed-swipe-surface"
+          className={`feed-swipe-surface ${swipeAnimating ? "animating" : ""}`}
+          style={{ "--swipe-offset": `${swipeOffset}px` } as React.CSSProperties}
           onTouchStart={(event) => {
             const touch = event.touches[0];
             touchStart.current = { x: touch.clientX, y: touch.clientY };
           }}
+          onTouchMove={(event) => {
+            const start = touchStart.current;
+            if (!start || event.touches.length === 0) return;
+            const touch = event.touches[0];
+            const dx = touch.clientX - start.x;
+            const dy = touch.clientY - start.y;
+            if (Math.abs(dx) < Math.abs(dy) * 1.2) return;
+            setSwipeAnimating(false);
+            setSwipeOffset(Math.max(-120, Math.min(120, dx)));
+          }}
           onTouchEnd={(event) => {
             const start = touchStart.current;
             touchStart.current = null;
-            if (!start || event.changedTouches.length === 0) return;
+            if (!start || event.changedTouches.length === 0) {
+              settleSwipe();
+              return;
+            }
             const touch = event.changedTouches[0];
             const dx = touch.clientX - start.x;
             const dy = touch.clientY - start.y;
-            if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.35) return;
+            if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.35) {
+              settleSwipe();
+              return;
+            }
             const index = store.feeds.findIndex((item) => item.id === activeFeed.id);
             const next = dx < 0 ? index + 1 : index - 1;
-            if (next >= 0 && next < store.feeds.length) store.setActiveFeedId(store.feeds[next].id);
+            if (next >= 0 && next < store.feeds.length) {
+              animateFeedChange(next, dx < 0 ? 1 : -1);
+            } else {
+              settleSwipe();
+            }
           }}
+          onTouchCancel={settleSwipe}
         >
           <FeedView feed={activeFeed} />
         </div>
@@ -530,8 +579,9 @@ function TitleCard({
       <Link to={`/title/${series.id}`} className="title-card" data-testid="title-card">
         <div className="poster-shell">
           <Cover series={series} />
+          {view.visible.rank && <span className="rank">{rank}</span>}
           <div className="poster-metrics">
-            <TitleMetrics series={series} rank={rank} view={view} compact history={history} latestDate={latestDate} />
+            <TitleMetrics series={series} view={view} compact history={history} latestDate={latestDate} />
           </div>
         </div>
         <div className="title-meta">
@@ -544,14 +594,12 @@ function TitleCard({
 
 function TitleMetrics({
   series,
-  rank,
   view,
   compact = false,
   history,
   latestDate,
 }: {
   series: SeriesCatalog;
-  rank?: number;
   view: FeedViewSettings;
   compact?: boolean;
   history: HistoryMap;
@@ -563,7 +611,6 @@ function TitleMetrics({
     .filter((item) => item.value !== "n/a");
   return (
     <div className={`metrics ${compact ? "compact-metrics" : ""}`}>
-      {view.visible.rank && rank != null && <span className="rank-stat"><b>#</b>{rank}</span>}
       {values.map(({ metric, value }) => (
         <span key={metric}>
           <b>{metricDefinition(metric).shortLabel}</b> {value}
@@ -578,6 +625,7 @@ function FeedsPage() {
   const [editorFeed, setEditorFeed] = useState<Feed | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  const [dragGhost, setDragGhost] = useState<{ feed: Feed; covers: SeriesCatalog[]; x: number; y: number } | null>(null);
 
   const feedItems = (feed: Feed) =>
     runFeedQuery({
@@ -601,34 +649,47 @@ function FeedsPage() {
       </div>
       <p className="muted tiny">Hold the grip and drag a feed to change Home swipe order.</p>
       <div className="feed-cover-grid">
-        {store.feeds.map((feed) => (
-          <FeedCoverCard
-            key={feed.id}
-            feed={feed}
-            covers={feedItems(feed).slice(0, 4)}
-            dragging={draggingId === feed.id}
-            over={overId === feed.id}
-            onOpen={() => store.setActiveFeedId(feed.id)}
-            onEdit={() => setEditorFeed(feed)}
-            onDelete={() => store.deleteFeed(feed.id)}
-            onDragStart={(event) => {
-              event.currentTarget.setPointerCapture(event.pointerId);
-              setDraggingId(feed.id);
-              setOverId(feed.id);
-            }}
-            onDragMove={(event) => {
-              if (!draggingId) return;
-              const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-feed-id]");
-              if (target?.dataset.feedId) setOverId(target.dataset.feedId);
-            }}
-            onDragEnd={() => {
-              if (draggingId && overId) store.moveFeed(draggingId, overId);
-              setDraggingId(null);
-              setOverId(null);
-            }}
-          />
-        ))}
+        {store.feeds.map((feed) => {
+          const covers = feedItems(feed).slice(0, 4);
+          return (
+            <FeedCoverCard
+              key={feed.id}
+              feed={feed}
+              covers={covers}
+              dragging={draggingId === feed.id}
+              over={overId === feed.id}
+              onOpen={() => store.setActiveFeedId(feed.id)}
+              onEdit={() => setEditorFeed(feed)}
+              onDelete={() => store.deleteFeed(feed.id)}
+              onDragStart={(event) => {
+                event.currentTarget.setPointerCapture(event.pointerId);
+                setDraggingId(feed.id);
+                setOverId(feed.id);
+                setDragGhost({ feed, covers, x: event.clientX, y: event.clientY });
+              }}
+              onDragMove={(event) => {
+                if (!draggingId && !dragGhost) return;
+                setDragGhost((current) => current && { ...current, x: event.clientX, y: event.clientY });
+                const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-feed-id]");
+                if (target?.dataset.feedId) setOverId(target.dataset.feedId);
+              }}
+              onDragEnd={(event) => {
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                if (draggingId && overId) store.moveFeed(draggingId, overId);
+                setDraggingId(null);
+                setOverId(null);
+                setDragGhost(null);
+              }}
+            />
+          );
+        })}
       </div>
+      {dragGhost && (
+        <div className="feed-drag-ghost" style={{ left: dragGhost.x, top: dragGhost.y }}>
+          <MosaicCover items={dragGhost.covers} title={dragGhost.feed.name} />
+          <strong>{dragGhost.feed.name}</strong>
+        </div>
+      )}
       <BottomDrawer title={editorFeed?.name ?? "Feed"} open={Boolean(editorFeed)} onOpenChange={(open) => !open && setEditorFeed(null)}>
         {editorFeed && (
           <FeedEditor
@@ -1224,14 +1285,20 @@ function SearchPage() {
     feed.view = { ...feed.view, gridColumns: 3 };
     return feed;
   }, []);
+  const sensitiveTagIds = useMemo(() => buildSensitiveTagSet(store.tags), [store.tags]);
   const results = useMemo(
     () =>
       query.trim()
         ? store.catalog
-            .filter((item) => item.display_title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+            .filter((item) => {
+              if (!item.display_title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) return false;
+              if (!["safe", "suggestive"].includes(String(item.content_rating ?? ""))) return false;
+              if (!store.settings.searchSensitiveTags && item.tag_ids.some((id) => sensitiveTagIds.has(id))) return false;
+              return true;
+            })
             .sort((a, b) => a.display_title.localeCompare(b.display_title))
         : [],
-    [query, store.catalog],
+    [query, sensitiveTagIds, store.catalog, store.settings.searchSensitiveTags],
   );
   useEffect(() => {
     sessionStorage.setItem("manhwa-search-query", query);
@@ -1437,12 +1504,20 @@ function recommendationItems(base: SeriesCatalog, shelf: RecommendationShelf, st
       for (const rule of shelf.sort) {
         const av = metricValue(a.item, rule.metric, store.history, store.syncMeta?.historyLastDate);
         const bv = metricValue(b.item, rule.metric, store.history, store.syncMeta?.historyLastDate);
+        const aMissing = typeof av !== "string" && (av === -Infinity || av == null || Number.isNaN(Number(av)));
+        const bMissing = typeof bv !== "string" && (bv === -Infinity || bv == null || Number.isNaN(Number(bv)));
+        if (aMissing || bMissing) {
+          if (aMissing && bMissing) continue;
+          return aMissing ? 1 : -1;
+        }
         if (av === bv) continue;
         const direction = rule.direction === "asc" ? 1 : -1;
         return av > bv ? direction : -direction;
       }
       if (shelf.dateMode === "latest") {
-        return String(b.item.published?.start_date ?? "").localeCompare(String(a.item.published?.start_date ?? ""));
+        const ad = isFutureDate(a.item.published?.start_date) ? "" : String(a.item.published?.start_date ?? "");
+        const bd = isFutureDate(b.item.published?.start_date) ? "" : String(b.item.published?.start_date ?? "");
+        return bd.localeCompare(ad);
       }
       return b.item.display_title.localeCompare(a.item.display_title);
     })
@@ -1616,6 +1691,15 @@ function SettingsPage() {
         <ToggleRow label="Restore last session" description="Reopen at the prior route/feed/scroll when possible." value={store.settings.restoreLastSession} onChange={(restoreLastSession) => store.updateSettings({ restoreLastSession })} />
       </SettingsSection>
 
+      <SettingsSection title="Search">
+        <ToggleRow
+          label="Show sensitive tag families"
+          description="Global title search includes BL, GL, Smut, Hentai, and child tags only when this is on."
+          value={store.settings.searchSensitiveTags}
+          onChange={(searchSensitiveTags) => store.updateSettings({ searchSensitiveTags })}
+        />
+      </SettingsSection>
+
       <SettingsSection title="Sharing & Backup">
         <Link className="button" to="/learn">
           <Info size={16} /> Learn metrics and data
@@ -1744,6 +1828,7 @@ function TitleDetailPage() {
 
   return (
     <div className="detail-page">
+      {series.cover && <img className="detail-bg" src={series.cover} alt="" />}
       <div className="detail-top-actions">
         <button className="icon-button" type="button" onClick={() => navigate(-1)} aria-label="Back">
           <ArrowLeft size={22} />
@@ -1766,7 +1851,7 @@ function TitleDetailPage() {
           <p className="detail-facts">
             {[visible.year && series.year ? String(series.year) : "", visible.status ? series.status ?? "" : "", visible.chapters && series.total_chapters ? `${series.total_chapters} chapters` : ""]
               .filter(Boolean)
-              .join(" · ")}
+              .join(" / ")}
           </p>
         </div>
       </section>

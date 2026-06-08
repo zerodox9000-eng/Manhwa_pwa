@@ -8,6 +8,7 @@ const tags: TagNode[] = [
   { id: 2, name: "Hentai", path: "Sexual Content > Intensity > Hentai", is_genre: true, parent_id: null, level: 2 },
   { id: 3, name: "Fantasy", path: "Themes > Fantasy", is_genre: true, parent_id: null, level: 2 },
   { id: 4, name: "Isekai", path: "Themes > Fantasy > Isekai", is_genre: false, parent_id: 3, level: 3 },
+  { id: 5, name: "Non-BL with Two Male Leads", path: "Themes > Relationship > Non-BL with Two Male Leads", is_genre: false, parent_id: null, level: 3 },
 ];
 
 const baseSeries: SeriesCatalog[] = [
@@ -81,6 +82,23 @@ describe("runFeedQuery", () => {
     expect(result.items.map((item) => item.id)).toEqual([1, 3]);
   });
 
+  it("does not hide non-BL relationship tags as sensitive Boys Love", () => {
+    const feed = createFeed("non bl");
+    feed.filters.sourceMode = "anilist";
+    feed.filters.sourceModes = ["anilist"];
+    const result = runFeedQuery({
+      feed,
+      series: [{ ...baseSeries[0], id: 40, display_title: "Non BL friendship", tag_ids: [5] }],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+      metaHistoryFirst: "2024-05-01",
+      metaHistoryLast: "2024-05-10",
+    });
+    expect(result.items.map((item) => item.id)).toEqual([40]);
+  });
+
   it("segments non-AniList titles by source mode", () => {
     const feed = createFeed("non anilist");
     feed.filters.sourceMode = "non-anilist";
@@ -136,10 +154,45 @@ describe("runFeedQuery", () => {
     expect(result.items.map((item) => item.id)).toEqual([3, 2, 1]);
   });
 
+  it("keeps future release dates inactive for sorting and rolling filters", () => {
+    const feed = createFeed("future release");
+    feed.filters.sourceMode = "mixed";
+    feed.filters.sourceModes = ["anilist", "non-anilist"];
+    feed.sort = [{ id: "release", metric: "releaseDate", direction: "desc" }];
+    const future = { ...baseSeries[0], id: 41, display_title: "Future dated", published: { start_date: "2999-01-01", end_date: null } };
+    const past = { ...baseSeries[0], id: 42, display_title: "Past dated", published: { start_date: "2024-12-01", end_date: null } };
+    const result = runFeedQuery({
+      feed,
+      series: [future, past],
+      tags,
+      history,
+      labels: [],
+      settings: { ...DEFAULT_SETTINGS, nonAniListPlacement: "mixed" },
+      metaHistoryFirst: "2024-05-01",
+      metaHistoryLast: "2024-05-10",
+    });
+    expect(result.items.map((item) => item.id)).toEqual([42, 41]);
+
+    feed.filters.dateField = "release";
+    feed.filters.rolling = { mode: "fixed", amount: 1, unit: "days", from: "2998-01-01", to: "2999-12-31" };
+    const filtered = runFeedQuery({
+      feed,
+      series: [future, past],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+      metaHistoryFirst: "2024-05-01",
+      metaHistoryLast: "2024-05-10",
+    });
+    expect(filtered.items).toEqual([]);
+  });
+
   it("matches child tags when a parent tag is selected", () => {
     const feed = createFeed("hierarchy");
     feed.filters.sourceModes = ["anilist", "non-anilist"];
     feed.filters.includeTagIds = [3];
+    feed.filters.excludeTagIds = [];
     const result = runFeedQuery({
       feed,
       series: [
