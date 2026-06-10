@@ -1884,24 +1884,14 @@ textarea,
   padding-bottom: calc(72px + env(safe-area-inset-bottom));
 }
 
-.feed-swipe-viewport {
-  overflow: hidden;
+.feed-swipe-surface {
+  transform: translate3d(var(--swipe-offset, 0), 0, 0);
   touch-action: pan-y;
-}
-
-.feed-swipe-track {
-  display: grid;
-  grid-template-columns: repeat(3, 100%);
-  transform: translate3d(calc(-100% + var(--swipe-offset, 0px)), 0, 0);
   will-change: transform;
 }
 
-.feed-swipe-track.animating {
+.feed-swipe-surface.animating {
   transition: transform 210ms cubic-bezier(0.22, 0.8, 0.24, 1);
-}
-
-.feed-swipe-pane {
-  min-width: 0;
 }
 
 .poster-shell .rank {

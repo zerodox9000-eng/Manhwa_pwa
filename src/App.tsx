@@ -220,50 +220,38 @@ function BottomDrawer({
 function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
-  const touchStart = useRef<{ x: number; y: number; locked: boolean; cancelled: boolean } | null>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [swipeAnimating, setSwipeAnimating] = useState(false);
   const activeFeed = store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null;
-  const activeIndex = activeFeed ? store.feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
-  const previousFeed = activeIndex > 0 ? store.feeds[activeIndex - 1] : null;
-  const nextFeed = activeIndex >= 0 && activeIndex < store.feeds.length - 1 ? store.feeds[activeIndex + 1] : null;
-  const swiping = Boolean(activeFeed && (swipeOffset !== 0 || swipeAnimating));
 
   useEffect(() => {
     if (!store.activeFeedId && store.feeds[0]) store.setActiveFeedId(store.feeds[0].id);
   }, [store]);
 
-  const finishSwipe = (nextIndex: number, targetOffset: number) => {
-    if (nextIndex < 0 || nextIndex >= store.feeds.length) {
-      cancelSwipe();
-      return;
-    }
+  const animateFeedChange = (nextIndex: number, direction: 1 | -1) => {
+    const width = window.innerWidth || 360;
     setSwipeAnimating(true);
-    setSwipeOffset(targetOffset);
+    setSwipeOffset(-direction * width);
     window.setTimeout(() => {
       store.setActiveFeedId(store.feeds[nextIndex].id);
       resetPageScroll();
       setSwipeAnimating(false);
-      setSwipeOffset(0);
-    }, 220);
+      setSwipeOffset(direction * width);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setSwipeAnimating(true);
+          setSwipeOffset(0);
+          window.setTimeout(() => setSwipeAnimating(false), 220);
+        });
+      });
+    }, 190);
   };
 
-  const cancelSwipe = () => {
+  const settleSwipe = () => {
     setSwipeAnimating(true);
     setSwipeOffset(0);
     window.setTimeout(() => setSwipeAnimating(false), 180);
-  };
-
-  const settleSwipe = (dx: number, dy: number) => {
-    const width = window.innerWidth || 360;
-    const threshold = Math.min(150, Math.max(86, width * 0.24));
-    if (Math.abs(dx) < threshold || Math.abs(dx) < Math.abs(dy) * 1.7 || activeIndex < 0) {
-      cancelSwipe();
-      return;
-    }
-    if (dx < 0 && nextFeed) finishSwipe(activeIndex + 1, -width);
-    else if (dx > 0 && previousFeed) finishSwipe(activeIndex - 1, width);
-    else cancelSwipe();
   };
 
   return (
@@ -287,11 +275,11 @@ function HomePage() {
         </div>
       ) : (
         <div
-          className="feed-swipe-viewport"
+          className={`feed-swipe-surface ${swipeAnimating ? "animating" : ""}`}
           style={{ "--swipe-offset": `${swipeOffset}px` } as React.CSSProperties}
           onTouchStart={(event) => {
             const touch = event.touches[0];
-            touchStart.current = { x: touch.clientX, y: touch.clientY, locked: false, cancelled: false };
+            touchStart.current = { x: touch.clientX, y: touch.clientY };
           }}
           onTouchMove={(event) => {
             const start = touchStart.current;
@@ -299,46 +287,35 @@ function HomePage() {
             const touch = event.touches[0];
             const dx = touch.clientX - start.x;
             const dy = touch.clientY - start.y;
-            if (start.cancelled) return;
-            if (!start.locked) {
-              if (Math.abs(dx) < 18 && Math.abs(dy) < 18) return;
-              if (Math.abs(dy) > Math.abs(dx) * 0.8) {
-                start.cancelled = true;
-                setSwipeOffset(0);
-                return;
-              }
-              if (Math.abs(dx) < Math.abs(dy) * 1.55) return;
-              start.locked = true;
-            }
+            if (Math.abs(dx) < Math.abs(dy) * 1.2) return;
             setSwipeAnimating(false);
-            const width = window.innerWidth || 360;
-            const leftBound = nextFeed ? -width : -64;
-            const rightBound = previousFeed ? width : 64;
-            setSwipeOffset(Math.max(leftBound, Math.min(rightBound, dx)));
+            setSwipeOffset(Math.max(-120, Math.min(120, dx)));
           }}
           onTouchEnd={(event) => {
             const start = touchStart.current;
             touchStart.current = null;
-            if (!start || start.cancelled || event.changedTouches.length === 0) {
-              cancelSwipe();
+            if (!start || event.changedTouches.length === 0) {
+              settleSwipe();
               return;
             }
             const touch = event.changedTouches[0];
             const dx = touch.clientX - start.x;
             const dy = touch.clientY - start.y;
-            settleSwipe(dx, dy);
+            if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.35) {
+              settleSwipe();
+              return;
+            }
+            const index = store.feeds.findIndex((item) => item.id === activeFeed.id);
+            const next = dx < 0 ? index + 1 : index - 1;
+            if (next >= 0 && next < store.feeds.length) {
+              animateFeedChange(next, dx < 0 ? 1 : -1);
+            } else {
+              settleSwipe();
+            }
           }}
-          onTouchCancel={cancelSwipe}
+          onTouchCancel={settleSwipe}
         >
-          {swiping ? (
-            <div className={`feed-swipe-track ${swipeAnimating ? "animating" : ""}`}>
-              <div className="feed-swipe-pane">{previousFeed ? <FeedView feed={previousFeed} /> : null}</div>
-              <div className="feed-swipe-pane"><FeedView feed={activeFeed} /></div>
-              <div className="feed-swipe-pane">{nextFeed ? <FeedView feed={nextFeed} /> : null}</div>
-            </div>
-          ) : (
-            <FeedView feed={activeFeed} />
-          )}
+          <FeedView feed={activeFeed} />
         </div>
       )}
       <BottomDrawer title="Create Feed" open={editorOpen} onOpenChange={setEditorOpen}>
