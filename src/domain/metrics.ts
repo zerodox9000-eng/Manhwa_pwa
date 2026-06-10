@@ -145,8 +145,23 @@ export function metricValue(series: SeriesCatalog, metric: MetricId, history: Hi
   return -Infinity;
 }
 
-export function formatMetricValue(series: SeriesCatalog, metric: MetricId, history?: HistoryMap, latestDate?: string | null) {
+function roundToDisplayPrecision(value: number, precision: number) {
+  const factor = 10 ** precision;
+  return Math.round((value + Number.EPSILON) * factor) / factor;
+}
+
+export function displayComparableMetricValue(series: SeriesCatalog, metric: MetricId, history?: HistoryMap, latestDate?: string | null) {
   const value = metricValue(series, metric, history, latestDate);
+  if (typeof value !== "number" || value === -Infinity || value == null || Number.isNaN(value)) return value;
+  if (metric === "fanFavouriteRaw" || metric === "fanFavouriteDelta") return roundToDisplayPrecision(value, 1);
+  if (metric.includes("Percentile") || metric.includes("Percent")) return roundToDisplayPrecision(value, 0);
+  if (metric === "meanScore") return roundToDisplayPrecision(value, 0);
+  if (metric === "fanFavouriteDiscoveryScore") return roundToDisplayPrecision(value, 1);
+  return value;
+}
+
+export function formatMetricValue(series: SeriesCatalog, metric: MetricId, history?: HistoryMap, latestDate?: string | null) {
+  const value = displayComparableMetricValue(series, metric, history, latestDate);
   if (value === -Infinity || value == null || Number.isNaN(Number(value))) return "n/a";
   if (typeof value === "string") return value;
   if (metric === "fanFavouriteRaw" || metric === "fanFavouriteDelta") return `${Number(value).toFixed(1)}%`;

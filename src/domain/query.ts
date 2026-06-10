@@ -9,7 +9,7 @@ import type {
   UserLabel,
 } from "./types";
 import { isDateWithin, isFutureDate, resolveRollingWindow } from "./dates";
-import { chapterNumber, effectiveEndDate, effectiveReleaseDate, historyDeltaForWindow, metricDefinition, metricValue } from "./metrics";
+import { chapterNumber, displayComparableMetricValue, effectiveEndDate, effectiveReleaseDate, historyDeltaForWindow, metricDefinition, metricValue } from "./metrics";
 
 const RELATIONSHIP_SENSITIVE_NAMES = new Set(["boys love", "girls love"]);
 const ADULT_SENSITIVE_NAMES = new Set(["smut", "hentai"]);
@@ -203,7 +203,7 @@ export function runFeedQuery(args: {
     if (filters.minMeanScore != null && (item.stats.meanScore == null || item.stats.meanScore < filters.minMeanScore)) return false;
     if (filters.maxMeanScore != null && (item.stats.meanScore == null || item.stats.meanScore > filters.maxMeanScore)) return false;
     for (const range of filters.metricRanges ?? []) {
-      const value = metricValue(item, range.metric, history, metaHistoryLast);
+      const value = displayComparableMetricValue(item, range.metric, history, metaHistoryLast);
       if (typeof value !== "number" || value === -Infinity || Number.isNaN(value)) return false;
       if (range.min != null && value < range.min) return false;
       if (range.max != null && value > range.max) return false;

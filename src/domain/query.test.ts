@@ -270,4 +270,27 @@ describe("runFeedQuery", () => {
     });
     expect(result.items.map((item) => item.id)).toEqual([]);
   });
+
+  it("uses displayed rounded metric values for range filters", () => {
+    const feed = createFeed("rounded display ranges");
+    feed.filters.sourceMode = "anilist";
+    feed.filters.sourceModes = ["anilist"];
+    feed.filters.metricRanges = [{ id: "disc", metric: "fanFavouriteDiscoveryPercentile", min: 90, max: 90 }];
+    const result = runFeedQuery({
+      feed,
+      series: [
+        { ...baseSeries[0], id: 70, display_title: "Rounds below into 90", analytics: { fanFavouriteDiscoveryPercentile: 89.6 } },
+        { ...baseSeries[0], id: 71, display_title: "Rounds above into 90", analytics: { fanFavouriteDiscoveryPercentile: 90.4 } },
+        { ...baseSeries[0], id: 72, display_title: "Rounds below 90", analytics: { fanFavouriteDiscoveryPercentile: 89.4 } },
+        { ...baseSeries[0], id: 73, display_title: "Rounds above 90", analytics: { fanFavouriteDiscoveryPercentile: 90.5 } },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+      metaHistoryFirst: "2024-05-01",
+      metaHistoryLast: "2024-05-10",
+    });
+    expect(result.items.map((item) => item.id)).toEqual([71, 70]);
+  });
 });
