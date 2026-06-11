@@ -1579,6 +1579,10 @@ function recommendationItems(base: SeriesCatalog, shelf: RecommendationShelf, st
     return tag ? isGenreTag(tag) : false;
   });
   const baseVector = buildRecommendationVector(base, tagsById, tagDocumentCounts, store.catalog.length);
+  const baseAnchors = base.tag_ids.filter((id) => {
+    const tag = tagsById.get(id);
+    return tag ? isRecommendationAnchor(tag, tagDocumentCounts, store.catalog.length) : false;
+  });
   const filterFeed = createFeed(shelf.name);
   filterFeed.filters.sourceModes = shelf.sourceModes;
   filterFeed.filters.sourceMode = shelf.sourceModes.length === 2 ? "mixed" : shelf.sourceModes[0];
@@ -1602,16 +1606,19 @@ function recommendationItems(base: SeriesCatalog, shelf: RecommendationShelf, st
       const candidateVector = buildRecommendationVector(item, tagsById, tagDocumentCounts, store.catalog.length);
       const similarity = cosineSimilarity(baseVector, candidateVector);
       const totalTagMatches = item.tag_ids.filter((id) => baseTags.has(id)).length;
-      return { item, genrePercent, sharedGenres, similarity, totalTagMatches };
+      const sharedAnchors = baseAnchors.filter((id) => itemTagSet.has(id)).length;
+      return { item, genrePercent, sharedAnchors, sharedGenres, similarity, totalTagMatches };
     })
-    .filter(({ item, sharedGenres, similarity, totalTagMatches }) => {
-      if (baseGenreIds.length > 0 && sharedGenres === 0) return false;
-      if (similarity < 0.08 && totalTagMatches === 0) return false;
+    .filter(({ item, sharedAnchors, sharedGenres, similarity, totalTagMatches }) => {
+      if (baseAnchors.length > 0 && sharedAnchors === 0) return false;
+      if (baseAnchors.length === 0 && baseGenreIds.length > 0 && sharedGenres === 0) return false;
+      if (similarity < 0.075 && totalTagMatches === 0) return false;
       if (shelf.statusMode === "completed" && item.status !== "completed") return false;
       if (shelf.statusMode === "ongoing" && item.status === "completed") return false;
       return true;
     })
     .sort((a, b) => {
+      if (a.sharedAnchors !== b.sharedAnchors) return b.sharedAnchors - a.sharedAnchors;
       if (Math.abs(a.similarity - b.similarity) > 0.0001) return b.similarity - a.similarity;
       if (a.genrePercent !== b.genrePercent) return b.genrePercent - a.genrePercent;
       if (a.totalTagMatches !== b.totalTagMatches) return b.totalTagMatches - a.totalTagMatches;
@@ -1652,6 +1659,64 @@ function recommendationTagIdf(tagId: number, counts: Map<number, number>, totalI
   return Math.log((totalItems + 1) / ((counts.get(tagId) ?? 0) + 1)) + 1;
 }
 
+function tagPathParts(tag: TagNode) {
+  return tag.path.split(" > ").filter(Boolean);
+}
+
+function normalizedTagName(tag: TagNode) {
+  return tag.name.trim().toLocaleLowerCase();
+}
+
+function recommendationTagWeight(tag: TagNode) {
+  const root = tagRoot(tag);
+  const name = normalizedTagName(tag);
+  const path = tag.path.toLocaleLowerCase();
+  const genre = isGenreTag(tag);
+  const level = Math.max(tag.level ?? 1, 1);
+
+  if (root === "Work Info") return 0.08;
+  if (root === "Derivative Work") return 0.12;
+  if (root === "Audience Demographics") return 0.22;
+  if (root === "Sexual Content") return genre ? 0.28 : 0.18;
+  if (root === "Character Traits") return 0.34 / Math.sqrt(level);
+  if (root === "Character Types") {
+    if (/(male lead|female lead|protagonist|cast)$/.test(name)) return 0.24;
+    return 0.58 / Math.sqrt(level - 0.5);
+  }
+  if (root === "Settings") {
+    if (name === "fantasy" || name === "supernatural" || name === "sci-fi") return 0.55;
+    if (/(tower|dungeon|level system|system|isekai|cultivation|murim|game|virtual reality|apocalypse|cyberpunk)/.test(path)) return 1.25 / Math.sqrt(level - 0.8);
+    return 0.72 / Math.sqrt(level - 0.8);
+  }
+  if (root === "Themes") {
+    if (name === "drama" || name === "romance" || name === "comedy" || name === "slice of life") return 0.48;
+    if (genre) return 2.15 / Math.sqrt(level - 0.7);
+    if (/(economics|business|office|workplace|horror|survival|revenge|politic|kingdom management|territory management|martial arts|murim|mystery|psychological|crime|sports)/.test(path)) {
+      return 1.9 / Math.sqrt(level - 0.8);
+    }
+    return 1.05 / Math.sqrt(level - 0.8);
+  }
+  if (root === "Occupations" || root === "Activities") return 1.75 / Math.sqrt(level - 0.8);
+  if (root === "Locations") {
+    if (/(school|south korea|europe|company|office|dungeon|tower|kingdom)/.test(path)) return 1.45 / Math.sqrt(level - 0.8);
+    return 1.1 / Math.sqrt(level - 0.8);
+  }
+  if (root === "Relationship") {
+    if (/(heterosexual|orientation)/.test(path)) return 0.22;
+    return 1.25 / Math.sqrt(level - 0.8);
+  }
+  if (root === "Narrative Tropes") return 1.35 / Math.sqrt(level - 0.8);
+  if (root === "World Building") return 1.45 / Math.sqrt(level - 0.8);
+  if (root === "Character Archetype") return 1.2 / Math.sqrt(level - 0.8);
+  return genre ? 1.25 : 0.9 / Math.sqrt(level);
+}
+
+function isRecommendationAnchor(tag: TagNode, counts: Map<number, number>, totalItems: number) {
+  const count = counts.get(tag.id) ?? 0;
+  const prevalence = totalItems > 0 ? count / totalItems : 1;
+  return recommendationTagWeight(tag) >= 1.15 && prevalence <= 0.25;
+}
+
 function addVectorWeight(vector: Map<string, number>, key: string, weight: number) {
   vector.set(key, (vector.get(key) ?? 0) + weight);
 }
@@ -1668,14 +1733,14 @@ function buildRecommendationVector(
     if (!tag) continue;
     const idf = recommendationTagIdf(tagId, tagDocumentCounts, totalItems);
     const genre = isGenreTag(tag);
-    const level = Math.max(tag.level ?? 1, 1);
-    const exactWeight = (genre ? 3.2 : 1.45 / Math.sqrt(level)) * idf;
+    const taxonomyWeight = recommendationTagWeight(tag);
+    const exactWeight = taxonomyWeight * idf;
     addVectorWeight(vector, `tag:${tagId}`, exactWeight);
 
-    const pathParts = tag.path.split(" > ").filter(Boolean);
+    const pathParts = tagPathParts(tag);
     const parentKey = tag.parent_id != null ? `parent:${tag.parent_id}` : pathParts.slice(0, -1).join(" > ");
-    if (!genre && parentKey) addVectorWeight(vector, `ctx:${parentKey}`, 0.42 * idf);
-    if (pathParts[0]) addVectorWeight(vector, `root:${pathParts[0]}`, genre ? 0.32 : 0.16);
+    if (!genre && parentKey) addVectorWeight(vector, `ctx:${parentKey}`, taxonomyWeight * 0.22 * idf);
+    if (pathParts[0]) addVectorWeight(vector, `root:${pathParts[0]}`, Math.min(taxonomyWeight * 0.08, genre ? 0.16 : 0.1));
   }
   return vector;
 }
