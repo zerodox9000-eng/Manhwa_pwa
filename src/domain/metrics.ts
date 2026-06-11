@@ -23,7 +23,7 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
   { id: "chapters", label: "Chapters", shortLabel: "Ch", help: "Parsed chapter count when available.", filterable: true, anilistOnly: false },
   { id: "releaseDate", label: "Release date", shortLabel: "Rel", help: "Start date from MangaBaka/AniList export.", filterable: false, anilistOnly: false },
   { id: "endDate", label: "End date", shortLabel: "End", help: "Completion/end date when available.", filterable: false, anilistOnly: false },
-  { id: "mangabakaLatestRank", label: "MangaBaka latest", shortLabel: "MB New", help: "Global MangaBaka latest order from the mixed latest feed.", filterable: false, anilistOnly: false },
+  { id: "mangabakaLatestRank", label: "Latest added", shortLabel: "Add", help: "MangaBaka latest-added order from the mixed latest feed.", filterable: false, anilistOnly: false },
   { id: "popularityGrowth", label: "Popularity growth", shortLabel: "Pop+", help: "Popularity delta across available history.", filterable: true, anilistOnly: true },
   { id: "popularityGrowthPercent", label: "Popularity growth percent", shortLabel: "Pop+%", help: "Popularity percentage growth across available history.", filterable: true, anilistOnly: true },
   { id: "favouritesGrowth", label: "Favourites growth", shortLabel: "Fav+", help: "Favourite delta across available history.", filterable: true, anilistOnly: true },

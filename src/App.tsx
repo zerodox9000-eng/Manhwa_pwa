@@ -69,6 +69,7 @@ const NAV_ITEMS = [
 
 const SORT_OPTIONS: MetricId[] = METRIC_DEFINITIONS.map((definition) => definition.id);
 const RANGE_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.filterable);
+const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.id !== "title" && definition.id !== "mangabakaLatestRank");
 const resetPageScroll = () => window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
@@ -870,38 +871,6 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
     });
   };
 
-  const applyLatestBasis = (basis: "release" | "mangabaka") => {
-    if (basis === "mangabaka") {
-      setDraft((current) => ({
-        ...current,
-        filters: {
-          ...current.filters,
-          dateField: "none",
-          includeEstimatedDates: true,
-        },
-        sort: [{ id: crypto.randomUUID(), metric: "mangabakaLatestRank", direction: "asc" }],
-        view: {
-          ...current.view,
-          metricSlots: ["mangabakaLatestRank"],
-        },
-      }));
-      return;
-    }
-    setDraft((current) => ({
-      ...current,
-      filters: {
-        ...current.filters,
-        dateField: "none",
-        includeEstimatedDates: true,
-      },
-      sort: [{ id: crypto.randomUUID(), metric: "releaseDate", direction: "desc" }],
-      view: {
-        ...current.view,
-        metricSlots: ["releaseDate"],
-      },
-    }));
-  };
-
   useEffect(() => {
     if (!anilistLocked) return;
     if (draft.filters.sourceMode !== "anilist" || draft.filters.sourceModes?.some((mode) => mode !== "anilist")) {
@@ -980,34 +949,6 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
           ))}
         </div>
         <p className="muted tiny">Default sensitive exclusions apply only to exact BL, GL, Smut, and Hentai tags.</p>
-      </div>
-
-      <ToggleRow
-        label="Include estimated dates"
-        description="Show entries with estimated or missing release dates. Their Rel cover stat stays blank; use MB New to sort MangaBaka's latest order."
-        value={draft.filters.includeEstimatedDates ?? true}
-        onChange={(includeEstimatedDates) => updateFilters({ includeEstimatedDates })}
-      />
-
-      <div className="field">
-        <span className="small-label">Latest basis</span>
-        <div className="segmented">
-          <button
-            className={`segment ${draft.sort[0]?.metric === "releaseDate" ? "active" : ""}`}
-            type="button"
-            onClick={() => applyLatestBasis("release")}
-          >
-            Release date
-          </button>
-          <button
-            className={`segment ${draft.sort[0]?.metric === "mangabakaLatestRank" ? "active" : ""}`}
-            type="button"
-            onClick={() => applyLatestBasis("mangabaka")}
-          >
-            MangaBaka latest
-          </button>
-        </div>
-        <p className="muted tiny">MangaBaka latest matches the site&apos;s latest-added order after this feed&apos;s type, rating, source, and tag filters are applied.</p>
       </div>
 
       <div className="field">
@@ -1329,7 +1270,7 @@ function MetricSlotPicker({ slots, onChange }: { slots: MetricId[]; onChange: (s
     <div className="field">
       <span className="small-label">Cover stats - max 3</span>
       <div className="metric-choice">
-        {METRIC_DEFINITIONS.filter((metric) => metric.id !== "title").map((metric) => (
+        {COVER_STAT_METRICS.map((metric) => (
           <button
             className={`metric-option ${current.includes(metric.id) ? "active" : ""}`}
             type="button"

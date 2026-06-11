@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, createFeed } from "./defaults";
-import { runFeedQuery } from "./query";
+import { feedUsesAniListOnlyParameters, runFeedQuery } from "./query";
 import type { HistoryMap, SeriesCatalog, TagNode } from "./types";
 
 const tags: TagNode[] = [
@@ -239,11 +239,12 @@ describe("runFeedQuery", () => {
   });
 
   it("uses MangaBaka latest rank after projecting source mode locally", () => {
-    const feed = createFeed("mb latest non anilist");
-    feed.filters.sourceMode = "non-anilist";
-    feed.filters.sourceModes = ["non-anilist"];
+    const feed = createFeed("latest added");
+    feed.filters.sourceMode = "mixed";
+    feed.filters.sourceModes = ["anilist", "non-anilist"];
     feed.sort = [{ id: "mb", metric: "mangabakaLatestRank", direction: "asc" }];
-    feed.view.metricSlots = ["mangabakaLatestRank"];
+    feed.view.metricSlots = ["year"];
+    expect(feedUsesAniListOnlyParameters(feed)).toBe(false);
     const result = runFeedQuery({
       feed,
       series: [
@@ -270,7 +271,7 @@ describe("runFeedQuery", () => {
       metaHistoryFirst: null,
       metaHistoryLast: null,
     });
-    expect(result.items.map((item) => item.id)).toEqual([91, 92]);
+    expect(result.items.map((item) => item.id)).toEqual([90, 91, 92]);
   });
 
   it("matches MangaBaka safe latest by applying local safety and exact tag filters after rank order", () => {
@@ -281,7 +282,7 @@ describe("runFeedQuery", () => {
     feed.filters.excludeTagIds = [4, 180, 41, 10];
     feed.filters.includeEstimatedDates = true;
     feed.sort = [{ id: "mb", metric: "mangabakaLatestRank", direction: "asc" }];
-    feed.view.metricSlots = ["mangabakaLatestRank"];
+    feed.view.metricSlots = ["year"];
     const result = runFeedQuery({
       feed,
       series: [

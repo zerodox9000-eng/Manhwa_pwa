@@ -91,10 +91,13 @@ function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
   };
 }
 
-function normalizeFeed(feed: Feed): Feed {
+export function normalizeFeed(feed: Feed): Feed {
   const excludeTagIds = feed.filters.excludeTagIds?.length
     ? feed.filters.excludeTagIds
     : DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS;
+  const metricSlots = (feed.view?.metricSlots?.length ? feed.view.metricSlots : DEFAULT_SETTINGS.defaultFeedView.metricSlots)
+    .filter((metric) => metric !== "mangabakaLatestRank")
+    .slice(0, 3);
   const normalized: Feed = {
     ...feed,
     description: feed.description ?? "",
@@ -122,7 +125,7 @@ function normalizeFeed(feed: Feed): Feed {
       ...DEFAULT_SETTINGS.defaultFeedView,
       ...feed.view,
       mode: "grid",
-      metricSlots: feed.view?.metricSlots?.length ? feed.view.metricSlots.slice(0, 3) : DEFAULT_SETTINGS.defaultFeedView.metricSlots,
+      metricSlots: metricSlots.length ? metricSlots : ["year"],
       visible: {
         ...DEFAULT_SETTINGS.defaultFeedView.visible,
         ...feed.view?.visible,
