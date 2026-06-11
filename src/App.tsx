@@ -2021,7 +2021,7 @@ function RichDescription({ text }: { text: string }) {
 
 function renderInlineMarkdown(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
-  const pattern = /(\*\*[^*]+\*\*|\[[^\]]+\]\((https?:\/\/[^)\s]+)\)|https?:\/\/[^\s)]+)/g;
+  const pattern = /(\[[^\]]+\]\s*\(\s*https?:\/\/[^)\s]+\s*\)|\*\*[^*]+\*\*|\*[^*\n]+\*|https?:\/\/[^\s)]+)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -2031,10 +2031,13 @@ function renderInlineMarkdown(text: string): ReactNode[] {
 
     if (token.startsWith("**") && token.endsWith("**")) {
       nodes.push(<strong key={nodes.length}>{token.slice(2, -2)}</strong>);
+    } else if (token.startsWith("*") && token.endsWith("*")) {
+      nodes.push(<em key={nodes.length}>{token.slice(1, -1)}</em>);
     } else if (token.startsWith("[")) {
-      const labelEnd = token.indexOf("](");
+      const labelEnd = token.indexOf("]");
       const label = token.slice(1, labelEnd);
-      const href = token.slice(labelEnd + 2, -1);
+      const hrefMatch = token.match(/https?:\/\/[^)\s]+/);
+      const href = hrefMatch?.[0] ?? "";
       nodes.push(
         <a key={nodes.length} href={href} target="_blank" rel="noreferrer">
           {label}

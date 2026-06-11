@@ -95,6 +95,30 @@ async function mockBackendData(page: Page) {
       headers: { "content-type": "application/gzip" },
     });
   });
+  await page.route("**/recommendations/features.json.gz", async (route) => {
+    await route.fulfill({
+      status: 200,
+      body: gzipJson([
+        {
+          id: 1252,
+          profileGroups: ["game-system"],
+          primaryAnchors: ["game-system"],
+          tagFeatures: { "tag:1": 1, "tag:2": 1 },
+          textFeatures: { solo: 1, leveling: 1, ragnarok: 1 },
+          quality: { discPct: 95.9668, fanPct: 3.7857, popularity: 30298 },
+        },
+        {
+          id: 4,
+          profileGroups: ["game-system"],
+          primaryAnchors: ["game-system"],
+          tagFeatures: { "tag:1": 1, "tag:2": 1 },
+          textFeatures: { high: 1, school: 1, boy: 1 },
+          quality: { discPct: 55, fanPct: 3.5035, popularity: 999 },
+        },
+      ]),
+      headers: { "content-type": "application/gzip" },
+    });
+  });
 }
 
 test.beforeEach(async ({ page }) => {

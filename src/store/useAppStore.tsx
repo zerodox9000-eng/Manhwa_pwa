@@ -54,11 +54,9 @@ function loadLocalSnapshot(): Partial<AppStateSnapshot> {
 }
 
 function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
-  const defaultShelfIds = new Set(["similar-loved", "latest-similar", "completed-similar", "completed-most-loved"]);
-  const savedShelves = settings?.recommendationShelves?.filter(
-    (shelf) => !defaultShelfIds.has(shelf.id),
-  );
-  const recommendationShelves = [...DEFAULT_SETTINGS.recommendationShelves, ...(savedShelves ?? [])];
+  const recommendationShelves = settings?.recommendationShelves
+    ? settings.recommendationShelves
+    : DEFAULT_SETTINGS.recommendationShelves;
   const relationshipTags =
     settings?.searchRelationshipTags ?? settings?.searchSensitiveTags ?? DEFAULT_SETTINGS.searchRelationshipTags;
   const adultTags = settings?.searchAdultTags ?? settings?.searchSensitiveTags ?? DEFAULT_SETTINGS.searchAdultTags;
