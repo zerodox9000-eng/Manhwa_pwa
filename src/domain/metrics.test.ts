@@ -24,7 +24,7 @@ describe("metrics", () => {
     expect(formatMetricValue(series, "endDate")).toBe("n/a");
   });
 
-  it("uses only trusted first-seen fallback internally and keeps estimated release display blank", () => {
+  it("uses estimated start dates internally and keeps estimated release display blank", () => {
     const fallbackSeries: SeriesCatalog = {
       ...series,
       id: 2,
@@ -39,13 +39,13 @@ describe("metrics", () => {
         end_date_is_estimated: true,
       },
     };
-    expect(metricValue(fallbackSeries, "releaseDate")).toBe(new Date("2026-06-07").getTime());
+    expect(metricValue(fallbackSeries, "releaseDate")).toBe(new Date("2026-01-01").getTime());
     expect(formatMetricValue(fallbackSeries, "releaseDate")).toBe("n/a");
     expect(metricValue(fallbackSeries, "endDate")).toBe(-Infinity);
     expect(formatMetricValue(fallbackSeries, "endDate")).toBe("n/a");
   });
 
-  it("does not use untrusted first-seen or last-updated as release fallback", () => {
+  it("does not use untrusted first-seen or last-updated as release fallback when no start date exists", () => {
     const untrusted: SeriesCatalog = {
       ...series,
       id: 3,
@@ -54,8 +54,7 @@ describe("metrics", () => {
       first_seen_at_is_trusted: false,
       last_updated_at: "2026-06-08T04:00:00.000Z",
       published: {
-        start_date: "2026-01-01",
-        start_date_is_estimated: true,
+        start_date: null,
         end_date: null,
       },
     };

@@ -57,9 +57,9 @@ function datePart(value?: string | null) {
 
 export function effectiveReleaseDate(series: SeriesCatalog) {
   const published = series.published;
-  const actual = published?.start_date && !published.start_date_is_estimated ? published.start_date : null;
+  const actualOrEstimated = published?.start_date ?? null;
   const trustedFirstSeen = series.first_seen_at_is_trusted ? datePart(series.first_seen_at) : null;
-  const date = actual ?? trustedFirstSeen ?? null;
+  const date = actualOrEstimated ?? trustedFirstSeen ?? null;
   return date && !isFutureDate(date) ? date : null;
 }
 

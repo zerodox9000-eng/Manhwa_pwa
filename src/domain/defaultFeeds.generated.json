@@ -887,11 +887,6 @@
         "id": "default-feed-mb-latest-sort-mb",
         "metric": "mangabakaLatestRank",
         "direction": "asc"
-      },
-      {
-        "id": "default-feed-mb-latest-sort-rel",
-        "metric": "releaseDate",
-        "direction": "desc"
       }
     ],
     "view": {
@@ -901,8 +896,7 @@
       "listCoverSize": "medium",
       "listDensity": "standard",
       "metricSlots": [
-        "mangabakaLatestRank",
-        "releaseDate"
+        "mangabakaLatestRank"
       ],
       "visible": {
         "cover": true,
@@ -979,11 +973,6 @@
         "id": "default-feed-mb-latest-anilist-sort-mb",
         "metric": "mangabakaLatestRank",
         "direction": "asc"
-      },
-      {
-        "id": "default-feed-mb-latest-anilist-sort-rel",
-        "metric": "releaseDate",
-        "direction": "desc"
       }
     ],
     "view": {
@@ -993,8 +982,7 @@
       "listCoverSize": "medium",
       "listDensity": "standard",
       "metricSlots": [
-        "mangabakaLatestRank",
-        "releaseDate"
+        "mangabakaLatestRank"
       ],
       "visible": {
         "cover": true,
@@ -1071,11 +1059,6 @@
         "id": "default-feed-mb-latest-non-anilist-sort-mb",
         "metric": "mangabakaLatestRank",
         "direction": "asc"
-      },
-      {
-        "id": "default-feed-mb-latest-non-anilist-sort-rel",
-        "metric": "releaseDate",
-        "direction": "desc"
       }
     ],
     "view": {
@@ -1085,8 +1068,7 @@
       "listCoverSize": "medium",
       "listDensity": "standard",
       "metricSlots": [
-        "mangabakaLatestRank",
-        "releaseDate"
+        "mangabakaLatestRank"
       ],
       "visible": {
         "cover": true,
@@ -1154,7 +1136,7 @@
         "unit": "weeks"
       },
       "labelIds": [],
-      "includeEstimatedDates": false
+      "includeEstimatedDates": true
     },
     "sort": [
       {
@@ -1240,7 +1222,7 @@
         "unit": "years"
       },
       "labelIds": [],
-      "includeEstimatedDates": false
+      "includeEstimatedDates": true
     },
     "sort": [
       {
