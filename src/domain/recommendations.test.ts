@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { rankRecommendations } from "./recommendations";
-import type { RecommendationFeature, SeriesCatalog } from "./types";
+import type { RecommendationFeature, SeriesCatalog, TagNode } from "./types";
 
 function series(id: number, title: string): SeriesCatalog {
   return {
@@ -15,6 +15,26 @@ function series(id: number, title: string): SeriesCatalog {
     stats: { popularity: 5000, favourites: 200, meanScore: 75 },
     analytics: { fanFavouriteDiscoveryPercentile: 80, fanFavouriteRaw: 4 },
     published: { start_date: "2024-01-01", end_date: null },
+  };
+}
+
+function taggedSeries(id: number, title: string, tagIds: number[], discPct = 80): SeriesCatalog {
+  return {
+    ...series(id, title),
+    tag_ids: tagIds,
+    analytics: { fanFavouriteDiscoveryPercentile: discPct, fanFavouriteRaw: 4 },
+  };
+}
+
+function tag(id: number, name: string, path: string, options: Partial<TagNode> = {}): TagNode {
+  return {
+    id,
+    name,
+    path,
+    is_genre: false,
+    parent_id: null,
+    level: path.split(" > ").length,
+    ...options,
   };
 }
 
@@ -149,5 +169,93 @@ describe("rankRecommendations", () => {
     expectPreferredOver(ranked, 45119, 49377);
     expectPreferredOver(ranked, 67834, 1451);
     expectPreferredOver(ranked, 45119, 41002);
+  });
+
+  it("uses dominant game-system context instead of incidental romance or sword tags", () => {
+    const localTags = [
+      tag(1, "Dungeon", "Settings > Dungeon"),
+      tag(2, "Level System", "Settings > Level System"),
+      tag(3, "Romance", "Genres > Romance", { is_genre: true }),
+      tag(4, "Office Worker", "Occupations > Office Worker"),
+      tag(5, "Martial Arts", "Activities > Martial Arts"),
+      tag(6, "Cultivation", "Settings > Cultivation"),
+      tag(7, "Hunter", "Character Types > Hunter"),
+    ];
+    const localTitles = [
+      taggedSeries(100, "Solo Leveling", [1, 2, 3], 100),
+      taggedSeries(101, "Solo Leveling: Ragnarok", [1, 2, 7], 92),
+      taggedSeries(102, "Executive Office Romance", [3, 4], 100),
+      taggedSeries(103, "Martial God Returns", [5, 6], 100),
+    ];
+    const localFeatures = [
+      feature(100, ["game-system", "romance-core", "murim-wuxia", "business-career"], { dungeon: 3, hunter: 2, level: 3, romance: 2 }, 100),
+      feature(101, ["game-system"], { dungeon: 3, hunter: 3, level: 2 }, 92),
+      feature(102, ["office-romance", "romance-core", "modern-workplace"], { romance: 3, office: 2, dating: 2 }, 100),
+      feature(103, ["murim-wuxia"], { murim: 3, martial: 3, cultivation: 3 }, 100),
+    ];
+    const ranked = rankRecommendations({
+      base: localTitles[0],
+      candidates: localTitles.slice(1),
+      tags: localTags,
+      features: localFeatures,
+      shelf,
+      history: {},
+      latestDate: null,
+    }).map((item) => item.id);
+
+    expect(ranked[0]).toBe(101);
+    expect(ranked).not.toContain(102);
+    expect(ranked).not.toContain(103);
+  });
+
+  it("keeps the modern Korean business-regression cluster ahead of fantasy, murim, and CEO-romance noise", () => {
+    const localTags = [
+      tag(1, "Economics", "Themes > Economics"),
+      tag(2, "Working", "Activities > Working"),
+      tag(3, "Company", "Locations > Company"),
+      tag(4, "CEOs", "Occupations > CEOs"),
+      tag(5, "Office Worker", "Occupations > Office Worker"),
+      tag(6, "South Korea", "Locations > Asia > South Korea"),
+      tag(7, "Time Rewind", "Narrative Tropes > Time Manipulation > Time Rewind"),
+      tag(8, "Time Travel", "Narrative Tropes > Time Manipulation > Time Travel"),
+      tag(9, "Based on a Novel", "Derivative Work > Based On > Based on Literature > Based on a Novel"),
+      tag(10, "Seinen", "Audience Demographics > Male Oriented > Seinen"),
+      tag(11, "Fantasy", "Genres > Fantasy", { is_genre: true }),
+      tag(12, "Dungeon", "Settings > Dungeon"),
+      tag(13, "Level System", "Settings > Level System"),
+      tag(14, "Martial Arts", "Activities > Martial Arts"),
+      tag(15, "Murim", "Settings > Murim"),
+      tag(16, "Romance", "Genres > Romance", { is_genre: true }),
+    ];
+    const localTitles = [
+      taggedSeries(201, "Reborn Rich", [1, 2, 6, 7, 8, 9, 10], 89),
+      taggedSeries(202, "A Man's Man", [1, 2, 3, 4, 5, 6, 7, 9, 10], 95),
+      taggedSeries(203, "Sinip Sawon Kim Cheolsu", [1, 2, 3, 5, 6, 7, 9, 10], 47),
+      taggedSeries(204, "Fantasy Tower Returner", [11, 12, 13, 7], 100),
+      taggedSeries(205, "Return of the Martial God", [14, 15, 7], 100),
+      taggedSeries(206, "CEO Contract Romance", [4, 5, 16], 100),
+    ];
+    const localFeatures = [
+      feature(201, ["business-career-regression", "corporate-workplace", "korean-business", "romance-core", "game-system"], { corporate: 3, business: 2, revenge: 2, regression: 2 }, 89),
+      feature(202, ["business-career-regression", "corporate-workplace", "korean-business", "sports-career"], { company: 3, ceo: 3, career: 3, regression: 2 }, 95),
+      feature(203, ["business-career-regression", "corporate-workplace", "korean-business"], { company: 3, employee: 3, trading: 2, regression: 2 }, 47),
+      feature(204, ["game-system", "regression-return"], { dungeon: 3, tower: 3, level: 2 }, 100),
+      feature(205, ["murim-wuxia", "regression-return"], { murim: 3, martial: 3, sect: 2 }, 100),
+      feature(206, ["office-romance", "romance-core", "modern-workplace"], { romance: 3, ceo: 2, contract: 2 }, 100),
+    ];
+    const ranked = rankRecommendations({
+      base: localTitles[0],
+      candidates: localTitles.slice(1),
+      tags: localTags,
+      features: localFeatures,
+      shelf,
+      history: {},
+      latestDate: null,
+    }).map((item) => item.id);
+
+    expect(ranked.slice(0, 2).sort()).toEqual([202, 203]);
+    expect(ranked).not.toContain(204);
+    expect(ranked).not.toContain(205);
+    expect(ranked).not.toContain(206);
   });
 });

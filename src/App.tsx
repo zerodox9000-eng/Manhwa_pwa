@@ -1572,30 +1572,38 @@ function RecommendationsPage() {
 }
 
 function recommendationItems(base: SeriesCatalog, shelf: RecommendationShelf, store: ReturnType<typeof useAppStore>) {
-  const filterFeed = createFeed(shelf.name);
-  filterFeed.filters.sourceModes = shelf.sourceModes;
-  filterFeed.filters.sourceMode = shelf.sourceModes.length === 2 ? "mixed" : shelf.sourceModes[0];
-  filterFeed.filters.contentRatings = ["safe", "suggestive"];
-  filterFeed.filters.metricRanges = shelf.metricRanges;
-  const pool = runFeedQuery({
-    feed: filterFeed,
-    series: store.catalog,
-    tags: store.tags,
-    history: store.history,
-    labels: store.labels,
-    settings: store.settings,
-    metaHistoryFirst: store.syncMeta?.historyFirstDate,
-    metaHistoryLast: store.syncMeta?.historyLastDate,
-  }).items.filter((item) => item.id !== base.id);
-  return rankRecommendations({
-    base,
-    candidates: pool,
-    tags: store.tags,
-    features: store.recommendationFeatures,
-    shelf,
-    history: store.history,
-    latestDate: store.syncMeta?.historyLastDate,
-  });
+  const buildPool = (metricRanges: RecommendationShelf["metricRanges"]) => {
+    const filterFeed = createFeed(shelf.name);
+    filterFeed.filters.sourceModes = shelf.sourceModes;
+    filterFeed.filters.sourceMode = shelf.sourceModes.length === 2 ? "mixed" : shelf.sourceModes[0];
+    filterFeed.filters.contentRatings = ["safe", "suggestive"];
+    filterFeed.filters.metricRanges = metricRanges;
+    return runFeedQuery({
+      feed: filterFeed,
+      series: store.catalog,
+      tags: store.tags,
+      history: store.history,
+      labels: store.labels,
+      settings: store.settings,
+      metaHistoryFirst: store.syncMeta?.historyFirstDate,
+      metaHistoryLast: store.syncMeta?.historyLastDate,
+    }).items.filter((item) => item.id !== base.id);
+  };
+
+  const rankPool = (pool: SeriesCatalog[]) =>
+    rankRecommendations({
+      base,
+      candidates: pool,
+      tags: store.tags,
+      features: store.recommendationFeatures,
+      shelf,
+      history: store.history,
+      latestDate: store.syncMeta?.historyLastDate,
+    });
+
+  const ranked = rankPool(buildPool(shelf.metricRanges));
+  if (ranked.length || !shelf.metricRanges.length) return ranked;
+  return rankPool(buildPool([]));
 }
 
 function RecommendationShelfEditor({

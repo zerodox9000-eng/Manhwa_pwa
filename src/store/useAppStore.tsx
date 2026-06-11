@@ -53,10 +53,26 @@ function loadLocalSnapshot(): Partial<AppStateSnapshot> {
   }
 }
 
+function isOldDefaultRecommendationRange(range: { id: string; metric: string; min: number | null; max: number | null }) {
+  return (
+    (range.id === "rec-min-pop" && range.metric === "popularity" && range.min === 500 && range.max == null) ||
+    (range.id === "rec-min-fan" && range.metric === "fanFavouriteRaw" && range.min === 2 && range.max == null)
+  );
+}
+
+function normalizeRecommendationShelves(settings?: Partial<AppSettings>) {
+  const shelves = settings?.recommendationShelves ?? DEFAULT_SETTINGS.recommendationShelves;
+  return shelves.map((shelf) => {
+    if (shelf.id !== "similar-loved") return shelf;
+    const ranges = shelf.metricRanges ?? [];
+    const isLegacyDefault =
+      ranges.length === 2 && ranges.every((range) => isOldDefaultRecommendationRange(range));
+    return isLegacyDefault ? { ...shelf, metricRanges: [] } : shelf;
+  });
+}
+
 function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
-  const recommendationShelves = settings?.recommendationShelves
-    ? settings.recommendationShelves
-    : DEFAULT_SETTINGS.recommendationShelves;
+  const recommendationShelves = normalizeRecommendationShelves(settings);
   const relationshipTags =
     settings?.searchRelationshipTags ?? settings?.searchSensitiveTags ?? DEFAULT_SETTINGS.searchRelationshipTags;
   const adultTags = settings?.searchAdultTags ?? settings?.searchSensitiveTags ?? DEFAULT_SETTINGS.searchAdultTags;

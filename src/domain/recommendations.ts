@@ -10,10 +10,13 @@ interface ScoredRecommendation {
   tagScore: number;
   qualityScore: number;
   sharedPrimaryAnchors: number;
+  matchTier: number;
 }
 
 const PROFILE_WEIGHTS: Record<string, number> = {
   "business-career-regression": 5.6,
+  "korean-corporate-regression": 6.4,
+  "sci-fi-business-regression": 7,
   "corporate-workplace": 3.4,
   "korean-business": 2.7,
   "business-career": 2.4,
@@ -22,25 +25,35 @@ const PROFILE_WEIGHTS: Record<string, number> = {
   "modern-korea": 1.6,
   "horror-survival": 5.2,
   "murim-wuxia": 5.2,
+  "chinese-murim": 4.6,
   "game-system": 4.6,
   "euro-fantasy": 4.1,
+  "kingdom-management": 4.4,
+  "engineering-builder": 3.8,
   "medical-career": 4.2,
   "showbiz-career": 3.4,
   "sports-career": 3.8,
   "food-career": 3.4,
   "office-romance": 3.2,
+  "romance-heavy": 2.2,
   "romance-core": 1.2,
   "school-life": 1.2,
 };
 
 const PRIMARY_PROFILE_GROUPS = new Set([
   "business-career-regression",
+  "korean-corporate-regression",
+  "sci-fi-business-regression",
   "corporate-workplace",
   "korean-business",
+  "business-career",
   "horror-survival",
   "murim-wuxia",
+  "chinese-murim",
   "game-system",
   "euro-fantasy",
+  "kingdom-management",
+  "engineering-builder",
   "medical-career",
   "showbiz-career",
   "sports-career",
@@ -120,8 +133,137 @@ function tagText(tag: TagNode) {
   return `${tag.name} ${tag.path}`.toLowerCase();
 }
 
+function pathHas(tag: TagNode, pattern: RegExp) {
+  return pattern.test(tagText(tag));
+}
+
+function seriesTagTexts(series: SeriesCatalog, tagsById: Map<number, TagNode>) {
+  return (series.tag_ids ?? []).map((id) => tagsById.get(id)).filter((tag): tag is TagNode => Boolean(tag));
+}
+
+function tagCount(tags: TagNode[], pattern: RegExp) {
+  return tags.filter((tag) => pathHas(tag, pattern)).length;
+}
+
+function hasExactGenre(tags: TagNode[], name: string) {
+  const target = name.toLowerCase();
+  return tags.some((tag) => isGenreTag(tag) && tag.name.trim().toLowerCase() === target);
+}
+
 function addFeature(features: Record<string, number>, key: string, value: number) {
   features[key] = Number(((features[key] ?? 0) + value).toFixed(4));
+}
+
+function buildDominantContext(series: SeriesCatalog, tagsById: Map<number, TagNode>) {
+  const tags = seriesTagTexts(series, tagsById);
+  if (!tags.length) return { profileGroups: [], primaryAnchors: [] };
+  const titleText = featureTermText(series);
+  const groups = new Set<string>();
+  const anchors = new Set<string>();
+
+  const murim =
+    tagCount(tags, /murim|wuxia|martial arts|cultivation|martial artist|ancient china|chinese mythology|sect/) > 0;
+  const chineseMurim = murim && tagCount(tags, /china|chinese|ancient china|wuxia|cultivation|sect/) > 0;
+  const kingdomManagement =
+    tagCount(tags, /kingdom management|territory management|civilization|estate|agriculture/) > 0 ||
+    /\b(estate|civilization|kingdom|territory)\b/.test(titleText);
+  const engineering =
+    tagCount(tags, /engineering|construction|architecture|agriculture|inventions|developer|builder/) > 0 ||
+    /\b(engineer|engineering|developer|builder|construction|estate)\b/.test(titleText);
+  const gameSignal =
+    tagCount(tags, /dungeon|tower|level system|game system|game world|game elements|ranker|hunter|virtual reality|system administrator/) > 0;
+  const game = gameSignal && !kingdomManagement;
+  const business =
+    tagCount(tags, /economics|company|corporate|conglomerate|chaebol|merchant|business|sales|trading|hostile takeover/) > 0;
+  const regression =
+    tagCount(tags, /time rewind|time travel|age regression|reincarnation|second chance|regression|regressed|returner/) > 0 ||
+    /\b(reborn|regressed|returned|second chance|back in time)\b/.test(titleText);
+  const modernKorea = tagCount(tags, /south korea|korean folklore|21st century|modern era/) > 0;
+  const workplace = tagCount(tags, /company|ceos?|office worker|office|employee|director|secretary|workplace/) > 0;
+  const euroFantasy = !murim && tagCount(tags, /european ambience|medieval|nobility|royalty|duke|prince|princess|emperor|villainess|kingdom|castle|territory management|kingdom management/) > 0;
+  const horror =
+    (!game && !murim && !kingdomManagement && hasExactGenre(tags, "horror")) ||
+    (!game && !murim && !kingdomManagement && tagCount(tags, /horror|gore|zombie|ghost|death game|psychological horror|survival horror/) >= 2);
+  const medical = !murim && tagCount(tags, /doctor|hospital|surgeon|nurse|clinic|patient|medical/) > 0;
+  const showbiz = tagCount(tags, /actor|actress|idol|showbiz|entertainment industry/) > 0;
+  const sports = !business && tagCount(tags, /sports|boxing|baseball|basketball|football|tennis|golf|wrestling|racing|athletics/) > 0;
+  const food = tagCount(tags, /food|cooking|restaurant|gourmet|chef/) > 0;
+  const school = tagCount(tags, /school|high school|academy|student|teacher/) > 0;
+  const exactRomance = hasExactGenre(tags, "romance");
+  const romanceStrong =
+    exactRomance ||
+    tagCount(tags, /office romance|mature romance|romantic|dating|love triangle|pregnancy|marriage proposal|forbidden love|unrequited love/) >= 1;
+  const romanceCore = romanceStrong && !(game || murim || business);
+  const officeRomance = romanceCore && workplace;
+  const koreanCorporateRegression =
+    business &&
+    regression &&
+    modernKorea &&
+    tagCount(tags, /\beconomics\b|\bworking\b|politics|sci-fi|urban|smart protagonist|company|office worker/) >= 2;
+  const sciFiBusinessRegression =
+    business &&
+    regression &&
+    modernKorea &&
+    tagCount(tags, /sci-fi|\beconomics\b|time rewind|time travel|smart protagonist|politics/) >= 3;
+
+  if (business) groups.add("business-career");
+  if (regression) groups.add("regression-return");
+  if (modernKorea) groups.add("modern-korea");
+  if (workplace) groups.add("modern-workplace");
+  if (sciFiBusinessRegression) groups.add("sci-fi-business-regression");
+  if (koreanCorporateRegression) groups.add("korean-corporate-regression");
+  if (business && regression && (modernKorea || workplace)) groups.add("business-career-regression");
+  if (business && workplace) groups.add("corporate-workplace");
+  if (business && modernKorea) groups.add("korean-business");
+  if (kingdomManagement) groups.add("kingdom-management");
+  if (engineering) groups.add("engineering-builder");
+  if (horror) groups.add("horror-survival");
+  if (murim) groups.add("murim-wuxia");
+  if (chineseMurim) groups.add("chinese-murim");
+  if (game) groups.add("game-system");
+  if (euroFantasy) groups.add("euro-fantasy");
+  if (medical) groups.add("medical-career");
+  if (showbiz) groups.add("showbiz-career");
+  if (sports) groups.add("sports-career");
+  if (food) groups.add("food-career");
+  if (exactRomance && business) groups.add("romance-heavy");
+  if (romanceCore) groups.add("romance-core");
+  if (officeRomance) groups.add("office-romance");
+  if (school) groups.add("school-life");
+
+  if (groups.has("sci-fi-business-regression")) anchors.add("sci-fi-business-regression");
+  if (groups.has("korean-corporate-regression")) anchors.add("korean-corporate-regression");
+  if (groups.has("business-career-regression")) anchors.add("business-career-regression");
+  if (groups.has("corporate-workplace")) anchors.add("corporate-workplace");
+  if (groups.has("korean-business")) anchors.add("korean-business");
+  if (groups.has("business-career") && !groups.has("business-career-regression")) anchors.add("business-career");
+  if (groups.has("kingdom-management")) anchors.add("kingdom-management");
+  if (groups.has("engineering-builder")) anchors.add("engineering-builder");
+  if (groups.has("game-system")) anchors.add("game-system");
+  if (groups.has("murim-wuxia")) anchors.add("murim-wuxia");
+  if (groups.has("chinese-murim")) anchors.add("chinese-murim");
+  if (groups.has("euro-fantasy")) anchors.add("euro-fantasy");
+  if (groups.has("horror-survival")) anchors.add("horror-survival");
+  if (groups.has("medical-career")) anchors.add("medical-career");
+  if (groups.has("showbiz-career")) anchors.add("showbiz-career");
+  if (groups.has("sports-career")) anchors.add("sports-career");
+  if (groups.has("food-career")) anchors.add("food-career");
+  if (groups.has("office-romance")) anchors.add("office-romance");
+
+  return {
+    profileGroups: [...groups].sort(),
+    primaryAnchors: [...anchors].sort(),
+  };
+}
+
+function withDominantContext(series: SeriesCatalog, feature: RecommendationFeature, tagsById: Map<number, TagNode>) {
+  const context = buildDominantContext(series, tagsById);
+  if (context.profileGroups.length === 0) return feature;
+  return {
+    ...feature,
+    profileGroups: context.profileGroups,
+    primaryAnchors: context.primaryAnchors,
+  };
 }
 
 function fallbackTagWeight(tag: TagNode) {
@@ -157,22 +299,40 @@ export function buildFallbackRecommendationFeature(series: SeriesCatalog, tagsBy
   const text = `${featureTermText(series)} ${(series.tag_ids ?? []).map((id) => tagsById.get(id)).filter(Boolean).map((tag) => tagText(tag!)).join(" ")}`;
   const profileGroups = new Set<string>();
 
-  if (hasText(text, /business|economics|merchant|company|corporate|conglomerate|ceo|director|office|employee|workplace|career|trading|hostile takeover|politic|revenge|betrayal|murder|smart protagonist/)) profileGroups.add("business-career");
-  if (hasText(text, /regression|regressed|return|returned|reborn|reincarnation|second chance|time rewind|time travel|time manipulation|age regression|back in time/)) profileGroups.add("regression-return");
+  if (hasText(text, /business|economics|merchant|company|corporate|conglomerate|chaebol|ceo|director|office|employee|workplace|career|trading|hostile takeover|sales/)) profileGroups.add("business-career");
+  if (hasText(text, /regression|regressed|return|returned|reborn|reincarnation|second chance|time rewind|time travel|age regression|back in time/)) profileGroups.add("regression-return");
   if (hasText(text, /south korea|korean|seoul|chaebol|kdrama|naver|kakao|webtoon/)) profileGroups.add("modern-korea");
   if (hasText(text, /working|office|company|ceo|director|secretary|coworker|employee|career|manager/)) profileGroups.add("modern-workplace");
   if (hasText(text, /romance|marriage|pregnancy|dating|couple|wife|husband|fiance|one-night stand|love triangle|male lead falls in love|mature romance/)) profileGroups.add("romance-core");
   if (hasText(text, /horror|gore|ghost|zombie|death game|survival horror|psychological horror/)) profileGroups.add("horror-survival");
-  if (hasText(text, /murim|wuxia|martial arts|cultivation|sect|swordplay|martial artist|swordsman|ancient china|chinese ambience|chinese mythology/)) profileGroups.add("murim-wuxia");
+  if (hasText(text, /murim|wuxia|martial arts|cultivation|sect|martial artist|ancient china|chinese ambience|chinese mythology/)) profileGroups.add("murim-wuxia");
+  if (hasText(text, /wuxia|cultivation|sect|ancient china|chinese ambience|chinese mythology/)) profileGroups.add("chinese-murim");
   if (hasText(text, /dungeon|tower|hunter|ranker|level system|game system|guild|virtual reality|game world|rpg/)) profileGroups.add("game-system");
+  if (hasText(text, /kingdom management|territory management|civilization|estate|agriculture/)) profileGroups.add("kingdom-management");
+  if (hasText(text, /engineering|engineer|developer|builder|construction|architecture|inventions|estate/)) profileGroups.add("engineering-builder");
   if (hasText(text, /european ambience|medieval|nobility|royalty|duke|prince|princess|emperor|villainess|castle|kingdom/)) profileGroups.add("euro-fantasy");
   if (hasText(text, /doctor|medical|hospital|surgeon|nurse|clinic|patient/)) profileGroups.add("medical-career");
   if (hasText(text, /actor|actress|idol|celebrity|showbiz|entertainment industry|manager/)) profileGroups.add("showbiz-career");
   if (hasText(text, /boxing|sports|baseball|basketball|football|tennis|golf|wrestling|athletics|racing/)) profileGroups.add("sports-career");
-  if (profileGroups.has("business-career") && profileGroups.has("regression-return")) profileGroups.add("business-career-regression");
+  if (profileGroups.has("kingdom-management")) {
+    profileGroups.delete("game-system");
+    profileGroups.delete("horror-survival");
+  }
+  if (profileGroups.has("murim-wuxia")) {
+    profileGroups.delete("euro-fantasy");
+    profileGroups.delete("medical-career");
+    profileGroups.delete("horror-survival");
+  }
+  if (profileGroups.has("game-system")) {
+    profileGroups.delete("horror-survival");
+  }
+  if (profileGroups.has("business-career") && profileGroups.has("regression-return") && (profileGroups.has("modern-korea") || profileGroups.has("modern-workplace"))) profileGroups.add("business-career-regression");
+  if (profileGroups.has("business-career") && profileGroups.has("regression-return") && profileGroups.has("modern-korea")) profileGroups.add("korean-corporate-regression");
+  if (profileGroups.has("korean-corporate-regression") && hasText(text, /sci-fi|economics|time rewind|time travel|smart protagonist|politics/)) profileGroups.add("sci-fi-business-regression");
   if (profileGroups.has("business-career") && profileGroups.has("modern-workplace")) profileGroups.add("corporate-workplace");
   if (profileGroups.has("business-career") && profileGroups.has("modern-korea")) profileGroups.add("korean-business");
-  if (profileGroups.has("romance-core") && profileGroups.has("modern-workplace")) profileGroups.add("office-romance");
+  if (profileGroups.has("business-career") && profileGroups.has("romance-core")) profileGroups.add("romance-heavy");
+  if (profileGroups.has("romance-core") && profileGroups.has("modern-workplace") && !profileGroups.has("business-career")) profileGroups.add("office-romance");
 
   const tagFeatures: Record<string, number> = {};
   for (const tagId of series.tag_ids ?? []) {
@@ -245,12 +405,43 @@ function hasAny(groups: Set<string>, values: string[]) {
   return values.some((value) => groups.has(value));
 }
 
-function compatibleProfiles(base: RecommendationFeature, candidate: RecommendationFeature) {
+function compatibilityStats(base: RecommendationFeature, candidate: RecommendationFeature) {
   const baseGroups = groupSet(base);
   const candidateGroups = groupSet(candidate);
   const baseAnchors = anchorSet(base);
   const candidateAnchors = anchorSet(candidate);
   const sharedAnchors = sharedCount(baseAnchors, candidateAnchors);
+
+  return { baseGroups, candidateGroups, baseAnchors, candidateAnchors, sharedAnchors };
+}
+
+function hasSevereContextMismatch(baseGroups: Set<string>, candidateGroups: Set<string>) {
+  if (baseGroups.has("business-career") || baseGroups.has("business-career-regression")) {
+    if (hasAny(candidateGroups, ["murim-wuxia", "game-system", "horror-survival"]) && !candidateGroups.has("business-career")) return true;
+  }
+  if (baseGroups.has("kingdom-management")) {
+    if (hasAny(candidateGroups, ["murim-wuxia", "office-romance", "horror-survival"]) && !candidateGroups.has("kingdom-management")) return true;
+  }
+  if (baseGroups.has("engineering-builder")) {
+    if (hasAny(candidateGroups, ["office-romance", "horror-survival"]) && !candidateGroups.has("engineering-builder")) return true;
+  }
+  if (baseGroups.has("game-system")) {
+    if (!candidateGroups.has("game-system") && hasAny(candidateGroups, ["business-career", "office-romance", "euro-fantasy", "murim-wuxia"])) return true;
+  }
+  if (baseGroups.has("murim-wuxia")) {
+    if (!candidateGroups.has("murim-wuxia") && hasAny(candidateGroups, ["office-romance", "business-career", "euro-fantasy"])) return true;
+  }
+  if (baseGroups.has("horror-survival")) {
+    if (candidateGroups.has("romance-core") && !candidateGroups.has("horror-survival")) return true;
+  }
+  if (baseGroups.has("office-romance")) {
+    if (hasAny(candidateGroups, ["murim-wuxia", "game-system", "horror-survival"]) && !candidateGroups.has("office-romance")) return true;
+  }
+  return false;
+}
+
+function compatibleProfiles(base: RecommendationFeature, candidate: RecommendationFeature) {
+  const { baseGroups, candidateGroups, baseAnchors, sharedAnchors } = compatibilityStats(base, candidate);
 
   if (baseAnchors.size > 0 && sharedAnchors === 0) return false;
 
@@ -259,9 +450,18 @@ function compatibleProfiles(base: RecommendationFeature, candidate: Recommendati
   }
 
   if (baseGroups.has("business-career-regression")) {
-    if (!candidateGroups.has("business-career-regression") && !candidateGroups.has("corporate-workplace")) return false;
+    if (!candidateGroups.has("business-career-regression")) return false;
+    if (baseGroups.has("sci-fi-business-regression") && !candidateGroups.has("sci-fi-business-regression")) return false;
+    if (baseGroups.has("korean-corporate-regression") && !candidateGroups.has("korean-corporate-regression")) return false;
+    if (!baseGroups.has("romance-heavy") && candidateGroups.has("romance-heavy") && sharedAnchors < 2) return false;
     if (candidateGroups.has("office-romance") && !candidateGroups.has("business-career-regression")) return false;
     if (hasAny(candidateGroups, ["murim-wuxia", "game-system", "euro-fantasy", "horror-survival"]) && !candidateGroups.has("business-career-regression")) return false;
+  }
+  if (baseGroups.has("kingdom-management")) {
+    if (!candidateGroups.has("kingdom-management") && !candidateGroups.has("engineering-builder")) return false;
+  }
+  if (baseGroups.has("engineering-builder")) {
+    if (!candidateGroups.has("engineering-builder") && !candidateGroups.has("kingdom-management")) return false;
   }
 
   if (baseGroups.has("office-romance") && hasAny(candidateGroups, ["murim-wuxia", "game-system", "horror-survival"])) return false;
@@ -272,6 +472,46 @@ function compatibleProfiles(base: RecommendationFeature, candidate: Recommendati
   return true;
 }
 
+function relaxedCompatibleProfiles(
+  base: RecommendationFeature,
+  candidate: RecommendationFeature,
+  scores: { profileScore: number; tagScore: number; textScore: number },
+) {
+  const { baseGroups, candidateGroups, baseAnchors, sharedAnchors } = compatibilityStats(base, candidate);
+  if (hasSevereContextMismatch(baseGroups, candidateGroups)) return false;
+  if (compatibleProfiles(base, candidate)) return true;
+
+  const strongSimilarity = scores.tagScore >= 0.18 || scores.textScore >= 0.08 || scores.profileScore >= 0.45;
+
+  if (baseGroups.has("business-career-regression")) {
+    return (
+      (candidateGroups.has("sci-fi-business-regression") ||
+        candidateGroups.has("korean-corporate-regression") ||
+        candidateGroups.has("business-career-regression") ||
+        candidateGroups.has("corporate-workplace") ||
+        candidateGroups.has("business-career")) &&
+      strongSimilarity
+    );
+  }
+  if (baseGroups.has("business-career")) {
+    return (candidateGroups.has("business-career") || candidateGroups.has("corporate-workplace")) && strongSimilarity;
+  }
+  if (baseGroups.has("kingdom-management")) {
+    return (candidateGroups.has("kingdom-management") || candidateGroups.has("engineering-builder")) && strongSimilarity;
+  }
+  if (baseGroups.has("engineering-builder")) {
+    return (candidateGroups.has("engineering-builder") || candidateGroups.has("kingdom-management")) && strongSimilarity;
+  }
+  if (baseGroups.has("game-system")) return candidateGroups.has("game-system") && strongSimilarity;
+  if (baseGroups.has("murim-wuxia")) return candidateGroups.has("murim-wuxia") && strongSimilarity;
+  if (baseGroups.has("euro-fantasy")) return candidateGroups.has("euro-fantasy") && strongSimilarity;
+  if (baseGroups.has("horror-survival")) return candidateGroups.has("horror-survival") && strongSimilarity;
+  if (baseGroups.has("office-romance")) return candidateGroups.has("office-romance") && strongSimilarity;
+
+  if (baseAnchors.size > 0 && sharedAnchors === 0) return strongSimilarity;
+  return scores.tagScore >= 0.12 || scores.textScore >= 0.06 || scores.profileScore >= 0.3;
+}
+
 function qualityScore(feature: RecommendationFeature) {
   const disc = feature.quality.discPct == null ? 0 : Math.min(1, Math.max(0, feature.quality.discPct / 100));
   const fan = feature.quality.fanPct == null ? 0 : Math.min(1, Math.max(0, feature.quality.fanPct / 12));
@@ -279,22 +519,41 @@ function qualityScore(feature: RecommendationFeature) {
   return disc * 0.65 + fan * 0.2 + popularity * 0.15;
 }
 
-export function scoreRecommendation(base: RecommendationFeature, candidate: RecommendationFeature) {
-  if (!compatibleProfiles(base, candidate)) return null;
+export function scoreRecommendation(base: RecommendationFeature, candidate: RecommendationFeature, mode: "strict" | "relaxed" = "strict") {
   const profileScore = weightedOverlap(base.profileGroups, candidate.profileGroups);
   const tagScore = cosine(base.tagFeatures, candidate.tagFeatures);
   const textScore = cosine(base.textFeatures, candidate.textFeatures);
   const qScore = qualityScore(candidate);
-  const sharedPrimaryAnchors = sharedCount(anchorSet(base), anchorSet(candidate));
+  const basePrimaryAnchors = anchorSet(base);
+  const sharedPrimaryAnchors = sharedCount(basePrimaryAnchors, anchorSet(candidate));
+  const anchorCoverage = basePrimaryAnchors.size ? sharedPrimaryAnchors / basePrimaryAnchors.size : 0;
+  const compatible =
+    mode === "strict"
+      ? compatibleProfiles(base, candidate)
+      : relaxedCompatibleProfiles(base, candidate, { profileScore, tagScore, textScore });
+
+  if (!compatible) return null;
+
+  const sharedKoreanBusinessRegression =
+    ((base.profileGroups.includes("sci-fi-business-regression") &&
+      candidate.profileGroups.includes("sci-fi-business-regression")) ||
+      (base.profileGroups.includes("korean-corporate-regression") &&
+      candidate.profileGroups.includes("korean-corporate-regression")) ||
+      (base.profileGroups.includes("business-career-regression") &&
+        candidate.profileGroups.includes("business-career-regression"))) &&
+    base.profileGroups.includes("korean-business") &&
+    candidate.profileGroups.includes("korean-business");
 
   const finalScore =
-    profileScore * 0.35 +
-    tagScore * 0.3 +
-    textScore * 0.25 +
-    qScore * 0.1 +
-    Math.min(sharedPrimaryAnchors, 3) * 0.04;
+    profileScore * 0.34 +
+    tagScore * 0.26 +
+    textScore * 0.26 +
+    qScore * 0.08 +
+    anchorCoverage * 0.16 +
+    Math.min(sharedPrimaryAnchors, 3) * 0.03 +
+    (sharedKoreanBusinessRegression ? 0.18 : 0);
 
-  if (finalScore < 0.08) return null;
+  if (finalScore < (mode === "strict" ? 0.08 : 0.14)) return null;
   return {
     finalScore,
     profileScore,
@@ -317,16 +576,24 @@ export function rankRecommendations(args: {
   const { base, candidates, tags, features, shelf, history, latestDate } = args;
   const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
   const featuresById = new Map(features.map((feature) => [feature.id, feature]));
-  const baseFeature = featuresById.get(base.id) ?? buildFallbackRecommendationFeature(base, tagsById);
+  const baseFeature = withDominantContext(base, featuresById.get(base.id) ?? buildFallbackRecommendationFeature(base, tagsById), tagsById);
 
-  return candidates
-    .map((item): ScoredRecommendation | null => {
-      const candidateFeature = featuresById.get(item.id) ?? buildFallbackRecommendationFeature(item, tagsById);
-      const score = scoreRecommendation(baseFeature, candidateFeature);
-      return score ? { item, ...score } : null;
-    })
-    .filter((item): item is ScoredRecommendation => Boolean(item))
+  const scoreCandidates = (mode: "strict" | "relaxed", skipIds = new Set<number>()) =>
+    candidates
+      .filter((item) => !skipIds.has(item.id))
+      .map((item): ScoredRecommendation | null => {
+        const candidateFeature = withDominantContext(item, featuresById.get(item.id) ?? buildFallbackRecommendationFeature(item, tagsById), tagsById);
+        const score = scoreRecommendation(baseFeature, candidateFeature, mode);
+        return score ? { item, matchTier: mode === "strict" ? 0 : 1, ...score } : null;
+      })
+      .filter((item): item is ScoredRecommendation => Boolean(item));
+
+  const strict = scoreCandidates("strict");
+  const strictIds = new Set(strict.map(({ item }) => item.id));
+  const relaxed = strict.length >= 12 ? [] : scoreCandidates("relaxed", strictIds);
+  return [...strict, ...relaxed]
     .sort((a, b) => {
+      if (a.matchTier !== b.matchTier) return a.matchTier - b.matchTier;
       if (Math.abs(a.finalScore - b.finalScore) > 0.0001) return b.finalScore - a.finalScore;
       if (Math.abs(a.profileScore - b.profileScore) > 0.0001) return b.profileScore - a.profileScore;
       if (Math.abs(a.textScore - b.textScore) > 0.0001) return b.textScore - a.textScore;
