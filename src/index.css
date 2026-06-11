@@ -2172,6 +2172,26 @@ textarea,
   line-height: 1.68;
 }
 
+.rich-description {
+  display: grid;
+  gap: 12px;
+}
+
+.rich-description p {
+  margin: 0;
+  white-space: pre-line;
+}
+
+.rich-description a {
+  color: #9db7ff;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.rich-description a:hover {
+  text-decoration: underline;
+}
+
 .detail-rec-section > h3 {
   margin: 20px 0 10px;
   font-size: 15px;

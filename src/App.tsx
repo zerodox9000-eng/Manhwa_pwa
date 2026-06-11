@@ -24,7 +24,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   HashRouter,
   Link,
@@ -1975,7 +1975,7 @@ function TitleDetailPage() {
       {visible.description && detail?.description && (
         <section className="detail-block">
           <h2 className="section-title">Description</h2>
-          <p>{detail.description}</p>
+          <RichDescription text={detail.description} />
         </section>
       )}
       {visible.allTags && (
@@ -2023,6 +2023,57 @@ function TitleDetailPage() {
 
 function uniqueNames(...groups: (string[] | undefined)[]) {
   return [...new Set(groups.flat().filter(Boolean))];
+}
+
+function RichDescription({ text }: { text: string }) {
+  const paragraphs = text
+    .replace(/\r\n/g, "\n")
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
+  return (
+    <div className="rich-description">
+      {paragraphs.map((paragraph, index) => (
+        <p key={`${index}-${paragraph.slice(0, 16)}`}>{renderInlineMarkdown(paragraph)}</p>
+      ))}
+    </div>
+  );
+}
+
+function renderInlineMarkdown(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const pattern = /(\*\*[^*]+\*\*|\[[^\]]+\]\((https?:\/\/[^)\s]+)\)|https?:\/\/[^\s)]+)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
+    const token = match[0];
+
+    if (token.startsWith("**") && token.endsWith("**")) {
+      nodes.push(<strong key={nodes.length}>{token.slice(2, -2)}</strong>);
+    } else if (token.startsWith("[")) {
+      const labelEnd = token.indexOf("](");
+      const label = token.slice(1, labelEnd);
+      const href = token.slice(labelEnd + 2, -1);
+      nodes.push(
+        <a key={nodes.length} href={href} target="_blank" rel="noreferrer">
+          {label}
+        </a>,
+      );
+    } else {
+      nodes.push(
+        <a key={nodes.length} href={token} target="_blank" rel="noreferrer">
+          {token}
+        </a>,
+      );
+    }
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return nodes;
 }
 
 function DetailLinks({ series }: { series: SeriesCatalog }) {

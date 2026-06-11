@@ -91,13 +91,15 @@ function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
   };
 }
 
-export function normalizeFeed(feed: Feed): Feed {
+export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boolean } = {}): Feed {
   const excludeTagIds = feed.filters.excludeTagIds?.length
     ? feed.filters.excludeTagIds
     : DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS;
-  const metricSlots = (feed.view?.metricSlots?.length ? feed.view.metricSlots : DEFAULT_SETTINGS.defaultFeedView.metricSlots)
-    .filter((metric) => metric !== "mangabakaLatestRank")
-    .slice(0, 3);
+  const rawMetricSlots = feed.view?.metricSlots?.length ? feed.view.metricSlots : DEFAULT_SETTINGS.defaultFeedView.metricSlots;
+  const metricSlots = (options.preserveMetricSlots
+    ? rawMetricSlots
+    : rawMetricSlots.filter((metric) => metric !== "mangabakaLatestRank")
+  ).slice(0, 3);
   const normalized: Feed = {
     ...feed,
     description: feed.description ?? "",
@@ -157,7 +159,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [history, setHistory] = useState<HistoryMap>({});
   const [syncMeta, setSyncMeta] = useState<SyncMeta | null>(null);
   const [feeds, setFeeds] = useState<Feed[]>(
-    (hasSavedState ? local.feeds ?? [] : (defaultFeedsJson as Feed[])).map(normalizeFeed),
+    (hasSavedState ? local.feeds ?? [] : (defaultFeedsJson as Feed[])).map((feed) => normalizeFeed(feed)),
   );
   const [folders, setFolders] = useState<Folder[]>(local.folders ?? []);
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
@@ -287,14 +289,17 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const importSnapshot = useCallback((snapshot: Partial<AppStateSnapshot>, mode: "merge" | "replace") => {
     if (mode === "replace") {
-      setFeeds((snapshot.feeds ?? []).map(normalizeFeed));
+      setFeeds((snapshot.feeds ?? []).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true })));
       setFolders(snapshot.folders ?? []);
       setLabels(snapshot.labels ?? []);
       setSettings(mergeSettings(snapshot.settings));
       setActiveFeedId(snapshot.activeFeedId ?? null);
       return;
     }
-    setFeeds((current) => [...current, ...(snapshot.feeds ?? []).map(normalizeFeed)]);
+    setFeeds((current) => [
+      ...current,
+      ...(snapshot.feeds ?? []).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true })),
+    ]);
     setFolders((current) => [...current, ...(snapshot.folders ?? [])]);
     setLabels((current) => [...current, ...(snapshot.labels ?? [])]);
     if (snapshot.settings) setSettings((current) => mergeSettings({ ...current, ...snapshot.settings }));

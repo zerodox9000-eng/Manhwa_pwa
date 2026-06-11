@@ -16,4 +16,13 @@ describe("normalizeFeed", () => {
     expect(normalized.sort[0].metric).toBe("mangabakaLatestRank");
     expect(normalized.view.metricSlots).toEqual(["year"]);
   });
+
+  it("preserves shared cover stats when requested", () => {
+    const feed = createFeed("shared exact");
+    feed.view.metricSlots = ["mangabakaLatestRank", "popularity", "favourites"];
+
+    const normalized = normalizeFeed(feed, { preserveMetricSlots: true });
+
+    expect(normalized.view.metricSlots).toEqual(["mangabakaLatestRank", "popularity", "favourites"]);
+  });
 });
