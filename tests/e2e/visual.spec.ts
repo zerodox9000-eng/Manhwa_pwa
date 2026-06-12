@@ -118,7 +118,7 @@ for (const viewport of [
     await page.goto("/");
     await page.waitForSelector("[data-testid='title-card']");
     await expect(page.locator("body")).not.toContainText("Folders");
-    await expect(page.locator(".compact-metrics").first()).toContainText("DiscPct");
+    await expect(page.locator(".compact-metrics").first()).toContainText("Fan Rank");
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
     await page.screenshot({ path: `test-results/visual/${viewport.name}-home.png`, fullPage: true });
 

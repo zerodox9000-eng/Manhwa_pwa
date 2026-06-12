@@ -136,7 +136,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     meanScore: "Mean Score",
     fanFavouriteRaw: "Fan Favourite Percent",
     fanFavouriteDiscoveryScore: "Discovery Score",
-    fanFavouriteDiscoveryPercentile: "Discovery Percentile",
+    fanFavouriteDiscoveryPercentile: "Fan Rank",
     popularityGrowth: "Popularity Growth",
     favouritesGrowth: "Favourites Growth",
   },

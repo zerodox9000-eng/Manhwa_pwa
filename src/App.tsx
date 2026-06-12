@@ -245,8 +245,8 @@ function HomePage() {
     setPagerAnimating(true);
     setPagerOffset(finalOffset);
     window.setTimeout(() => {
-      store.setActiveFeedId(store.feeds[targetIndex].id);
       resetPageScroll();
+      store.setActiveFeedId(store.feeds[targetIndex].id);
       setPagerAnimating(false);
       setPagerOffset(0);
     }, 230);
@@ -1838,10 +1838,6 @@ function SettingsPage() {
 
       <SettingsSection title="App Settings">
         <div className="field">
-          <label>In-app app name</label>
-          <input className="input" value={store.settings.appName} onChange={(event) => store.updateSettings({ appName: event.target.value })} />
-        </div>
-        <div className="field">
           <label>Accent color</label>
           <input className="input" type="color" value={store.settings.accentColor} onChange={(event) => store.updateSettings({ accentColor: event.target.value })} />
         </div>
@@ -2227,7 +2223,7 @@ function DetailSettingsDrawer({
     ["allTags", "All tags", "Show every catalog tag."],
     ["authorsArtists", "Creators", "Show authors and artists."],
     ["links", "External links", "Show MangaBaka, AniList, and other sources."],
-    ["discoveryMetrics", "Discovery percentile", "Show DiscPct in the stat row."],
+    ["discoveryMetrics", "Fan Rank", "Show Fan Rank in the stat row."],
     ["popularity", "Popularity", "Show AniList popularity."],
     ["favourites", "Favourites", "Show AniList favourites."],
     ["meanScore", "Mean score", "Show AniList mean score."],
@@ -2265,8 +2261,8 @@ function LearnPage() {
           Popularity, favourites, and mean score are used only for AniList-mapped titles. Non-AniList titles can still be browsed
           through common filters such as title, tags, year, chapters, and status. <a href="https://anilist.co" target="_blank" rel="noreferrer">Open AniList</a>.
         </LearnItem>
-        <LearnItem title="Discovery Metrics">
-          Fan% is favourites divided by popularity. Discovery score combines fandom attachment and popularity confidence so niche titles do not unfairly dominate.
+        <LearnItem title="Fan Rank">
+          Fan Rank is the percentile version of the balanced fan discovery score. It combines fandom attachment and popularity confidence so niche titles do not unfairly dominate.
         </LearnItem>
         <LearnItem title="Cover Stats">
           Cover stat slots show at most three metrics. Fan% is the default rank signal, with Pop and Fav beside it for context.

@@ -18,7 +18,7 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
   { id: "fanRatioPercentile", label: "Fan percent percentile", shortLabel: "FanPct", help: "How high the fan favourite percent ranks against other titles.", filterable: true, anilistOnly: true },
   { id: "popularityPercentile", label: "Popularity percentile", shortLabel: "PopPct", help: "How high popularity ranks against other titles.", filterable: true, anilistOnly: true },
   { id: "fanFavouriteDiscoveryScore", label: "Discovery score", shortLabel: "Disc", help: "Balanced score for loved titles with enough popularity confidence.", filterable: true, anilistOnly: true },
-  { id: "fanFavouriteDiscoveryPercentile", label: "Discovery percentile", shortLabel: "DiscPct", help: "Percentile version of discovery score.", filterable: true, anilistOnly: true },
+  { id: "fanFavouriteDiscoveryPercentile", label: "Fan Rank", shortLabel: "Fan Rank", help: "Percentile rank of the balanced fan discovery score.", filterable: true, anilistOnly: true },
   { id: "year", label: "Year", shortLabel: "Year", help: "Release year from the catalog.", filterable: true, anilistOnly: false },
   { id: "chapters", label: "Chapters", shortLabel: "Ch", help: "Parsed chapter count when available.", filterable: true, anilistOnly: false },
   { id: "releaseDate", label: "Release date", shortLabel: "Rel", help: "Start date from MangaBaka/AniList export.", filterable: false, anilistOnly: false },
@@ -31,7 +31,7 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
   { id: "meanScoreDelta", label: "Mean score delta", shortLabel: "Score+", help: "Mean score movement across available history.", filterable: true, anilistOnly: true },
   { id: "fanFavouriteDelta", label: "Fan percent delta", shortLabel: "Fan+%", help: "Fan favourite percent movement across available history.", filterable: true, anilistOnly: true },
   { id: "discoveryScoreDelta", label: "Discovery score delta", shortLabel: "Disc+", help: "Discovery score movement across available history.", filterable: true, anilistOnly: true },
-  { id: "discoveryPercentileDelta", label: "Discovery percentile delta", shortLabel: "DiscPct+", help: "Discovery percentile movement across available history.", filterable: true, anilistOnly: true },
+  { id: "discoveryPercentileDelta", label: "Fan Rank delta", shortLabel: "Fan Rank+", help: "Fan Rank movement across available history.", filterable: true, anilistOnly: true },
   { id: "title", label: "Title", shortLabel: "A-Z", help: "Alphabetical title sort.", filterable: false, anilistOnly: false },
 ];
 

@@ -2732,3 +2732,108 @@ textarea,
   font-size: 16px;
   line-height: 1.15;
 }
+
+/* Feed glass polish and compact header spacing. Keep after prior mobile overrides. */
+.feed-tabs {
+  background: rgba(10, 11, 15, 0.58);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(18px) saturate(1.18);
+}
+
+.feed-tab {
+  opacity: 0.62;
+  background: rgba(255, 255, 255, 0.025);
+  transition:
+    opacity 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.feed-tab.active {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.11);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 0, 110, 0.38),
+    0 8px 22px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.feed-pager-panel:not(:nth-child(2)) .feed-preview {
+  opacity: 0.5;
+  filter: saturate(0.76) blur(0.15px);
+}
+
+.section:has(.feed-action-row) {
+  position: relative;
+  padding-top: 2px;
+}
+
+.feed-action-row {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 3;
+  min-height: 0;
+  margin: 0;
+}
+
+.feed-action-row .icon-button {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  border-radius: 9px;
+  background: rgba(20, 22, 30, 0.5);
+  border-color: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px) saturate(1.14);
+}
+
+.feed-view-header {
+  padding-right: 38px;
+}
+
+.feed-view-title {
+  min-width: 0;
+}
+
+.single-line-title {
+  font-size: clamp(21px, 8vw, 34px) !important;
+  line-height: 1.05;
+}
+
+.feed-description {
+  display: -webkit-box;
+  margin-top: 4px;
+  padding-right: 4px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.feed-menu {
+  top: 36px;
+  right: 0;
+  background: rgba(18, 20, 28, 0.72);
+  backdrop-filter: blur(18px) saturate(1.16);
+}
+
+.detail-page::after {
+  position: fixed;
+  inset: auto 0 0;
+  z-index: -1;
+  height: 45vh;
+  pointer-events: none;
+  content: "";
+  background: linear-gradient(180deg, transparent, rgba(7, 8, 12, 0.82));
+}
+
+.detail-stat,
+.detail-block .chip,
+.link-chip,
+.input,
+.setting-row,
+.drawer-content {
+  backdrop-filter: blur(14px) saturate(1.12);
+}
