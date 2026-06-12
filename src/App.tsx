@@ -323,9 +323,9 @@ function HomePage() {
           onPointerCancel={settlePager}
         >
           <div className="feed-pager-track">
-            <div className="feed-pager-panel">{previousFeed ? <FeedPreview feed={previousFeed} /> : null}</div>
+            <div className="feed-pager-panel">{previousFeed ? <BlankFeedPanel /> : null}</div>
             <div className="feed-pager-panel">{activeFeed ? <FeedView feed={activeFeed} /> : null}</div>
-            <div className="feed-pager-panel">{nextFeed ? <FeedPreview feed={nextFeed} /> : null}</div>
+            <div className="feed-pager-panel">{nextFeed ? <BlankFeedPanel /> : null}</div>
           </div>
         </div>
       )}
@@ -370,53 +370,8 @@ function FeedTabs() {
   );
 }
 
-function FeedPreview({ feed }: { feed: Feed }) {
-  const store = useAppStore();
-  const metricWindow = useMemo(
-    () => resolveRollingWindow(feed.filters.rolling, store.syncMeta?.historyLastDate),
-    [feed.filters.rolling, store.syncMeta?.historyLastDate],
-  );
-  const previewItems = useMemo(
-    () =>
-      runFeedQuery({
-        feed,
-        series: store.catalog,
-        tags: store.tags,
-        history: store.history,
-        labels: store.labels,
-        settings: store.settings,
-        metaHistoryFirst: store.syncMeta?.historyFirstDate,
-        metaHistoryLast: store.syncMeta?.historyLastDate,
-      }).items.slice(0, 18),
-    [feed, store.catalog, store.history, store.labels, store.settings, store.syncMeta, store.tags],
-  );
-  return (
-    <section className="section feed-preview" aria-hidden="true">
-      <h1 className="single-line-title">{feed.name}</h1>
-      {feed.showDescription && feed.description && <p className="feed-description">{feed.description}</p>}
-      <div className={`feed-preview-grid columns-${feed.view.gridColumns}`}>
-        {previewItems.map((series, index) => (
-          <div className="feed-preview-card" key={`${feed.id}-${series.id}`}>
-            <div className="poster-shell">
-              <Cover series={series} priority={index < 8} />
-              {feed.view.visible.rank && <span className="rank">{index + 1}</span>}
-              <div className="poster-metrics">
-                <TitleMetrics
-                  series={series}
-                  view={feed.view}
-                  compact
-                  history={store.history}
-                  latestDate={store.syncMeta?.historyLastDate}
-                  metricWindow={metricWindow}
-                />
-              </div>
-            </div>
-            <span className="feed-preview-title">{series.display_title}</span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
+function BlankFeedPanel() {
+  return <section className="blank-feed-panel" aria-hidden="true" />;
 }
 
 function FeedView({ feed }: { feed: Feed }) {
