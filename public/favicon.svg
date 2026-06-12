@@ -1,7 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Manhwa Lib">
-  <circle cx="32" cy="32" r="31" fill="#ff006e"/>
-  <circle cx="32" cy="32" r="25" fill="#101117"/>
-  <rect x="17" y="13" width="30" height="38" rx="4" fill="#f7f8ff"/>
-  <path d="M22 43V21h6l4 7 4-7h6v22h-6V30l-3 6h-3l-3-6v13h-5Z" fill="#111218"/>
-  <path d="M22 47h20" stroke="#ff006e" stroke-width="3" stroke-linecap="round"/>
+  <defs>
+    <radialGradient id="bg" cx="30%" cy="24%" r="78%">
+      <stop offset="0" stop-color="#ff7ab8"/>
+      <stop offset="0.48" stop-color="#ff006e"/>
+      <stop offset="1" stop-color="#6f0bff"/>
+    </radialGradient>
+    <linearGradient id="shine" x1="17" y1="11" x2="48" y2="51" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c2ceff"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="31" fill="url(#bg)"/>
+  <circle cx="32" cy="32" r="27" fill="#101117" opacity="0.74"/>
+  <path fill="url(#shine)" d="M32 10c2 11 8 17 19 20-11 2-17 9-19 20-3-11-9-18-20-20 11-3 17-9 20-20Z"/>
+  <path fill="#ff4d9a" d="M47 35c1 5 5 9 10 10-5 1-9 5-10 10-1-5-5-9-10-10 5-1 9-5 10-10Z"/>
+  <path fill="#ffffff" opacity="0.84" d="M17 37c1 5 4 8 9 9-5 1-8 4-9 9-1-5-4-8-9-9 5-1 8-4 9-9Z"/>
 </svg>

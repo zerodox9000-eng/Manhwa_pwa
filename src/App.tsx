@@ -369,6 +369,10 @@ function FeedTabs() {
 
 function FeedPreview({ feed }: { feed: Feed }) {
   const store = useAppStore();
+  const metricWindow = useMemo(
+    () => resolveRollingWindow(feed.filters.rolling, store.syncMeta?.historyLastDate),
+    [feed.filters.rolling, store.syncMeta?.historyLastDate],
+  );
   const previewItems = useMemo(
     () =>
       runFeedQuery({
@@ -380,7 +384,7 @@ function FeedPreview({ feed }: { feed: Feed }) {
         settings: store.settings,
         metaHistoryFirst: store.syncMeta?.historyFirstDate,
         metaHistoryLast: store.syncMeta?.historyLastDate,
-      }).items.slice(0, 12),
+      }).items.slice(0, 18),
     [feed, store.catalog, store.history, store.labels, store.settings, store.syncMeta, store.tags],
   );
   return (
@@ -390,7 +394,21 @@ function FeedPreview({ feed }: { feed: Feed }) {
       <div className={`feed-preview-grid columns-${feed.view.gridColumns}`}>
         {previewItems.map((series, index) => (
           <div className="feed-preview-card" key={`${feed.id}-${series.id}`}>
-            <Cover series={series} priority={index < 6} />
+            <div className="poster-shell">
+              <Cover series={series} priority={index < 8} />
+              {feed.view.visible.rank && <span className="rank">{index + 1}</span>}
+              <div className="poster-metrics">
+                <TitleMetrics
+                  series={series}
+                  view={feed.view}
+                  compact
+                  history={store.history}
+                  latestDate={store.syncMeta?.historyLastDate}
+                  metricWindow={metricWindow}
+                />
+              </div>
+            </div>
+            <span className="feed-preview-title">{series.display_title}</span>
           </div>
         ))}
       </div>
@@ -464,14 +482,6 @@ function FeedView({ feed }: { feed: Feed }) {
             />
           </div>
         )}
-        {query.activeNotes.map((note) => (
-          <p className="muted tiny" key={note}>
-            {note}
-          </p>
-        ))}
-        {query.missingDateData && (
-          <p className="muted tiny">Some current exports do not include date fields in the catalog yet.</p>
-        )}
       </section>
       <TitleCollection
         items={query.items}
@@ -495,6 +505,10 @@ function FeedView({ feed }: { feed: Feed }) {
       <BottomDrawer title="Feed Info" open={infoOpen} onOpenChange={setInfoOpen}>
         <div className="settings-list">
           <div className="setting-row"><span>Titles</span><strong>{query.items.length.toLocaleString()}</strong></div>
+          {query.activeNotes.map((note) => (
+            <div className="setting-row" key={note}><span>{note}</span></div>
+          ))}
+          {query.missingDateData && <div className="setting-row"><span>Some current exports do not include date fields in the catalog yet.</span></div>}
           <div className="setting-row"><span>Last data refresh</span><strong>{store.syncMeta?.lastSync ? new Date(store.syncMeta.lastSync).toLocaleString() : "Not synced"}</strong></div>
           <div className="setting-row"><span>Source</span><strong>{store.syncMeta?.source ?? "Offline cache"}</strong></div>
         </div>
@@ -514,12 +528,13 @@ function TitleCollection({
   history: HistoryMap;
   latestDate?: string | null;
 }) {
-  const countKey = `manhwa-visible-count:${feed.id}`;
-  const [visibleCount, setVisibleCount] = useState(() => Number(sessionStorage.getItem(countKey)) || 120);
+  const pageSize = feed.view.gridColumns >= 5 ? 60 : feed.view.gridColumns === 4 ? 72 : 120;
+  const countKey = `manhwa-visible-count:${feed.id}:${feed.view.gridColumns}`;
+  const [visibleCount, setVisibleCount] = useState(() => Number(sessionStorage.getItem(countKey)) || pageSize);
   useEffect(() => {
-    const saved = Number(sessionStorage.getItem(countKey)) || 120;
-    setVisibleCount(Math.max(120, Math.min(saved, Math.max(120, items.length))));
-  }, [countKey, items.length]);
+    const saved = Number(sessionStorage.getItem(countKey)) || pageSize;
+    setVisibleCount(Math.max(pageSize, Math.min(saved, Math.max(pageSize, items.length))));
+  }, [countKey, items.length, pageSize]);
   useEffect(() => {
     sessionStorage.setItem(countKey, String(visibleCount));
   }, [countKey, visibleCount]);
@@ -553,7 +568,7 @@ function TitleCollection({
           />
         ))}
       </div>
-      <LoadMore visibleCount={visibleCount} total={items.length} onMore={() => setVisibleCount((count) => count + 120)} />
+      <LoadMore visibleCount={visibleCount} total={items.length} onMore={() => setVisibleCount((count) => count + pageSize)} />
     </>
   );
 }

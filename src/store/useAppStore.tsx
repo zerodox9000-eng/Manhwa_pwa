@@ -186,17 +186,42 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void (async () => {
+      const bundledCatalogPromise = loadBundledCatalog();
+      const cachedDataPromise = loadCachedData();
+      const metaPromise = loadSyncMeta();
+      let cacheResolved = false;
+      let showedBundled = false;
+      const bundledTimer = window.setTimeout(() => {
+        void bundledCatalogPromise.then((bundledCatalog) => {
+          if (cacheResolved || bundledCatalog.length === 0) return;
+          showedBundled = true;
+          setCatalog(bundledCatalog);
+          setSyncMeta({
+            lastSync: new Date().toISOString(),
+            totalSeries: bundledCatalog.length,
+            historyFirstDate: null,
+            historyLastDate: null,
+            versionHash: `bundled-${bundledCatalog.length}`,
+            source: "Bundled query index",
+          });
+          setReady(true);
+        });
+      }, 260);
+
       const [{ catalog: cachedCatalog, tags: cachedTags, history: cachedHistory, recommendationFeatures: cachedRecommendationFeatures }, meta] = await Promise.all([
-        loadCachedData(),
-        loadSyncMeta(),
+        cachedDataPromise,
+        metaPromise,
       ]);
-      setCatalog(cachedCatalog);
-      setTags(cachedTags);
-      setHistory(cachedHistory);
-      setRecommendationFeatures(cachedRecommendationFeatures);
-      setSyncMeta(meta);
-      if (cachedCatalog.length === 0) {
-        const bundledCatalog = await loadBundledCatalog();
+      cacheResolved = true;
+      window.clearTimeout(bundledTimer);
+      if (cachedCatalog.length > 0) {
+        setCatalog(cachedCatalog);
+        setTags(cachedTags);
+        setHistory(cachedHistory);
+        setRecommendationFeatures(cachedRecommendationFeatures);
+        setSyncMeta(meta);
+      } else if (!showedBundled) {
+        const bundledCatalog = await bundledCatalogPromise;
         if (bundledCatalog.length > 0) {
           setCatalog(bundledCatalog);
           setSyncMeta({

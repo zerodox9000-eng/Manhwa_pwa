@@ -2573,14 +2573,42 @@ textarea,
 .feed-preview-grid.columns-5 { --preview-columns: 5; gap: 8px; }
 
 .feed-preview-card {
-  aspect-ratio: 2 / 3;
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.feed-preview-card .poster-shell {
   overflow: hidden;
   border-radius: 11px;
   background: rgba(255, 255, 255, 0.06);
 }
 
+.feed-preview-title {
+  display: -webkit-box;
+  min-height: 2.25em;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.12;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .title-card-wrap {
   contain: layout paint style;
+}
+
+.title-grid.columns-4 .title-card-wrap,
+.title-grid.columns-5 .title-card-wrap {
+  content-visibility: auto;
+  contain-intrinsic-size: 140px 230px;
+}
+
+.title-grid.columns-4 .poster-shell,
+.title-grid.columns-5 .poster-shell {
+  box-shadow: none;
 }
 
 .cover-wrap,

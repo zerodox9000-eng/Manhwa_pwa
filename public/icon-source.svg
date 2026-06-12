@@ -1,7 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Manhwa Lib icon">
-  <circle cx="256" cy="256" r="248" fill="#ff006e"/>
-  <circle cx="256" cy="256" r="206" fill="#101117"/>
-  <path d="M139 150c0-20 16-36 36-36h162c20 0 36 16 36 36v212c0 18-14 32-32 32H171c-18 0-32-14-32-32V150Z" fill="#f7f8ff"/>
-  <path d="M176 344V174h44l36 62 36-62h44v170h-42V246l-27 48h-22l-27-48v98h-42Z" fill="#111218"/>
-  <path d="M176 370h160" stroke="#ff006e" stroke-width="18" stroke-linecap="round"/>
+  <defs>
+    <radialGradient id="bg" cx="32%" cy="24%" r="78%">
+      <stop offset="0" stop-color="#ff7ab8"/>
+      <stop offset="0.46" stop-color="#ff006e"/>
+      <stop offset="1" stop-color="#6f0bff"/>
+    </radialGradient>
+    <linearGradient id="shine" x1="132" y1="104" x2="384" y2="414" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.56" stop-color="#ffe2f1"/>
+      <stop offset="1" stop-color="#b9c9ff"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#0a0018" flood-opacity="0.38"/>
+    </filter>
+  </defs>
+  <circle cx="256" cy="256" r="248" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="218" fill="#101117" opacity="0.74"/>
+  <circle cx="256" cy="256" r="214" fill="none" stroke="#ffffff" stroke-opacity="0.1" stroke-width="4"/>
+  <path filter="url(#soft)" fill="url(#shine)" d="M258 86c12 59 45 93 104 106-59 13-92 47-104 106-13-59-47-93-106-106 59-13 93-47 106-106Z"/>
+  <path fill="#ff4d9a" d="M369 271c7 34 26 53 60 61-34 7-53 27-60 61-8-34-27-54-61-61 34-8 53-27 61-61Z"/>
+  <path fill="#ffffff" opacity="0.84" d="M151 289c6 28 21 43 49 49-28 6-43 22-49 49-6-27-22-43-49-49 27-6 43-21 49-49Z"/>
 </svg>
