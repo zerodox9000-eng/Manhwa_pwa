@@ -2543,11 +2543,20 @@ textarea,
   display: grid;
   grid-template-columns: repeat(3, 100%);
   transform: translate3d(calc(-100% + var(--pager-offset, 0px)), 0, 0);
+  opacity: 1;
+  transition: opacity 120ms ease;
   will-change: transform;
 }
 
 .feed-pager.animating .feed-pager-track {
-  transition: transform 230ms cubic-bezier(0.2, 0.84, 0.24, 1);
+  transition:
+    transform 210ms cubic-bezier(0.2, 0.84, 0.24, 1),
+    opacity 120ms ease;
+}
+
+.feed-pager.settling .feed-pager-track {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .feed-pager-panel {

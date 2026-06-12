@@ -226,6 +226,7 @@ function HomePage() {
   const pointerRef = useRef<{ id: number; x: number; y: number; mode: "pending" | "horizontal" | "vertical" } | null>(null);
   const [pagerOffset, setPagerOffset] = useState(0);
   const [pagerAnimating, setPagerAnimating] = useState(false);
+  const [pagerSettling, setPagerSettling] = useState(false);
   const activeFeed = store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null;
   const activeIndex = activeFeed ? store.feeds.findIndex((item) => item.id === activeFeed.id) : -1;
   const previousFeed = activeIndex > 0 ? store.feeds[activeIndex - 1] : null;
@@ -243,13 +244,15 @@ function HomePage() {
 
   const finishPager = (targetIndex: number, finalOffset: number) => {
     setPagerAnimating(true);
+    setPagerSettling(true);
     setPagerOffset(finalOffset);
     window.setTimeout(() => {
       resetPageScroll();
       store.setActiveFeedId(store.feeds[targetIndex].id);
       setPagerAnimating(false);
       setPagerOffset(0);
-    }, 230);
+      window.setTimeout(() => setPagerSettling(false), 90);
+    }, 210);
   };
 
   return (
@@ -274,7 +277,7 @@ function HomePage() {
       ) : (
         <div
           ref={pagerRef}
-          className={`feed-pager ${pagerAnimating ? "animating" : ""}`}
+          className={`feed-pager ${pagerAnimating ? "animating" : ""} ${pagerSettling ? "settling" : ""}`}
           style={{ "--pager-offset": `${pagerOffset}px` } as React.CSSProperties}
           onPointerDown={(event) => {
             if (!event.isPrimary || event.pointerType === "mouse") return;
