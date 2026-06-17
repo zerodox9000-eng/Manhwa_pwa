@@ -78,8 +78,6 @@ function guardedFeedScrollValue(value: string) {
     const savedValue = parsed[target.feedId];
     const incoming = typeof savedValue === "number" && Number.isFinite(savedValue) ? savedValue : 0;
 
-    // This is the actual regression guard: React cleanup can run after the feed panel ref is nulled,
-    // which writes the active feed scroll as 0. Keep the last title-opening position instead.
     if (incoming < target.y) {
       parsed[target.feedId] = target.y;
       return JSON.stringify(parsed);
@@ -106,12 +104,45 @@ function getActiveFeedPanel() {
   return document.querySelector<HTMLElement>(".feed-pager-panel[data-feed-id]:not(.inactive-panel)");
 }
 
-function saveActiveFeedScroll(asReturnTarget = false) {
-  const panel = getActiveFeedPanel();
+function getPanelFromTarget(target: EventTarget | null) {
+  if (!(target instanceof Element)) return getActiveFeedPanel();
+  return target.closest<HTMLElement>(".feed-pager-panel[data-feed-id]") ?? getActiveFeedPanel();
+}
+
+function parseTranslateY(transform: string) {
+  const translateMatch = transform.match(/translateY\((-?\d+(?:\.\d+)?)px\)/);
+  if (translateMatch) return Number(translateMatch[1]);
+
+  const matrixMatch = transform.match(/matrix\([^,]+,[^,]+,[^,]+,[^,]+,[^,]+,\s*(-?\d+(?:\.\d+)?)\)/);
+  if (matrixMatch) return Number(matrixMatch[1]);
+
+  return 0;
+}
+
+function getClickedCardScrollTarget(panel: HTMLElement, target: EventTarget | null) {
+  if (!(target instanceof Element)) return panel.scrollTop;
+
+  const titleCard = target.closest<HTMLElement>(".title-card");
+  const row = target.closest<HTMLElement>(".virtual-title-row");
+  const panelRect = panel.getBoundingClientRect();
+  const titleCardRect = titleCard?.getBoundingClientRect();
+  const rowY = row ? parseTranslateY(row.style.transform) : 0;
+
+  const directPanelY = panel.scrollTop;
+  const cardPanelY = titleCardRect ? directPanelY + titleCardRect.top - panelRect.top - 90 : 0;
+  const rowPanelY = rowY > 0 ? rowY - 110 : 0;
+
+  // Keep the largest reliable candidate. The old regression path saved 0 during unmount;
+  // the clicked card/row position survives that and gives us a real target to restore.
+  return Math.max(directPanelY, cardPanelY, rowPanelY, 0);
+}
+
+function saveActiveFeedScroll(asReturnTarget = false, sourceTarget: EventTarget | null = null) {
+  const panel = getPanelFromTarget(sourceTarget);
   const feedId = panel?.dataset.feedId;
   if (!panel || !feedId || feedId === "blank") return;
 
-  const y = panel.scrollTop;
+  const y = asReturnTarget ? getClickedCardScrollTarget(panel, sourceTarget) : panel.scrollTop;
   writeFeedScrollPosition(feedId, y);
   if (asReturnTarget) {
     writeReturnScrollTarget(feedId, y);
@@ -143,9 +174,7 @@ function restoreActiveFeedScroll(deadline = performance.now() + 4500) {
 
     if (panel && y > 0) {
       panel.scrollTop = y;
-      if (Math.abs(panel.scrollTop - y) > 2) {
-        panel.scrollTo({ top: y, left: 0, behavior: "auto" });
-      }
+      panel.scrollTo({ top: y, left: 0, behavior: "auto" });
 
       const feedId = panel.dataset.feedId;
       if (feedId && feedId !== "blank") writeFeedScrollPosition(feedId, y);
@@ -165,7 +194,7 @@ function isTitleLink(target: EventTarget | null) {
 }
 
 function saveBeforeTitleNavigation(event: Event) {
-  if (isTitleLink(event.target)) saveActiveFeedScroll(true);
+  if (isTitleLink(event.target)) saveActiveFeedScroll(true, event.target);
 }
 
 installSessionStorageGuard();
