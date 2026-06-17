@@ -4,6 +4,8 @@ import { DATA_SOURCE_CANDIDATES } from "../domain/defaults";
 import { normalizeCatalog, resolveDisplayTitle } from "../domain/catalog";
 import type { HistoryMap, RecommendationFeature, SeriesCatalog, SeriesDetail, SyncMeta, TagNode } from "../domain/types";
 
+const detailRequestCache = new Map<string, Promise<SeriesDetail>>();
+
 function bytesToText(bytes: Uint8Array) {
   return new TextDecoder("utf-8").decode(bytes);
 }
@@ -269,18 +271,29 @@ export async function fetchSeriesDetail(source: string, id: number) {
       });
     return cached;
   }
-  try {
-    const detail = fixMangaBakaLink(
-      await fetchJson<SeriesDetail>(
-        source,
-        `details/${id}.json`,
-        false
-      )
-    );
-    await db.details.put(detail);
-    return detail;
-  } catch (error) {
-    if (cached) return cached;
-    throw error;
-  }
+  const cacheKey = `${source}:${id}`;
+  const existing = detailRequestCache.get(cacheKey);
+  if (existing) return existing;
+
+  const request = (async () => {
+    try {
+      const detail = fixMangaBakaLink(
+        await fetchJson<SeriesDetail>(
+          source,
+          `details/${id}.json`,
+          false
+        )
+      );
+      await db.details.put(detail);
+      return detail;
+    } finally {
+      detailRequestCache.delete(cacheKey);
+    }
+  })();
+  detailRequestCache.set(cacheKey, request);
+  return request;
+}
+
+export function preloadSeriesDetail(source: string, id: number) {
+  return fetchSeriesDetail(source, id).catch(() => null);
 }

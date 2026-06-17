@@ -5,6 +5,7 @@ import { feedUsesAniListOnlyParameters } from "../domain/query";
 import type {
   AppSettings,
   AppStateSnapshot,
+  DataReadiness,
   Feed,
   Folder,
   HistoryMap,
@@ -21,6 +22,11 @@ const STORAGE_KEY = "manhwa-library-state-v1";
 
 interface StoreState {
   ready: boolean;
+  dataReadiness: DataReadiness;
+  hasUsableCatalog: boolean;
+  isInitialSync: boolean;
+  isUsingFallbackData: boolean;
+  syncError: string | null;
   catalog: SeriesCatalog[];
   tags: TagNode[];
   history: HistoryMap;
@@ -174,6 +180,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const local = useMemo(loadLocalSnapshot, []);
   const hasSavedState = useMemo(() => localStorage.getItem(STORAGE_KEY) != null, []);
   const [ready, setReady] = useState(false);
+  const [dataReadiness, setDataReadiness] = useState<DataReadiness>("loading-cache");
+  const [isInitialSync, setIsInitialSync] = useState(true);
+  const [isUsingFallbackData, setIsUsingFallbackData] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<SeriesCatalog[]>([]);
   const [tags, setTags] = useState<TagNode[]>([]);
   const [history, setHistory] = useState<HistoryMap>({});
@@ -201,6 +211,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           if (cacheResolved || bundledCatalog.length === 0) return;
           showedBundled = true;
           setCatalog(bundledCatalog);
+          setIsUsingFallbackData(true);
+          setDataReadiness("ready-fallback");
           setSyncMeta({
             lastSync: new Date().toISOString(),
             totalSeries: bundledCatalog.length,
@@ -225,10 +237,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         setHistory(cachedHistory);
         setRecommendationFeatures(cachedRecommendationFeatures);
         setSyncMeta(meta);
+        setIsUsingFallbackData(false);
+        setDataReadiness("ready-cache");
       } else if (!showedBundled) {
         const bundledCatalog = await bundledCatalogPromise;
         if (bundledCatalog.length > 0) {
           setCatalog(bundledCatalog);
+          setIsUsingFallbackData(true);
+          setDataReadiness("ready-fallback");
           setSyncMeta({
             lastSync: new Date().toISOString(),
             totalSeries: bundledCatalog.length,
@@ -246,6 +262,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (cachedCatalog.length === 0 || !hasQueryDates || !hasLiveMergedCatalog || online) {
         await refreshData();
       }
+      setIsInitialSync(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -265,6 +282,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const refreshData = useCallback(async () => {
     setSyncStatus("Starting sync");
+    setSyncError(null);
+    setDataReadiness((current) => (current.startsWith("ready") || current === "offline-fallback" ? current : "loading-live"));
     try {
       const synced = await syncFrontendData(settings.dataSourceUrl, setSyncStatus);
       setCatalog(synced.catalog);
@@ -273,9 +292,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setRecommendationFeatures(synced.recommendationFeatures);
       setSyncMeta(synced.meta);
       setSettings((current) => ({ ...current, dataSourceUrl: synced.meta.source }));
+      setIsUsingFallbackData(false);
+      setDataReadiness("ready-live");
       setSyncStatus("Sync complete");
     } catch (error) {
-      setSyncStatus(error instanceof Error ? error.message : "Sync failed");
+      const message = error instanceof Error ? error.message : "Sync failed";
+      setSyncStatus(message);
+      setSyncError(message);
+      setDataReadiness((current) => (current.startsWith("ready") || current === "offline-fallback" ? "offline-fallback" : "error"));
     }
   }, [settings.dataSourceUrl]);
 
@@ -348,7 +372,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setLabels([]);
     setTitleOverrides({});
     setSettings(DEFAULT_SETTINGS);
-    setActiveFeedId(null);
+      setActiveFeedId(null);
+      setDataReadiness("loading-cache");
+      setIsUsingFallbackData(false);
+      setSyncError(null);
   }, []);
 
   const importSnapshot = useCallback((snapshot: Partial<AppStateSnapshot>, mode: "merge" | "replace") => {
@@ -374,6 +401,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<StoreState>(
     () => ({
       ready,
+      dataReadiness,
+      hasUsableCatalog: catalog.length > 0 && dataReadiness !== "loading-cache" && dataReadiness !== "loading-live",
+      isInitialSync,
+      isUsingFallbackData,
+      syncError,
       catalog,
       tags,
       history,
@@ -401,6 +433,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       ready,
+      dataReadiness,
+      isInitialSync,
+      isUsingFallbackData,
+      syncError,
       catalog,
       tags,
       history,

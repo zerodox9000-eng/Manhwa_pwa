@@ -7,10 +7,26 @@ interface ScoredRecommendation {
   finalScore: number;
   profileScore: number;
   textScore: number;
+  contextScore: number;
   tagScore: number;
   qualityScore: number;
   sharedPrimaryAnchors: number;
   matchTier: number;
+}
+
+export interface RecommendationDebug {
+  finalScore: number | null;
+  profileScore: number;
+  contextScore: number;
+  tagScore: number;
+  textScore: number;
+  qualityScore: number;
+  sharedPrimaryAnchors: string[];
+  basePrimaryProfile: string | null;
+  candidatePrimaryProfile: string | null;
+  sharedProfileGroups: string[];
+  sharedContextFeatures: string[];
+  rejectionReason: string | null;
 }
 
 const PROFILE_WEIGHTS: Record<string, number> = {
@@ -257,6 +273,13 @@ function buildDominantContext(series: SeriesCatalog, tagsById: Map<number, TagNo
 }
 
 function withDominantContext(series: SeriesCatalog, feature: RecommendationFeature, tagsById: Map<number, TagNode>) {
+  if (feature.context) {
+    return {
+      ...feature,
+      profileGroups: feature.context.profileGroups?.length ? feature.context.profileGroups : feature.profileGroups,
+      primaryAnchors: feature.context.primaryAnchors?.length ? feature.context.primaryAnchors : feature.primaryAnchors,
+    };
+  }
   const context = buildDominantContext(series, tagsById);
   if (context.profileGroups.length === 0) return feature;
   return {
@@ -264,6 +287,49 @@ function withDominantContext(series: SeriesCatalog, feature: RecommendationFeatu
     profileGroups: context.profileGroups,
     primaryAnchors: context.primaryAnchors,
   };
+}
+
+function flattenSignals(feature: RecommendationFeature) {
+  const signals = feature.context?.storySignals;
+  if (!signals) return [];
+  return [
+    ...signals.setting.map((value) => `setting:${value}`),
+    ...signals.protagonistRole.map((value) => `role:${value}`),
+    ...signals.careerDomain.map((value) => `career:${value}`),
+    ...signals.premiseMechanic.map((value) => `premise:${value}`),
+    ...signals.conflictType.map((value) => `conflict:${value}`),
+    ...signals.progressionType.map((value) => `progression:${value}`),
+    ...signals.tone.map((value) => `tone:${value}`),
+    ...signals.worldType.map((value) => `world:${value}`),
+    `romance:${signals.romanceRole}`,
+    `regression:${signals.regressionRole}`,
+    `system:${signals.systemRole}`,
+  ];
+}
+
+function jaccard(left: string[], right: string[]) {
+  const a = new Set(left);
+  const b = new Set(right);
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  for (const value of a) if (b.has(value)) intersection += 1;
+  return intersection / (a.size + b.size - intersection);
+}
+
+function sharedValues(left: string[], right: string[]) {
+  const rightSet = new Set(right);
+  return [...new Set(left)].filter((value) => rightSet.has(value));
+}
+
+function contextSimilarity(base: RecommendationFeature, candidate: RecommendationFeature) {
+  if (!base.context || !candidate.context) return 0;
+  const samePrimary = base.context.primaryProfile && base.context.primaryProfile === candidate.context.primaryProfile ? 0.28 : 0;
+  const groupScore = jaccard(base.context.profileGroups, candidate.context.profileGroups) * 0.28;
+  const anchorScore = jaccard(base.context.primaryAnchors, candidate.context.primaryAnchors) * 0.18;
+  const signalScore = jaccard(flattenSignals(base), flattenSignals(candidate)) * 0.22;
+  const keywordScore = jaccard(base.context.searchKeywords ?? [], candidate.context.searchKeywords ?? []) * 0.04;
+  const confidence = Math.min(base.context.confidence ?? 0.5, candidate.context.confidence ?? 0.5);
+  return (samePrimary + groupScore + anchorScore + signalScore + keywordScore) * (0.55 + confidence * 0.45);
 }
 
 function fallbackTagWeight(tag: TagNode) {
@@ -523,6 +589,7 @@ export function scoreRecommendation(base: RecommendationFeature, candidate: Reco
   const profileScore = weightedOverlap(base.profileGroups, candidate.profileGroups);
   const tagScore = cosine(base.tagFeatures, candidate.tagFeatures);
   const textScore = cosine(base.textFeatures, candidate.textFeatures);
+  const contextScore = contextSimilarity(base, candidate);
   const qScore = qualityScore(candidate);
   const basePrimaryAnchors = anchorSet(base);
   const sharedPrimaryAnchors = sharedCount(basePrimaryAnchors, anchorSet(candidate));
@@ -545,11 +612,12 @@ export function scoreRecommendation(base: RecommendationFeature, candidate: Reco
     candidate.profileGroups.includes("korean-business");
 
   const finalScore =
-    profileScore * 0.34 +
-    tagScore * 0.26 +
-    textScore * 0.26 +
+    profileScore * 0.25 +
+    contextScore * 0.3 +
+    tagScore * 0.18 +
+    textScore * 0.14 +
     qScore * 0.08 +
-    anchorCoverage * 0.16 +
+    anchorCoverage * 0.12 +
     Math.min(sharedPrimaryAnchors, 3) * 0.03 +
     (sharedKoreanBusinessRegression ? 0.18 : 0);
 
@@ -557,10 +625,47 @@ export function scoreRecommendation(base: RecommendationFeature, candidate: Reco
   return {
     finalScore,
     profileScore,
+    contextScore,
     textScore,
     tagScore,
     qualityScore: qScore,
     sharedPrimaryAnchors,
+  };
+}
+
+export function debugRecommendationMatch(args: {
+  base: SeriesCatalog;
+  candidate: SeriesCatalog;
+  tags: TagNode[];
+  features: RecommendationFeature[];
+  mode?: "strict" | "relaxed";
+}): RecommendationDebug {
+  const { base, candidate, tags, features, mode = "strict" } = args;
+  const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
+  const featuresById = new Map(features.map((feature) => [feature.id, feature]));
+  const baseFeature = withDominantContext(base, featuresById.get(base.id) ?? buildFallbackRecommendationFeature(base, tagsById), tagsById);
+  const candidateFeature = withDominantContext(candidate, featuresById.get(candidate.id) ?? buildFallbackRecommendationFeature(candidate, tagsById), tagsById);
+  const score = scoreRecommendation(baseFeature, candidateFeature, mode);
+  const profileScore = weightedOverlap(baseFeature.profileGroups, candidateFeature.profileGroups);
+  const tagScore = cosine(baseFeature.tagFeatures, candidateFeature.tagFeatures);
+  const textScore = cosine(baseFeature.textFeatures, candidateFeature.textFeatures);
+  const contextScore = contextSimilarity(baseFeature, candidateFeature);
+  const qScore = qualityScore(candidateFeature);
+  const baseAnchors = [...anchorSet(baseFeature)];
+  const candidateAnchors = [...anchorSet(candidateFeature)];
+  return {
+    finalScore: score?.finalScore ?? null,
+    profileScore,
+    contextScore,
+    tagScore,
+    textScore,
+    qualityScore: qScore,
+    sharedPrimaryAnchors: sharedValues(baseAnchors, candidateAnchors),
+    basePrimaryProfile: baseFeature.context?.primaryProfile ?? null,
+    candidatePrimaryProfile: candidateFeature.context?.primaryProfile ?? null,
+    sharedProfileGroups: sharedValues(baseFeature.profileGroups, candidateFeature.profileGroups),
+    sharedContextFeatures: sharedValues(flattenSignals(baseFeature), flattenSignals(candidateFeature)),
+    rejectionReason: score ? null : "Profile/context mismatch or score below strict threshold",
   };
 }
 
@@ -596,6 +701,7 @@ export function rankRecommendations(args: {
       if (a.matchTier !== b.matchTier) return a.matchTier - b.matchTier;
       if (Math.abs(a.finalScore - b.finalScore) > 0.0001) return b.finalScore - a.finalScore;
       if (Math.abs(a.profileScore - b.profileScore) > 0.0001) return b.profileScore - a.profileScore;
+      if (Math.abs(a.contextScore - b.contextScore) > 0.0001) return b.contextScore - a.contextScore;
       if (Math.abs(a.textScore - b.textScore) > 0.0001) return b.textScore - a.textScore;
       if (Math.abs(a.tagScore - b.tagScore) > 0.0001) return b.tagScore - a.tagScore;
       for (const rule of shelf.sort) {

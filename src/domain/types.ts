@@ -7,6 +7,15 @@ export type SourceMode = "anilist" | "non-anilist" | "mixed";
 export type NonAniListPlacement = "top" | "bottom" | "mixed";
 export type ControlPlacement = "drawer" | "toolbar" | "fab";
 export type ThemeMode = "system" | "dark" | "light";
+export type DataReadiness =
+  | "booting"
+  | "loading-cache"
+  | "loading-live"
+  | "ready-cache"
+  | "ready-live"
+  | "ready-fallback"
+  | "offline-fallback"
+  | "error";
 
 export interface AniListStats {
   popularity: number | null;
@@ -71,6 +80,7 @@ export interface SeriesCatalog {
     animeplanet?: { id: string; rating?: number | null; url?: string | null } | null;
     mangaupdates?: { id: string; rating?: number | null; url?: string | null } | null;
   } | null;
+  context?: RecommendationContext | null;
 }
 
 export interface SeriesDetail extends SeriesCatalog {
@@ -93,6 +103,7 @@ export interface RecommendationFeature {
   id: number;
   profileGroups: string[];
   primaryAnchors: string[];
+  context?: RecommendationContext | null;
   tagFeatures: Record<string, number>;
   textFeatures: Record<string, number>;
   quality: {
@@ -100,6 +111,35 @@ export interface RecommendationFeature {
     fanPct: number | null;
     popularity: number | null;
   };
+}
+
+export interface RecommendationContext {
+  primaryProfile: string | null;
+  profileGroups: string[];
+  primaryAnchors: string[];
+  excludedProfiles: string[];
+  storySignals: {
+    setting: string[];
+    protagonistRole: string[];
+    careerDomain: string[];
+    premiseMechanic: string[];
+    conflictType: string[];
+    progressionType: string[];
+    tone: string[];
+    worldType: string[];
+    romanceRole: "none" | "minor" | "major" | "core";
+    regressionRole: "none" | "minor" | "major" | "core";
+    systemRole: "none" | "minor" | "major" | "core";
+  };
+  semanticSummary: string;
+  searchKeywords: string[];
+  evidence: {
+    tags: string[];
+    titleTerms: string[];
+    descriptionTerms: string[];
+    sourceFields: string[];
+  };
+  confidence: number;
 }
 
 export interface HistoryEntry {
@@ -339,4 +379,5 @@ export interface QueryResult {
   limitedHistory: boolean;
   missingDateData: boolean;
   activeNotes: string[];
+  debugCounts: Record<string, number>;
 }

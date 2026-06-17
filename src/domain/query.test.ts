@@ -66,6 +66,15 @@ const history: HistoryMap = {
 };
 
 describe("runFeedQuery", () => {
+  it("keeps the intentional new-feed default as AniList plus Fan Rank", () => {
+    const feed = createFeed("default");
+    expect(feed.filters.sourceModes).toEqual(["anilist"]);
+    expect(feed.sort).toHaveLength(1);
+    expect(feed.sort[0].metric).toBe("fanFavouriteDiscoveryPercentile");
+    expect(feed.sort[0].direction).toBe("desc");
+    expect(feed.view.metricSlots).toEqual(["fanFavouriteDiscoveryPercentile"]);
+  });
+
   it("hides default exact sensitive parent tags only while they are excluded", () => {
     const feed = createFeed("safe");
     feed.filters.excludeTagIds = [2];
@@ -446,6 +455,7 @@ describe("runFeedQuery", () => {
       metaHistoryLast: "2024-05-10",
     });
     expect(result.items).toEqual([]);
+    expect(result.debugCounts["Excluded estimated release date"]).toBe(1);
   });
 
   it("can use listed dates for a rolling added-date cutoff", () => {

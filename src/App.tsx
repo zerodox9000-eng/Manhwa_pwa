@@ -24,7 +24,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   HashRouter,
   Link,
@@ -42,7 +43,8 @@ import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, run
 import { formatMetricValue, historyDeltaForWindow, isRollingMetric, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveDisplayTitle } from "./domain/catalog";
-import { decodeSharePayload, exportCsv, makeShareUrl, type SharePayload } from "./domain/share";
+import { decodeSharePayload, exportCsv, findEquivalentFeed, findFeedNameConflict, makeShareUrl, type SharePayload } from "./domain/share";
+import { APP_MOTION, motionDuration } from "./domain/motion";
 import type {
   AppSettings,
   ContentRating,
@@ -57,7 +59,7 @@ import type {
   SourceMode,
   TagNode,
 } from "./domain/types";
-import { fetchSeriesDetail } from "./services/dataService";
+import { fetchSeriesDetail, preloadSeriesDetail } from "./services/dataService";
 import { AppStoreProvider, useAppStore } from "./store/useAppStore";
 
 const NAV_ITEMS = [
@@ -101,6 +103,16 @@ function localDisplayTitle(series: SeriesCatalog, settings: AppSettings, overrid
 }
 
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
+const FEED_SCROLL_SESSION_KEY = "manhwa-library-feed-scroll-v1";
+
+function readFeedScrollPositions() {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(FEED_SCROLL_SESSION_KEY) ?? "{}") as Record<string, number>;
+    return Object.fromEntries(Object.entries(parsed).filter(([, value]) => Number.isFinite(value))) as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
 
 function App() {
   return (
@@ -250,10 +262,14 @@ function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
   const pagerRef = useRef<HTMLDivElement | null>(null);
-  const pointerRef = useRef<{ id: number; x: number; y: number; mode: "pending" | "horizontal" | "vertical" } | null>(null);
+  const pointerRef = useRef<{ id: number; x: number; y: number; lastX: number; lastT: number; velocityX: number; mode: "pending" | "horizontal" | "vertical" } | null>(null);
+  const scrollPositions = useRef<Record<string, number>>(readFeedScrollPositions());
+  const feedPanelRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const persistScrollRaf = useRef<number | null>(null);
+  const offsetRef = useRef(0);
+  const rafRef = useRef<number | null>(null);
   const [pagerOffset, setPagerOffset] = useState(0);
   const [pagerAnimating, setPagerAnimating] = useState(false);
-  const [pagerSettling, setPagerSettling] = useState(false);
   const activeFeed = store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null;
   const activeIndex = activeFeed ? store.feeds.findIndex((item) => item.id === activeFeed.id) : -1;
   const previousFeed = activeIndex > 0 ? store.feeds[activeIndex - 1] : null;
@@ -263,40 +279,110 @@ function HomePage() {
     if (!store.activeFeedId && store.feeds[0]) store.setActiveFeedId(store.feeds[0].id);
   }, [store]);
 
+  const setPagerOffsetRaf = useCallback((value: number) => {
+    offsetRef.current = value;
+    if (rafRef.current != null) return;
+    rafRef.current = window.requestAnimationFrame(() => {
+      rafRef.current = null;
+      setPagerOffset(offsetRef.current);
+    });
+  }, []);
+
+  const persistFeedScroll = useCallback(() => {
+    try {
+      sessionStorage.setItem(FEED_SCROLL_SESSION_KEY, JSON.stringify(scrollPositions.current));
+    } catch {
+      // sessionStorage can be unavailable in private contexts.
+    }
+  }, []);
+
+  const schedulePersistFeedScroll = useCallback(() => {
+    if (persistScrollRaf.current != null) return;
+    persistScrollRaf.current = window.requestAnimationFrame(() => {
+      persistScrollRaf.current = null;
+      persistFeedScroll();
+    });
+  }, [persistFeedScroll]);
+
+  const saveCurrentScroll = useCallback(() => {
+    if (!activeFeed) return;
+    const panel = feedPanelRefs.current[activeFeed.id];
+    scrollPositions.current[activeFeed.id] = panel?.scrollTop ?? 0;
+    persistFeedScroll();
+  }, [activeFeed, persistFeedScroll]);
+
+  const restoreFeedScroll = useCallback((feedId: string) => {
+    const y = scrollPositions.current[feedId] ?? 0;
+    requestAnimationFrame(() => {
+      const panel = feedPanelRefs.current[feedId];
+      if (panel) panel.scrollTo({ top: y, left: 0, behavior: "auto" });
+    });
+  }, []);
+
+  const switchToFeed = useCallback((feedId: string, resetIfNew = false) => {
+    saveCurrentScroll();
+    const hadScroll = Object.prototype.hasOwnProperty.call(scrollPositions.current, feedId);
+    store.setActiveFeedId(feedId);
+    if (resetIfNew && !hadScroll) scrollPositions.current[feedId] = 0;
+    restoreFeedScroll(feedId);
+  }, [restoreFeedScroll, saveCurrentScroll, store]);
+
+  useEffect(() => {
+    if (activeFeed) restoreFeedScroll(activeFeed.id);
+  }, [activeFeed, restoreFeedScroll]);
+
+  useEffect(
+    () => () => {
+      saveCurrentScroll();
+      persistFeedScroll();
+      if (persistScrollRaf.current != null) window.cancelAnimationFrame(persistScrollRaf.current);
+      if (rafRef.current != null) window.cancelAnimationFrame(rafRef.current);
+    },
+    [persistFeedScroll, saveCurrentScroll],
+  );
+
   const settlePager = () => {
     setPagerAnimating(true);
-    setPagerOffset(0);
-    window.setTimeout(() => setPagerAnimating(false), 220);
+    setPagerOffsetRaf(0);
+    window.setTimeout(() => setPagerAnimating(false), motionDuration(APP_MOTION.snapBackMs) + APP_MOTION.settleMs);
   };
 
   const finishPager = (targetIndex: number, finalOffset: number) => {
     setPagerAnimating(true);
-    setPagerSettling(true);
-    setPagerOffset(finalOffset);
+    setPagerOffsetRaf(finalOffset);
     window.setTimeout(() => {
-      resetPageScroll();
-      store.setActiveFeedId(store.feeds[targetIndex].id);
+      const target = store.feeds[targetIndex];
+      switchToFeed(target.id, true);
       setPagerAnimating(false);
-      setPagerOffset(0);
-      window.setTimeout(() => setPagerSettling(false), 90);
-    }, 210);
+      setPagerOffsetRaf(0);
+    }, motionDuration(APP_MOTION.pagerCommitMs));
   };
 
+  const renderPagerPanel = (feed: Feed | null, inactive = false) => (
+    <div
+      className={`feed-pager-panel ${inactive ? "inactive-panel" : ""}`}
+      data-feed-id={feed?.id ?? "blank"}
+      ref={(node) => {
+        if (feed) feedPanelRefs.current[feed.id] = node;
+      }}
+      onScroll={(event) => {
+        if (!feed) return;
+        scrollPositions.current[feed.id] = event.currentTarget.scrollTop;
+        schedulePersistFeedScroll();
+      }}
+    >
+      {feed ? <FeedView feed={feed} inactive={inactive} /> : <BlankFeedPanel />}
+    </div>
+  );
+
   return (
-    <div className="page">
-      <FeedTabs />
-      {!store.ready ? (
-        <div className="empty-state">
-          <strong>Loading local library</strong>
-          <span className="muted">{store.syncStatus || "Opening IndexedDB cache"}</span>
-        </div>
-      ) : !activeFeed ? (
+    <div className="page home-page">
+      <FeedTabs onSelect={(feedId) => switchToFeed(feedId, true)} />
+      {!activeFeed ? (
         <div className="empty-state">
           <Library size={34} />
           <h1>Build your first feed</h1>
-          <p className="muted">
-            Home stays empty until you create a feed, so every shelf here is intentional instead of a random default.
-          </p>
+          <p className="muted">Create a feed to start building your own library shelves.</p>
           <button className="button primary" type="button" onClick={() => setEditorOpen(true)}>
             <Plus size={18} /> Create feed
           </button>
@@ -304,20 +390,25 @@ function HomePage() {
       ) : (
         <div
           ref={pagerRef}
-          className={`feed-pager ${pagerAnimating ? "animating" : ""} ${pagerSettling ? "settling" : ""}`}
+          className={`feed-pager ${pagerAnimating ? "animating" : ""}`}
           style={{ "--pager-offset": `${pagerOffset}px` } as React.CSSProperties}
           onPointerDown={(event) => {
             if (!event.isPrimary || event.pointerType === "mouse") return;
-            pointerRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, mode: "pending" };
+            pointerRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, lastX: event.clientX, lastT: performance.now(), velocityX: 0, mode: "pending" };
           }}
           onPointerMove={(event) => {
             const start = pointerRef.current;
             if (!start || start.id !== event.pointerId || !event.isPrimary) return;
             const dx = event.clientX - start.x;
             const dy = event.clientY - start.y;
+            const now = performance.now();
+            const dt = Math.max(1, now - start.lastT);
+            start.velocityX = (event.clientX - start.lastX) / dt;
+            start.lastX = event.clientX;
+            start.lastT = now;
             if (start.mode === "pending") {
-              if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
-              start.mode = Math.abs(dx) > Math.abs(dy) * 1.35 ? "horizontal" : "vertical";
+              if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+              start.mode = Math.abs(dx) > Math.abs(dy) * 1.2 ? "horizontal" : "vertical";
               if (start.mode === "horizontal") event.currentTarget.setPointerCapture(event.pointerId);
             }
             if (start.mode !== "horizontal") return;
@@ -326,7 +417,7 @@ function HomePage() {
             const resisted = canMove ? dx : dx * 0.28;
             const width = pagerRef.current?.clientWidth || window.innerWidth || 360;
             setPagerAnimating(false);
-            setPagerOffset(Math.max(-width, Math.min(width, resisted)));
+            setPagerOffsetRaf(Math.max(-width, Math.min(width, resisted)));
           }}
           onPointerUp={(event) => {
             const start = pointerRef.current;
@@ -336,7 +427,9 @@ function HomePage() {
             const dx = event.clientX - start.x;
             const dy = event.clientY - start.y;
             const width = pagerRef.current?.clientWidth || window.innerWidth || 360;
-            if (start.mode !== "horizontal" || Math.abs(dx) < Math.min(96, width * 0.24) || Math.abs(dx) < Math.abs(dy) * 1.35) {
+            const distanceCommit = Math.abs(dx) > Math.min(72, width * 0.14);
+            const velocityCommit = Math.abs(start.velocityX) > 0.45;
+            if (start.mode !== "horizontal" || !(distanceCommit || velocityCommit) || Math.abs(dx) < Math.abs(dy) * 1.2) {
               settlePager();
               return;
             }
@@ -350,9 +443,9 @@ function HomePage() {
           onPointerCancel={settlePager}
         >
           <div className="feed-pager-track">
-            <div className="feed-pager-panel">{previousFeed ? <BlankFeedPanel /> : null}</div>
-            <div className="feed-pager-panel">{activeFeed ? <FeedView feed={activeFeed} /> : null}</div>
-            <div className="feed-pager-panel">{nextFeed ? <BlankFeedPanel /> : null}</div>
+            {renderPagerPanel(previousFeed, true)}
+            {renderPagerPanel(activeFeed, false)}
+            {renderPagerPanel(nextFeed, true)}
           </div>
         </div>
       )}
@@ -370,7 +463,7 @@ function HomePage() {
   );
 }
 
-function FeedTabs() {
+function FeedTabs({ onSelect }: { onSelect?: (feedId: string) => void }) {
   const store = useAppStore();
   const activeRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
@@ -386,8 +479,11 @@ function FeedTabs() {
           ref={store.activeFeedId === feed.id ? activeRef : null}
           className={`feed-tab ${store.activeFeedId === feed.id ? "active" : ""}`}
           onClick={() => {
-            store.setActiveFeedId(feed.id);
-            resetPageScroll();
+            if (onSelect) onSelect(feed.id);
+            else {
+              store.setActiveFeedId(feed.id);
+              resetPageScroll();
+            }
           }}
         >
           <span className="feed-tab-title">{feed.name}</span>
@@ -397,11 +493,56 @@ function FeedTabs() {
   );
 }
 
+function SkeletonBlock({ className = "" }: { className?: string }) {
+  return <span className={`skeleton-block ${className}`} aria-hidden="true" />;
+}
+
+function SkeletonCardGrid({ columns = 3, count = 12 }: { columns?: FeedViewSettings["gridColumns"]; count?: number }) {
+  return (
+    <div className={`title-grid skeleton-grid columns-${columns}`} style={{ "--grid-columns": columns } as React.CSSProperties}>
+      {Array.from({ length: count }, (_, index) => (
+        <div className="title-card-wrap" key={index}>
+          <div className="title-card skeleton-card">
+            <SkeletonBlock className="skeleton-cover" />
+            <SkeletonBlock className="skeleton-line short" />
+            <SkeletonBlock className="skeleton-line" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FeedLoadingState({ columns, status, fallback }: { columns: FeedViewSettings["gridColumns"]; status?: string; fallback?: boolean }) {
+  return (
+    <section className="feed-loading-state" aria-live="polite">
+      <div className="loading-copy">
+        <strong>{fallback ? "Using offline preview data" : "Loading your library"}</strong>
+        <span className="muted tiny">{status || "Preparing latest feed data"}</span>
+      </div>
+      <SkeletonCardGrid columns={columns} count={columns >= 4 ? 15 : 12} />
+    </section>
+  );
+}
+
+function DetailSkeleton() {
+  return (
+    <div className="detail-skeleton" aria-hidden="true">
+      <SkeletonBlock className="skeleton-cover detail-skeleton-cover" />
+      <div className="detail-skeleton-copy">
+        <SkeletonBlock className="skeleton-line wide" />
+        <SkeletonBlock className="skeleton-line" />
+        <SkeletonBlock className="skeleton-line short" />
+      </div>
+    </div>
+  );
+}
+
 function BlankFeedPanel() {
   return <section className="blank-feed-panel" aria-hidden="true" />;
 }
 
-function FeedView({ feed }: { feed: Feed }) {
+function FeedView({ feed, inactive = false }: { feed: Feed; inactive?: boolean }) {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -433,11 +574,14 @@ function FeedView({ feed }: { feed: Feed }) {
       }),
     [runtimeFeed, store.catalog, store.history, store.labels, store.settings, store.syncMeta, store.tags],
   );
+  const showLoading = store.catalog.length === 0 || store.dataReadiness === "loading-cache" || store.dataReadiness === "loading-live";
+  const showFallbackBanner = store.isUsingFallbackData || store.dataReadiness === "ready-fallback" || store.dataReadiness === "offline-fallback";
+
   return (
     <>
       <section className="section">
         <div className="feed-action-row">
-          <button className="icon-button" type="button" onClick={() => setMenuOpen((open) => !open)} aria-label="Feed menu">
+          <button className="icon-button" type="button" disabled={inactive} onClick={() => setMenuOpen((open) => !open)} aria-label="Feed menu">
             <EllipsisVertical size={20} />
           </button>
           {menuOpen && (
@@ -467,13 +611,22 @@ function FeedView({ feed }: { feed: Feed }) {
             />
           </div>
         )}
+        {showFallbackBanner && (
+          <div className="fallback-banner">
+            {store.dataReadiness === "offline-fallback" ? "Using cached/offline data while sync retries." : "Using offline preview data until live sync finishes."}
+          </div>
+        )}
       </section>
-      <TitleCollection
-        items={query.items}
-        feed={runtimeFeed}
-        history={store.history}
-        latestDate={store.syncMeta?.historyLastDate}
-      />
+      {showLoading ? (
+        <FeedLoadingState columns={runtimeFeed.view.gridColumns} status={store.syncStatus} fallback={showFallbackBanner} />
+      ) : (
+        <TitleCollection
+          items={query.items}
+          feed={runtimeFeed}
+          history={store.history}
+          latestDate={store.syncMeta?.historyLastDate}
+        />
+      )}
       <BottomDrawer title="Feed Settings" open={editorOpen} onOpenChange={setEditorOpen}>
         <FeedEditor
           feed={feed}
@@ -493,6 +646,14 @@ function FeedView({ feed }: { feed: Feed }) {
           {query.activeNotes.map((note) => (
             <div className="setting-row" key={note}><span>{note}</span></div>
           ))}
+          {Object.entries(query.debugCounts)
+            .filter(([, value]) => value > 0)
+            .map(([label, value]) => (
+              <div className="setting-row" key={label}>
+                <span>{label}</span>
+                <strong>{value.toLocaleString()}</strong>
+              </div>
+            ))}
           {query.missingDateData && <div className="setting-row"><span>Some current exports do not include date fields in the catalog yet.</span></div>}
           <div className="setting-row"><span>Last data refresh</span><strong>{store.syncMeta?.lastSync ? new Date(store.syncMeta.lastSync).toLocaleString() : "Not synced"}</strong></div>
           <div className="setting-row"><span>Source</span><strong>{store.syncMeta?.source ?? "Offline cache"}</strong></div>
@@ -513,18 +674,31 @@ function TitleCollection({
   history: HistoryMap;
   latestDate?: string | null;
 }) {
-  const pageSize = feed.view.gridColumns >= 5 ? 60 : feed.view.gridColumns === 4 ? 72 : 120;
-  const countKey = `manhwa-visible-count:${feed.id}:${feed.view.gridColumns}`;
-  const [visibleCount, setVisibleCount] = useState(() => Number(sessionStorage.getItem(countKey)) || pageSize);
-  useEffect(() => {
-    const saved = Number(sessionStorage.getItem(countKey)) || pageSize;
-    setVisibleCount(Math.max(pageSize, Math.min(saved, Math.max(pageSize, items.length))));
-  }, [countKey, items.length, pageSize]);
-  useEffect(() => {
-    sessionStorage.setItem(countKey, String(visibleCount));
-  }, [countKey, visibleCount]);
-  const visibleItems = items.slice(0, visibleCount);
   const metricWindow = useMemo(() => resolveRollingWindow(feed.filters.rolling, latestDate), [feed.filters.rolling, latestDate]);
+  const collectionRef = useRef<HTMLDivElement | null>(null);
+  const [scrollElement, setScrollElement] = useState<HTMLElement | null>(null);
+  const columns = feed.view.gridColumns;
+  const rowCount = Math.ceil(items.length / columns);
+  const estimateSize = useCallback(() => {
+    if (columns === 1) return 660;
+    if (columns === 2) return 360;
+    if (columns === 3) return 270;
+    if (columns === 4) return 225;
+    return 184;
+  }, [columns]);
+  useEffect(() => {
+    setScrollElement(collectionRef.current?.closest<HTMLElement>(".feed-pager-panel") ?? null);
+  }, [feed.id]);
+
+  // TanStack Virtual exposes imperative helpers by design; this component keeps them local.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: rowCount,
+    estimateSize,
+    overscan: 6,
+    getScrollElement: () => scrollElement ?? (typeof document === "undefined" ? null : ((document.scrollingElement ?? document.documentElement) as HTMLElement)),
+    getItemKey: (index) => `${feed.id}:${columns}:${index}`,
+  });
 
   if (items.length === 0) {
     return (
@@ -536,36 +710,37 @@ function TitleCollection({
     );
   }
   return (
-    <>
-      <div
-        className={`title-grid columns-${feed.view.gridColumns} density-${feed.view.gridDensity}`}
-        style={{ "--grid-columns": feed.view.gridColumns } as React.CSSProperties}
-      >
-        {visibleItems.map((series, index) => (
-          <TitleCard
-            key={series.id}
-            series={series}
-            rank={index + 1}
-            view={feed.view}
-            history={history}
-            latestDate={latestDate}
-            metricWindow={metricWindow}
-          />
-        ))}
+    <div
+      ref={collectionRef}
+      className={`virtual-title-grid columns-${columns} density-${feed.view.gridDensity}`}
+      style={{ height: virtualizer.getTotalSize(), "--grid-columns": columns } as React.CSSProperties}
+    >
+      {virtualizer.getVirtualItems().map((virtualRow) => {
+        const start = virtualRow.index * columns;
+        const rowItems = items.slice(start, start + columns);
+        return (
+          <div
+            className={`virtual-title-row title-grid columns-${columns} density-${feed.view.gridDensity}`}
+            data-index={virtualRow.index}
+            key={virtualRow.key}
+            ref={virtualizer.measureElement}
+            style={{ transform: `translateY(${virtualRow.start}px)`, "--grid-columns": columns } as React.CSSProperties}
+          >
+            {rowItems.map((series, index) => (
+              <TitleCard
+                key={series.id}
+                series={series}
+                rank={start + index + 1}
+                view={feed.view}
+                history={history}
+                latestDate={latestDate}
+                metricWindow={metricWindow}
+              />
+            ))}
+          </div>
+        );
+      })}
       </div>
-      <LoadMore visibleCount={visibleCount} total={items.length} onMore={() => setVisibleCount((count) => count + pageSize)} />
-    </>
-  );
-}
-
-function LoadMore({ visibleCount, total, onMore }: { visibleCount: number; total: number; onMore: () => void }) {
-  if (visibleCount >= total) return null;
-  return (
-    <div className="toolbar" style={{ justifyContent: "center", margin: "18px 0" }}>
-      <button className="button" type="button" onClick={onMore}>
-        Load more ({Math.min(visibleCount, total).toLocaleString()} / {total.toLocaleString()})
-      </button>
-    </div>
   );
 }
 
@@ -636,9 +811,16 @@ function TitleCard({
 }) {
   const store = useAppStore();
   const displayTitle = localDisplayTitle(series, store.settings, store.titleOverrides);
+  const preload = () => void preloadSeriesDetail(store.settings.dataSourceUrl, series.id);
   return (
     <div className="title-card-wrap">
-      <Link to={`/title/${series.id}`} className="title-card" data-testid="title-card">
+      <Link
+        to={`/title/${series.id}`}
+        className="title-card"
+        data-testid="title-card"
+        onPointerDown={preload}
+        onMouseEnter={preload}
+      >
         <div className="poster-shell">
           <Cover series={series} priority={rank <= 18} titleOverride={displayTitle} />
           {view.visible.rank && <span className="rank">{rank}</span>}
@@ -915,6 +1097,48 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
       sourceMode: normalized.length === 2 ? "mixed" : normalized[0],
     });
   };
+  const applyPreset = (preset: "release" | "added" | "fan-rank") => {
+    setDraft((current) => {
+      if (preset === "release") {
+        return {
+          ...current,
+          filters: {
+            ...current.filters,
+            dateField: "release",
+            sourceMode: "mixed",
+            sourceModes: ["anilist", "non-anilist"],
+            rolling: current.filters.rolling.mode === "none" ? { ...store.settings.defaultRollingWindow } : current.filters.rolling,
+          },
+          sort: [{ id: crypto.randomUUID(), metric: "releaseDate", direction: "desc" }],
+          view: { ...current.view, metricSlots: ["releaseDate", "fanFavouriteDiscoveryPercentile"].slice(0, 3) as MetricId[] },
+        };
+      }
+      if (preset === "added") {
+        return {
+          ...current,
+          filters: {
+            ...current.filters,
+            dateField: "none",
+            sourceMode: "mixed",
+            sourceModes: ["anilist", "non-anilist"],
+          },
+          sort: [{ id: crypto.randomUUID(), metric: "mangabakaLatestRank", direction: "asc" }],
+          view: { ...current.view, metricSlots: ["year"] },
+        };
+      }
+      return {
+        ...current,
+        filters: {
+          ...current.filters,
+          dateField: "none",
+          sourceMode: "anilist",
+          sourceModes: ["anilist"],
+        },
+        sort: [{ id: crypto.randomUUID(), metric: "fanFavouriteDiscoveryPercentile", direction: "desc" }],
+        view: { ...current.view, metricSlots: ["fanFavouriteDiscoveryPercentile"] },
+      };
+    });
+  };
 
   useEffect(() => {
     if (!anilistLocked) return;
@@ -957,6 +1181,21 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
         value={draft.showDescription}
         onChange={(showDescription) => setDraft({ ...draft, showDescription })}
       />
+
+      <div className="field">
+        <span className="small-label">Quick presets</span>
+        <div className="segmented">
+          <button className="segment" type="button" onClick={() => applyPreset("release")}>
+            Use as Release feed
+          </button>
+          <button className="segment" type="button" onClick={() => applyPreset("added")}>
+            Use as Latest-added feed
+          </button>
+          <button className="segment" type="button" onClick={() => applyPreset("fan-rank")}>
+            Use as Fan Rank feed
+          </button>
+        </div>
+      </div>
 
       <h2 className="section-title">Filters</h2>
       <div className="field">
@@ -1707,7 +1946,12 @@ function RecommendationResults({
   ]);
 
   if (items == null) {
-    return <div className="inline-loading muted tiny">Finding close matches...</div>;
+    return (
+      <section className="recommendation-loading" aria-live="polite">
+        <span className="muted tiny">Finding close matches...</span>
+        <SkeletonCardGrid columns={feed.view.gridColumns} count={6} />
+      </section>
+    );
   }
 
   return <TitleCollection items={items} feed={feed} history={store.history} latestDate={store.syncMeta?.historyLastDate} />;
@@ -1794,7 +2038,9 @@ function RecommendationShelfEditor({
                       onClick={() =>
                         setDraft({
                           ...draft,
-                          sort: draft.sort.map((item) => (item.id === rule.id ? { ...item, metric: option } : item)),
+                          sort: draft.sort.map((item) =>
+                            item.id === rule.id ? { ...item, metric: option, direction: defaultDirectionForMetric(option) } : item,
+                          ),
                         })
                       }
                       title={metricDefinition(option).help}
@@ -1816,7 +2062,7 @@ function RecommendationShelfEditor({
                         })
                       }
                     >
-                      {direction === "desc" ? "High first" : "Low first"}
+                      {directionLabel(rule.metric, direction)}
                     </button>
                   ))}
                 </div>
@@ -1996,10 +2242,16 @@ function TitleDetailPage() {
   const params = useParams();
   const id = Number(params.id);
   const catalogItem = store.catalog.find((item) => item.id === id);
-  const [detail, setDetail] = useState<SeriesDetail | null>(null);
-  const [status, setStatus] = useState("Loading detail");
+  const [detailState, setDetailState] = useState<{
+    id: number;
+    detail: SeriesDetail | null;
+    status: "idle" | "loading" | "ready" | "error";
+    error?: string;
+  }>({ id, detail: null, status: "idle" });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [showAllRecommendations, setShowAllRecommendations] = useState(false);
+  const [detailRetry, setDetailRetry] = useState(0);
   const detailLayoutKey = `manhwa-detail-layout:${store.activeFeedId ?? "default"}`;
   const [visible, setVisible] = useState(() => {
     try {
@@ -2027,35 +2279,42 @@ function TitleDetailPage() {
   useEffect(() => {
     let cancelled = false;
     if (!id) return;
+    setDetailState({ id, detail: null, status: "loading" });
     void fetchSeriesDetail(store.settings.dataSourceUrl, id)
       .then((value) => {
-        if (!cancelled) setDetail(value);
+        if (!cancelled) setDetailState({ id, detail: value, status: "ready" });
       })
-      .catch((error) => setStatus(error instanceof Error ? error.message : "Could not load detail"));
+      .catch((error) => {
+        if (!cancelled) {
+          setDetailState({ id, detail: null, status: "error", error: error instanceof Error ? error.message : "Could not load detail" });
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [id, store.settings.dataSourceUrl]);
+  }, [detailRetry, id, store.settings.dataSourceUrl]);
 
+  const validDetail = detailState.id === id ? detailState.detail : null;
   const series = useMemo(
     () =>
-      detail && catalogItem
+      validDetail && catalogItem
         ? {
-            ...detail,
-            display_title: resolveDisplayTitle(detail, catalogItem),
+            ...validDetail,
+            display_title: resolveDisplayTitle(validDetail, catalogItem),
             stats: catalogItem.stats,
             analytics: catalogItem.analytics,
-            source: catalogItem.source ?? detail.source,
-            published: catalogItem.published ?? detail.published,
-            last_updated_at: catalogItem.last_updated_at ?? detail.last_updated_at,
-            authors: catalogItem.authors?.length ? catalogItem.authors : detail.authors,
-            artists: catalogItem.artists?.length ? catalogItem.artists : detail.artists,
-            links: { ...(detail.links ?? {}), ...(catalogItem.links ?? {}) },
+            context: catalogItem.context ?? validDetail.context,
+            source: catalogItem.source ?? validDetail.source,
+            published: catalogItem.published ?? validDetail.published,
+            last_updated_at: catalogItem.last_updated_at ?? validDetail.last_updated_at,
+            authors: catalogItem.authors?.length ? catalogItem.authors : validDetail.authors,
+            artists: catalogItem.artists?.length ? catalogItem.artists : validDetail.artists,
+            links: { ...(validDetail.links ?? {}), ...(catalogItem.links ?? {}) },
           }
-        : detail
-          ? { ...detail, display_title: resolveDisplayTitle(detail) }
+        : validDetail
+          ? { ...validDetail, display_title: resolveDisplayTitle(validDetail) }
           : catalogItem,
-    [catalogItem, detail],
+    [catalogItem, validDetail],
   );
   const displayTitle = series ? localDisplayTitle(series, store.settings, store.titleOverrides) : undefined;
   if (!series) {
@@ -2064,7 +2323,7 @@ function TitleDetailPage() {
         <button className="button" type="button" onClick={() => navigate(-1)}>
           <ArrowLeft size={16} /> Back
         </button>
-        <p className="muted">{status}</p>
+        {detailState.status === "error" ? <p className="muted">{detailState.error || "Could not load detail"}</p> : <DetailSkeleton />}
       </div>
     );
   }
@@ -2080,6 +2339,9 @@ function TitleDetailPage() {
         <Link className="icon-button" to={`/recommendations/${series.id}`} aria-label="Recommendations">
           <Sparkles size={20} />
         </Link>
+        <button className="icon-button" type="button" onClick={() => setShareOpen(true)} aria-label="Share title">
+          <Share2 size={20} />
+        </button>
         <button className="icon-button" type="button" onClick={() => setSettingsOpen(true)} aria-label="Detail settings">
           <EllipsisVertical size={20} />
         </button>
@@ -2105,10 +2367,26 @@ function TitleDetailPage() {
           <DetailLinks series={series} />
         </section>
       )}
-      {visible.description && detail?.description && (
+      {visible.description && (
         <section className="detail-block">
           <h2 className="section-title">Description</h2>
-          <RichDescription text={detail.description} />
+          {validDetail?.description ? (
+            <RichDescription text={validDetail.description} />
+          ) : detailState.status === "error" ? (
+            <div className="empty-state compact-empty">
+              <span className="muted tiny">{detailState.error || "Could not load description."}</span>
+              <button className="button" type="button" onClick={() => setDetailRetry((value) => value + 1)}>
+                Retry
+              </button>
+            </div>
+          ) : (
+            <div className="description-skeleton">
+              <SkeletonBlock className="skeleton-line wide" />
+              <SkeletonBlock className="skeleton-line" />
+              <SkeletonBlock className="skeleton-line" />
+              <SkeletonBlock className="skeleton-line short" />
+            </div>
+          )}
         </section>
       )}
       {visible.allTags && (
@@ -2154,6 +2432,9 @@ function TitleDetailPage() {
           titleOverride={store.titleOverrides[String(series.id)] ?? ""}
           onTitleOverrideChange={(title) => store.setTitleOverride(series.id, title)}
         />
+      </BottomDrawer>
+      <BottomDrawer title="Share Title" open={shareOpen} onOpenChange={setShareOpen}>
+        <DetailSharePanel series={series} description={validDetail?.description ?? ""} tagsById={tagsById} />
       </BottomDrawer>
     </div>
   );
@@ -2273,6 +2554,118 @@ function DetailLinks({ series }: { series: SeriesCatalog }) {
   );
 }
 
+function plainDescription(text?: string | null) {
+  return (text ?? "")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*\n]+)\*/g, "$1")
+    .replace(/\((https?:\/\/[^)]+)\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function DetailSharePanel({ series, description, tagsById }: { series: SeriesCatalog; description?: string | null; tagsById: Map<number, TagNode> }) {
+  const store = useAppStore();
+  const [includeCover, setIncludeCover] = useState(true);
+  const [includeMeta, setIncludeMeta] = useState(true);
+  const [includeStats, setIncludeStats] = useState(true);
+  const [includeGenres, setIncludeGenres] = useState(true);
+  const [includeDescription, setIncludeDescription] = useState(true);
+  const [recommendationCount, setRecommendationCount] = useState<0 | 3 | 5 | 10>(3);
+  const displayTitle = localDisplayTitle(series, store.settings, store.titleOverrides);
+  const shortDescription = plainDescription(description).slice(0, 260);
+  const sharePayload: SharePayload = {
+    kind: "title",
+    version: 2,
+    titleId: series.id,
+    title: displayTitle,
+    description: shortDescription,
+  };
+  const recShelf = store.settings.recommendationShelves[0];
+  const recs = useMemo(
+    () => (recShelf && recommendationCount > 0 ? recommendationItems(series, recShelf, store).slice(0, recommendationCount) : []),
+    [recommendationCount, recShelf, series, store],
+  );
+  const genreTags = series.tag_ids
+    .map((id) => tagsById.get(id))
+    .filter((tag): tag is TagNode => Boolean(tag))
+    .filter(isGenreTag)
+    .slice(0, 5);
+  const stats = [
+    ["Fan Rank", formatMetricValue(series, "fanFavouriteDiscoveryPercentile", store.history, store.syncMeta?.historyLastDate)],
+    ["Pop", formatMetricValue(series, "popularity", store.history, store.syncMeta?.historyLastDate)],
+    ["Fav", formatMetricValue(series, "favourites", store.history, store.syncMeta?.historyLastDate)],
+  ].filter(([, value]) => value !== "n/a");
+
+  return (
+    <div className="detail-share-panel">
+      <div className="detail-share-preview">
+        {includeCover && series.cover && <img src={series.cover} alt="" />}
+        <div className="detail-share-copy">
+          <h2>{displayTitle}</h2>
+          {includeMeta && (
+            <p className="muted">
+              {[series.year, series.status, series.total_chapters ? `${series.total_chapters} chapters` : ""].filter(Boolean).join(" / ")}
+            </p>
+          )}
+          {includeStats && stats.length > 0 && (
+            <div className="detail-share-stats">
+              {stats.map(([label, value]) => (
+                <span key={label}>
+                  <strong>{value}</strong>
+                  <small>{label}</small>
+                </span>
+              ))}
+            </div>
+          )}
+          {includeGenres && genreTags.length > 0 && (
+            <div className="chips compact-share-chips">
+              {genreTags.map((tag) => (
+                <span className="chip" key={tag.id}>{tag.name}</span>
+              ))}
+            </div>
+          )}
+          {includeDescription && shortDescription && <p className="share-card-description">{shortDescription}</p>}
+          {recommendationCount > 0 && recs.length > 0 && (
+            <div className="share-recs">
+              <strong>Top matches</strong>
+              {recs.slice(0, recommendationCount).map((item) => (
+                <span key={item.id}>{localDisplayTitle(item, store.settings, store.titleOverrides)}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="settings-list">
+        <ToggleRow label="Cover" description="Show the title artwork in the share preview." value={includeCover} onChange={setIncludeCover} />
+        <ToggleRow label="Year/status/chapters" description="Show compact title facts." value={includeMeta} onChange={setIncludeMeta} />
+        <ToggleRow label="Stats" description="Show Fan Rank, popularity, and favourites when available." value={includeStats} onChange={setIncludeStats} />
+        <ToggleRow label="Genres" description="Show main genre chips." value={includeGenres} onChange={setIncludeGenres} />
+        <ToggleRow label="Short description" description="Show a compact synopsis preview." value={includeDescription} onChange={setIncludeDescription} />
+        <div className="setting-row">
+          <div>
+            <strong>Recommendations</strong>
+            <div className="muted tiny">Optional top matches in the screenshot-friendly card.</div>
+          </div>
+          <div className="segmented mini">
+            {[0, 3, 5, 10].map((count) => (
+              <button
+                key={count}
+                type="button"
+                className={`segment ${recommendationCount === count ? "active" : ""}`}
+                onClick={() => setRecommendationCount(count as 0 | 3 | 5 | 10)}
+              >
+                {count}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <SharePanel payload={sharePayload} />
+    </div>
+  );
+}
+
 function DetailSettingsDrawer({
   visible,
   onChange,
@@ -2348,7 +2741,7 @@ function LearnPage() {
           Fan Rank is the percentile version of the balanced fan discovery score. It combines fandom attachment and popularity confidence so niche titles do not unfairly dominate.
         </LearnItem>
         <LearnItem title="Cover Stats">
-          Cover stat slots show at most three metrics. Fan% is the default rank signal, with Pop and Fav beside it for context.
+          Cover stat slots show at most three metrics. Fan Rank is the default scoring-style signal, and visible stats are display-only.
         </LearnItem>
         <LearnItem title="Safe Defaults">
           Safe and suggestive content are enabled by default. BL, GL, Smut, and Hentai are exact-tag exclusions unless a feed explicitly includes them.
@@ -2397,14 +2790,19 @@ function ImportPage() {
   }, [params]);
 
   useEffect(() => {
-    if (payload?.kind !== "feed") return;
+    if (payload?.kind !== "feed" && payload?.kind !== "title") return;
     const previousTitle = document.title;
     const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
     const previousDescription = description?.content;
-    document.title = payload.feed.name;
-    if (description) description.content = payload.feed.showDescription && payload.feed.description.trim()
-      ? payload.feed.description.trim()
-      : `Add the ${payload.feed.name} feed.`;
+    document.title = payload.kind === "feed" ? payload.feed.name : payload.title || "Manhwa Lib title";
+    if (description) {
+      description.content =
+        payload.kind === "feed"
+          ? payload.feed.showDescription && payload.feed.description.trim()
+            ? payload.feed.description.trim()
+            : `Add the ${payload.feed.name} feed.`
+          : payload.description || `Open ${payload.title || "this title"} in Manhwa Lib.`;
+    }
     return () => {
       document.title = previousTitle;
       if (description && previousDescription) description.content = previousDescription;
@@ -2413,12 +2811,30 @@ function ImportPage() {
 
   const apply = (mode: "merge" | "replace") => {
     if (!payload) return;
-    if (payload.kind === "feed") store.importSnapshot({ feeds: [payload.feed] }, "merge");
+    if (payload.kind === "title") {
+      navigate(`/title/${payload.titleId}`, { replace: true });
+      return;
+    }
+    if (payload.kind === "feed") {
+      const exact = findEquivalentFeed(store.feeds, payload.feed);
+      if (exact) {
+        store.setActiveFeedId(exact.id);
+        navigate("/", { replace: true });
+        return;
+      }
+      const now = new Date().toISOString();
+      const feed = { ...payload.feed, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
+      store.upsertFeed(feed);
+      store.setActiveFeedId(feed.id);
+      navigate("/", { replace: true });
+      return;
+    }
     if (payload.kind === "settings") store.importSnapshot({ settings: payload.settings as AppSettings }, mode);
     if (payload.kind === "labels") store.importSnapshot({ labels: payload.labels }, mode);
     if (payload.kind === "full") store.importSnapshot(payload.snapshot, mode);
-    navigate("/");
+    navigate("/", { replace: true });
   };
+  const feedConflict = payload?.kind === "feed" ? findFeedNameConflict(store.feeds, payload.feed) : null;
 
   return (
     <div className="page">
@@ -2432,13 +2848,21 @@ function ImportPage() {
           <span className="muted">
             {payload.kind === "feed" && payload.feed.showDescription && payload.feed.description.trim()
               ? payload.feed.description.trim()
+              : payload.kind === "title"
+                ? payload.description || payload.title || "Open this title in Manhwa Lib."
               : payload.kind === "feed"
                 ? "Review this feed before adding it to your library."
                 : "Review before applying this shared configuration."}
           </span>
+          {payload.kind === "feed" && findEquivalentFeed(store.feeds, payload.feed) && (
+            <span className="muted tiny">You already have this exact feed. Add will open the existing copy.</span>
+          )}
+          {feedConflict && (
+            <span className="muted tiny">A feed named {feedConflict.name} already exists, but this shared feed has different settings.</span>
+          )}
           <div className="toolbar">
             <button className="button primary" type="button" onClick={() => apply("merge")}>
-              Add
+              {payload.kind === "title" ? "Open" : "Add"}
             </button>
             {(payload.kind === "settings" || payload.kind === "full") && (
               <button className="button" type="button" onClick={() => apply("replace")}>
@@ -2471,8 +2895,13 @@ function SharePanelButton({ payload, label = "Share" }: { payload: SharePayload;
 
 function SharePanel({ payload }: { payload: SharePayload }) {
   const url = useMemo(() => makeShareUrl(payload), [payload]);
-  const title = payload.kind === "feed" ? payload.feed.name : "Manhwa Lib configuration";
-  const description = payload.kind === "feed" && payload.feed.showDescription ? payload.feed.description.trim() : "";
+  const title = payload.kind === "feed" ? payload.feed.name : payload.kind === "title" ? payload.title || "Manhwa Lib title" : "Manhwa Lib configuration";
+  const description =
+    payload.kind === "feed" && payload.feed.showDescription
+      ? payload.feed.description.trim()
+      : payload.kind === "title"
+        ? payload.description ?? ""
+        : "";
   const share = async () => {
     if (navigator.share) {
       await navigator.share({ title, text: description ? `${title}\n${description}` : title, url });
