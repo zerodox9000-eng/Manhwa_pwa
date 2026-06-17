@@ -1,0 +1,14 @@
+/* Restore the visual gap between poster covers and title text in feed cards. */
+.title-card .title-meta {
+  padding-top: 10px !important;
+}
+
+.title-grid.columns-1 .title-card .title-meta,
+.title-grid.columns-2 .title-card .title-meta {
+  padding-top: 12px !important;
+}
+
+.title-grid.columns-4 .title-card .title-meta,
+.title-grid.columns-5 .title-card .title-meta {
+  padding-top: 8px !important;
+}
