@@ -29,6 +29,7 @@ interface StoreState {
   feeds: Feed[];
   folders: Folder[];
   labels: UserLabel[];
+  titleOverrides: Record<string, string>;
   settings: AppSettings;
   activeFeedId: string | null;
   syncStatus: string;
@@ -39,6 +40,7 @@ interface StoreState {
   upsertFolder: (folder: Folder) => void;
   deleteFolder: (id: string) => void;
   upsertLabel: (label: UserLabel) => void;
+  setTitleOverride: (id: number, title: string) => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
   refreshData: () => Promise<void>;
   resetLocalState: () => Promise<void>;
@@ -101,21 +103,23 @@ function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
       ...DEFAULT_SETTINGS.metricNames,
       ...settings?.metricNames,
     },
+    defaultRollingWindow: {
+      ...DEFAULT_SETTINGS.defaultRollingWindow,
+      ...settings?.defaultRollingWindow,
+    },
     searchSensitiveTags: relationshipTags && adultTags,
     searchRelationshipTags: relationshipTags,
     searchAdultTags: adultTags,
   };
 }
 
-export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boolean } = {}): Feed {
+export function normalizeFeed(feed: Feed, _options: { preserveMetricSlots?: boolean } = {}): Feed {
+  void _options;
   const excludeTagIds = feed.filters.excludeTagIds?.length
     ? feed.filters.excludeTagIds
     : DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS;
   const rawMetricSlots = feed.view?.metricSlots?.length ? feed.view.metricSlots : DEFAULT_SETTINGS.defaultFeedView.metricSlots;
-  const metricSlots = (options.preserveMetricSlots
-    ? rawMetricSlots
-    : rawMetricSlots.filter((metric) => metric !== "mangabakaLatestRank")
-  ).slice(0, 3);
+  const metricSlots = rawMetricSlots.filter((metric) => metric !== "mangabakaLatestRank").slice(0, 3);
   const normalized: Feed = {
     ...feed,
     description: feed.description ?? "",
@@ -180,6 +184,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   );
   const [folders, setFolders] = useState<Folder[]>(local.folders ?? []);
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
+  const [titleOverrides, setTitleOverrides] = useState<Record<string, string>>(local.titleOverrides ?? {});
   const [settings, setSettings] = useState<AppSettings>(mergeSettings(local.settings));
   const [activeFeedId, setActiveFeedId] = useState<string | null>(local.activeFeedId ?? null);
   const [syncStatus, setSyncStatus] = useState("");
@@ -250,12 +255,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       feeds,
       folders,
       labels,
+      titleOverrides,
       settings,
       activeFeedId,
       lastRoute: window.location.hash,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-  }, [feeds, folders, labels, settings, activeFeedId]);
+  }, [feeds, folders, labels, titleOverrides, settings, activeFeedId]);
 
   const refreshData = useCallback(async () => {
     setSyncStatus("Starting sync");
@@ -317,6 +323,19 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const setTitleOverride = useCallback((id: number, title: string) => {
+    setTitleOverrides((current) => {
+      const clean = title.trim();
+      const key = String(id);
+      if (!clean) {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      }
+      return { ...current, [key]: clean };
+    });
+  }, []);
+
   const updateSettings = useCallback((patch: Partial<AppSettings>) => {
     setSettings((current) => mergeSettings({ ...current, ...patch }));
   }, []);
@@ -327,6 +346,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setFeeds([]);
     setFolders([]);
     setLabels([]);
+    setTitleOverrides({});
     setSettings(DEFAULT_SETTINGS);
     setActiveFeedId(null);
   }, []);
@@ -336,6 +356,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setFeeds((snapshot.feeds ?? []).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true })));
       setFolders(snapshot.folders ?? []);
       setLabels(snapshot.labels ?? []);
+      setTitleOverrides(snapshot.titleOverrides ?? {});
       setSettings(mergeSettings(snapshot.settings));
       setActiveFeedId(snapshot.activeFeedId ?? null);
       return;
@@ -346,6 +367,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     ]);
     setFolders((current) => [...current, ...(snapshot.folders ?? [])]);
     setLabels((current) => [...current, ...(snapshot.labels ?? [])]);
+    if (snapshot.titleOverrides) setTitleOverrides((current) => ({ ...current, ...snapshot.titleOverrides }));
     if (snapshot.settings) setSettings((current) => mergeSettings({ ...current, ...snapshot.settings }));
   }, []);
 
@@ -360,6 +382,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       feeds,
       folders,
       labels,
+      titleOverrides,
       settings,
       activeFeedId,
       syncStatus,
@@ -370,6 +393,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       upsertFolder,
       deleteFolder,
       upsertLabel,
+      setTitleOverride,
       updateSettings,
       refreshData,
       resetLocalState,
@@ -385,6 +409,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       feeds,
       folders,
       labels,
+      titleOverrides,
       settings,
       activeFeedId,
       syncStatus,
@@ -394,6 +419,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       upsertFolder,
       deleteFolder,
       upsertLabel,
+      setTitleOverride,
       updateSettings,
       refreshData,
       resetLocalState,

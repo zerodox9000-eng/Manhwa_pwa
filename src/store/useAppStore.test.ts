@@ -23,6 +23,6 @@ describe("normalizeFeed", () => {
 
     const normalized = normalizeFeed(feed, { preserveMetricSlots: true });
 
-    expect(normalized.view.metricSlots).toEqual(["mangabakaLatestRank", "popularity", "favourites"]);
+    expect(normalized.view.metricSlots).toEqual(["popularity", "favourites"]);
   });
 });

@@ -9,7 +9,7 @@ import type {
   UserLabel,
 } from "./types";
 import { isDateWithin, isFutureDate, resolveRollingWindow } from "./dates";
-import { chapterNumber, displayComparableMetricValue, displayReleaseDate, effectiveEndDate, effectiveReleaseDate, historyDeltaForWindow, metricDefinition, metricValue } from "./metrics";
+import { chapterNumber, displayReleaseDate, effectiveEndDate, effectiveReleaseDate, historyDeltaForWindow, isRollingMetric, listedDate, metricDefinition, metricValue } from "./metrics";
 
 const RELATIONSHIP_SENSITIVE_NAMES = new Set(["boys love", "girls love"]);
 const ADULT_SENSITIVE_NAMES = new Set(["smut", "hentai"]);
@@ -74,7 +74,6 @@ export function feedUsesAniListOnlyParameters(feed: Feed) {
   const metrics = [
     ...feed.sort.map((rule) => rule.metric),
     ...(filters.metricRanges ?? []).map((range) => range.metric),
-    ...(feed.view?.metricSlots ?? []),
   ];
   return metrics.some((metric) => metricDefinition(metric).anilistOnly);
 }
@@ -166,7 +165,16 @@ export function runFeedQuery(args: {
   }
 
   const window = resolveRollingWindow(filters.rolling, metaHistoryLast);
-  const usesHistorySort = feed.sort.some((rule) => rule.metric.includes("Growth") || rule.metric.includes("Delta"));
+  const usesHistorySort = feed.sort.some((rule) => isRollingMetric(rule.metric));
+  const sourceModes = effectiveSourceModesForFeed(feed);
+  activeNotes.push(`Source mode: ${sourceModes.join(" + ")}${feedUsesAniListOnlyParameters(feed) ? " (AniList stat locked)" : ""}.`);
+  activeNotes.push(`Sort: ${feed.sort.map((rule) => `${metricDefinition(rule.metric).shortLabel} ${rule.direction}`).join(", ") || "none"}.`);
+  if (feed.view?.metricSlots?.length) {
+    activeNotes.push(`Cover stats: ${feed.view.metricSlots.map((metric) => metricDefinition(metric).shortLabel).join(", ")} (display only).`);
+  }
+  if (filters.dateField === "release") activeNotes.push("Rel date mode: real non-estimated release dates only.");
+  if (filters.dateField === "added") activeNotes.push("Added date mode: first-seen/listed date cutoff, sorted separately from Add rank.");
+  if (filters.dateField === "end") activeNotes.push("End date mode: actual non-estimated completion dates only.");
   if (window && usesHistorySort) {
     activeNotes.push(`Growth window: ${window.from} to ${window.to}.`);
     if (Object.keys(history).length === 0) activeNotes.push("Growth sorting will update after history sync finishes.");
@@ -201,7 +209,7 @@ export function runFeedQuery(args: {
     if (filters.minMeanScore != null && (item.stats.meanScore == null || item.stats.meanScore < filters.minMeanScore)) return false;
     if (filters.maxMeanScore != null && (item.stats.meanScore == null || item.stats.meanScore > filters.maxMeanScore)) return false;
     for (const range of filters.metricRanges ?? []) {
-      const value = displayComparableMetricValue(item, range.metric, history, metaHistoryLast);
+      const value = metricValue(item, range.metric, history, metaHistoryLast);
       if (typeof value !== "number" || !Number.isFinite(value)) return false;
       if (range.min != null && value < range.min) return false;
       if (range.max != null && value > range.max) return false;
@@ -221,7 +229,12 @@ export function runFeedQuery(args: {
     }
 
     if (window && filters.dateField !== "none") {
-      const dateValue = filters.dateField === "release" ? effectiveReleaseDate(item) : effectiveEndDate(item);
+      const dateValue =
+        filters.dateField === "release"
+          ? effectiveReleaseDate(item)
+          : filters.dateField === "end"
+            ? effectiveEndDate(item)
+            : listedDate(item);
       if (!dateValue) {
         missingDateData = true;
         return false;
@@ -244,7 +257,7 @@ export function runFeedQuery(args: {
     for (const rule of feed.sort) {
       let av = metricValue(a, rule.metric, history, metaHistoryLast);
       let bv = metricValue(b, rule.metric, history, metaHistoryLast);
-      if (window && rule.metric.includes("Growth")) {
+      if (window && isRollingMetric(rule.metric)) {
         av = historyDeltaForWindow(a.id, rule.metric, history, window.from, window.to) ?? av;
         bv = historyDeltaForWindow(b.id, rule.metric, history, window.from, window.to) ?? bv;
       }

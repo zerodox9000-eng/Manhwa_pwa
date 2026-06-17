@@ -55,24 +55,56 @@ function datePart(value?: string | null) {
   return value?.slice(0, 10) ?? null;
 }
 
-export function effectiveReleaseDate(series: SeriesCatalog) {
-  const published = series.published;
-  const actualOrEstimated = published?.start_date ?? null;
-  const trustedFirstSeen = series.first_seen_at_is_trusted ? datePart(series.first_seen_at) : null;
-  const date = actualOrEstimated ?? trustedFirstSeen ?? null;
-  return date && !isFutureDate(date) ? date : null;
-}
-
-export function displayReleaseDate(series: SeriesCatalog) {
+export function realReleaseDate(series: SeriesCatalog) {
   const published = series.published;
   const date = published?.start_date && !published.start_date_is_estimated ? published.start_date : null;
   return date && !isFutureDate(date) ? date : null;
 }
 
-export function effectiveEndDate(series: SeriesCatalog) {
+export function listedDate(series: SeriesCatalog) {
+  const date =
+    datePart(series.first_seen_at) ??
+    datePart(series.added_at) ??
+    datePart(series.created_at) ??
+    datePart(series.mangabaka_latest_snapshot_at) ??
+    datePart(series.last_updated_at) ??
+    null;
+  return date && !isFutureDate(date) ? date : null;
+}
+
+export function latestAddedRank(series: SeriesCatalog) {
+  return series.mangabaka_latest_rank ?? null;
+}
+
+export function realEndDate(series: SeriesCatalog) {
   const published = series.published;
   if (!published?.end_date || published.end_date_is_estimated) return null;
   return isFutureDate(published.end_date) ? null : published.end_date;
+}
+
+export function effectiveReleaseDate(series: SeriesCatalog) {
+  return realReleaseDate(series);
+}
+
+export function displayReleaseDate(series: SeriesCatalog) {
+  return realReleaseDate(series);
+}
+
+export function effectiveEndDate(series: SeriesCatalog) {
+  return realEndDate(series);
+}
+
+export function isRollingMetric(metric: MetricId) {
+  return (
+    metric === "popularityGrowth" ||
+    metric === "popularityGrowthPercent" ||
+    metric === "favouritesGrowth" ||
+    metric === "favouritesGrowthPercent" ||
+    metric === "meanScoreDelta" ||
+    metric === "fanFavouriteDelta" ||
+    metric === "discoveryScoreDelta" ||
+    metric === "discoveryPercentileDelta"
+  );
 }
 
 export function historyDeltaForWindow(seriesId: number, metric: MetricId, history: HistoryMap, from: string, to: string) {
@@ -110,7 +142,7 @@ export function metricValue(series: SeriesCatalog, metric: MetricId, history: Hi
   if (metric === "popularityPercentile") return analytics.popularityPercentile ?? -Infinity;
   if (metric === "fanFavouriteDiscoveryScore") return analytics.fanFavouriteDiscoveryScore ?? -Infinity;
   if (metric === "fanFavouriteDiscoveryPercentile") return analytics.fanFavouriteDiscoveryPercentile ?? -Infinity;
-  if (metric === "mangabakaLatestRank") return series.mangabaka_latest_rank ?? Infinity;
+  if (metric === "mangabakaLatestRank") return latestAddedRank(series) ?? Infinity;
   if (metric === "releaseDate") {
     const date = effectiveReleaseDate(series);
     return parseDate(date)?.getTime() ?? -Infinity;

@@ -377,8 +377,8 @@ describe("runFeedQuery", () => {
     expect(result.items.map((item) => item.id)).toEqual([]);
   });
 
-  it("uses displayed rounded metric values for range filters", () => {
-    const feed = createFeed("rounded display ranges");
+  it("uses raw metric values for range filters instead of rounded display values", () => {
+    const feed = createFeed("raw ranges");
     feed.filters.sourceMode = "anilist";
     feed.filters.sourceModes = ["anilist"];
     feed.filters.metricRanges = [{ id: "disc", metric: "fanFavouriteDiscoveryPercentile", min: 90, max: 90 }];
@@ -397,6 +397,77 @@ describe("runFeedQuery", () => {
       metaHistoryFirst: "2024-05-01",
       metaHistoryLast: "2024-05-10",
     });
-    expect(result.items.map((item) => item.id)).toEqual([71, 70]);
+    expect(result.items.map((item) => item.id)).toEqual([]);
+  });
+
+  it("does not let cover stats force an AniList-only source lock", () => {
+    const feed = createFeed("cover stats mixed");
+    feed.filters.sourceMode = "mixed";
+    feed.filters.sourceModes = ["anilist", "non-anilist"];
+    feed.sort = [{ id: "rel", metric: "releaseDate", direction: "desc" }];
+    feed.view.metricSlots = ["fanFavouriteDiscoveryPercentile"];
+    expect(feedUsesAniListOnlyParameters(feed)).toBe(false);
+    const result = runFeedQuery({
+      feed,
+      series: baseSeries,
+      tags,
+      history,
+      labels: [],
+      settings: { ...DEFAULT_SETTINGS, nonAniListPlacement: "mixed" },
+      metaHistoryFirst: "2024-05-01",
+      metaHistoryLast: "2024-05-10",
+    });
+    expect(result.items.map((item) => item.id)).toContain(3);
+  });
+
+  it("keeps estimated release dates out of Rel sorting and rolling windows", () => {
+    const feed = createFeed("estimated release ignored");
+    feed.filters.sourceMode = "mixed";
+    feed.filters.sourceModes = ["anilist", "non-anilist"];
+    feed.filters.dateField = "release";
+    feed.filters.rolling = { mode: "fixed", amount: 1, unit: "days", from: "2026-01-01", to: "2026-01-31" };
+    feed.sort = [{ id: "rel", metric: "releaseDate", direction: "desc" }];
+    const result = runFeedQuery({
+      feed,
+      series: [
+        {
+          ...baseSeries[0],
+          id: 74,
+          display_title: "Estimated January",
+          first_seen_at: "2026-06-10T00:00:00.000Z",
+          published: { start_date: "2026-01-01", start_date_is_estimated: true, end_date: null },
+        },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+      metaHistoryFirst: "2024-05-01",
+      metaHistoryLast: "2024-05-10",
+    });
+    expect(result.items).toEqual([]);
+  });
+
+  it("can use listed dates for a rolling added-date cutoff", () => {
+    const feed = createFeed("added window");
+    feed.filters.sourceMode = "mixed";
+    feed.filters.sourceModes = ["anilist", "non-anilist"];
+    feed.filters.dateField = "added";
+    feed.filters.rolling = { mode: "fixed", amount: 1, unit: "days", from: "2026-06-01", to: "2026-06-30" };
+    feed.sort = [{ id: "add", metric: "mangabakaLatestRank", direction: "asc" }];
+    const result = runFeedQuery({
+      feed,
+      series: [
+        { ...baseSeries[0], id: 75, display_title: "Fresh", first_seen_at: "2026-06-12T00:00:00.000Z", mangabaka_latest_rank: 2 },
+        { ...baseSeries[0], id: 76, display_title: "Old", first_seen_at: "2026-05-12T00:00:00.000Z", mangabaka_latest_rank: 1 },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+      metaHistoryFirst: null,
+      metaHistoryLast: null,
+    });
+    expect(result.items.map((item) => item.id)).toEqual([75]);
   });
 });

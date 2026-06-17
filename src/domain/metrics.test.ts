@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMetricValue, metricValue } from "./metrics";
+import { formatMetricValue, listedDate, metricValue } from "./metrics";
 import type { SeriesCatalog } from "./types";
 
 const series: SeriesCatalog = {
@@ -24,7 +24,7 @@ describe("metrics", () => {
     expect(formatMetricValue(series, "endDate")).toBe("n/a");
   });
 
-  it("uses estimated start dates internally and keeps estimated release display blank", () => {
+  it("keeps estimated start dates out of release metrics but exposes listed date separately", () => {
     const fallbackSeries: SeriesCatalog = {
       ...series,
       id: 2,
@@ -39,7 +39,8 @@ describe("metrics", () => {
         end_date_is_estimated: true,
       },
     };
-    expect(metricValue(fallbackSeries, "releaseDate")).toBe(new Date("2026-01-01").getTime());
+    expect(metricValue(fallbackSeries, "releaseDate")).toBe(-Infinity);
+    expect(listedDate(fallbackSeries)).toBe("2026-06-07");
     expect(formatMetricValue(fallbackSeries, "releaseDate")).toBe("n/a");
     expect(metricValue(fallbackSeries, "endDate")).toBe(-Infinity);
     expect(formatMetricValue(fallbackSeries, "endDate")).toBe("n/a");

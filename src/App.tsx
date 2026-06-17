@@ -39,7 +39,7 @@ import {
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT } from "./domain/defaults";
 import { resolveRollingWindow } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
-import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
+import { formatMetricValue, historyDeltaForWindow, isRollingMetric, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveDisplayTitle } from "./domain/catalog";
 import { decodeSharePayload, exportCsv, makeShareUrl, type SharePayload } from "./domain/share";
@@ -72,6 +72,33 @@ const SORT_OPTIONS: MetricId[] = METRIC_DEFINITIONS.map((definition) => definiti
 const RANGE_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.filterable);
 const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.id !== "title" && definition.id !== "mangabakaLatestRank");
 const resetPageScroll = () => window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+
+function defaultDirectionForMetric(metric: MetricId): "asc" | "desc" {
+  if (metric === "title" || metric === "mangabakaLatestRank") return "asc";
+  return "desc";
+}
+
+function directionLabel(metric: MetricId, direction: "asc" | "desc") {
+  if (metric === "title") return direction === "asc" ? "A-Z" : "Z-A";
+  if (metric === "mangabakaLatestRank") return direction === "asc" ? "Latest first" : "Older first";
+  if (metric === "releaseDate" || metric === "endDate" || metric === "year") return direction === "desc" ? "Newest first" : "Oldest first";
+  if (isRollingMetric(metric)) return direction === "desc" ? "Biggest gain" : "Lowest gain";
+  return direction === "desc" ? "High first" : "Low first";
+}
+
+function applyDefaultRolling(feed: Feed, settings: AppSettings) {
+  return {
+    ...feed,
+    filters: {
+      ...feed.filters,
+      rolling: { ...settings.defaultRollingWindow },
+    },
+  };
+}
+
+function localDisplayTitle(series: SeriesCatalog, settings: AppSettings, overrides: Record<string, string>) {
+  return settings.enableTitleOverrides ? overrides[String(series.id)] || series.display_title : series.display_title;
+}
 
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 
@@ -331,7 +358,7 @@ function HomePage() {
       )}
       <BottomDrawer title="Create Feed" open={editorOpen} onOpenChange={setEditorOpen}>
         <FeedEditor
-          feed={createFeed("My Feed")}
+          feed={applyDefaultRolling(createFeed("My Feed"), store.settings)}
           onCancel={() => setEditorOpen(false)}
           onSave={(feed) => {
             store.upsertFeed(feed);
@@ -542,8 +569,9 @@ function LoadMore({ visibleCount, total, onMore }: { visibleCount: number; total
   );
 }
 
-function Cover({ series, priority = false }: { series: SeriesCatalog; priority?: boolean }) {
-  const initials = series.display_title
+function Cover({ series, priority = false, titleOverride }: { series: SeriesCatalog; priority?: boolean; titleOverride?: string }) {
+  const displayTitle = titleOverride || series.display_title;
+  const initials = displayTitle
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
@@ -606,18 +634,20 @@ function TitleCard({
   latestDate?: string | null;
   metricWindow?: { from: string; to: string } | null;
 }) {
+  const store = useAppStore();
+  const displayTitle = localDisplayTitle(series, store.settings, store.titleOverrides);
   return (
     <div className="title-card-wrap">
       <Link to={`/title/${series.id}`} className="title-card" data-testid="title-card">
         <div className="poster-shell">
-          <Cover series={series} priority={rank <= 18} />
+          <Cover series={series} priority={rank <= 18} titleOverride={displayTitle} />
           {view.visible.rank && <span className="rank">{rank}</span>}
           <div className="poster-metrics">
             <TitleMetrics series={series} view={view} compact history={history} latestDate={latestDate} metricWindow={metricWindow} />
           </div>
         </div>
         <div className="title-meta">
-          <span className="title-name">{series.display_title}</span>
+          <span className="title-name">{displayTitle}</span>
         </div>
       </Link>
     </div>
@@ -625,7 +655,7 @@ function TitleCard({
 }
 
 function isGrowthMetric(metric: MetricId) {
-  return metric.includes("Growth") || metric.includes("Delta");
+  return isRollingMetric(metric);
 }
 
 function formatRawMetricValue(metric: MetricId, value: number) {
@@ -727,7 +757,7 @@ function FeedsPage() {
       <div className="row">
         <h1>Feeds</h1>
         <span className="spacer" />
-        <button className="icon-button" type="button" onClick={() => setEditorFeed(createFeed("New Feed"))} aria-label="Create feed">
+        <button className="icon-button" type="button" onClick={() => setEditorFeed(applyDefaultRolling(createFeed("New Feed"), store.settings))} aria-label="Create feed">
           <Plus size={18} />
         </button>
       </div>
@@ -945,7 +975,7 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
           ))}
         </div>
         {anilistLocked && (
-          <p className="muted tiny">AniList-only is locked because this feed uses AniList stats in sorting, ranges, or cover stats.</p>
+          <p className="muted tiny">AniList-only is locked because this feed uses AniList stats in sorting or range filters.</p>
         )}
       </div>
 
@@ -1001,13 +1031,17 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
       />
 
       <h2 className="section-title">Rolling Dates</h2>
+      <p className="muted tiny">
+        Rel uses only real release dates. Add sorts by MangaBaka latest-added rank. Use Added/listed date here only when you want a rolling cutoff such as titles listed in the last month.
+      </p>
       <div className="field-grid">
         <div className="field">
           <label>Date field</label>
           <div className="segmented">
             {[
               ["none", "None"],
-              ["release", "Release"],
+              ["release", "Rel"],
+              ["added", "Added"],
               ["end", "End"],
             ].map(([value, label]) => (
               <button
@@ -1102,7 +1136,9 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
                     onClick={() =>
                       setDraft((current) => ({
                         ...current,
-                        sort: current.sort.map((item) => (item.id === rule.id ? { ...item, metric: option } : item)),
+                        sort: current.sort.map((item) =>
+                          item.id === rule.id ? { ...item, metric: option, direction: defaultDirectionForMetric(option) } : item,
+                        ),
                       }))
                     }
                     title={metricDefinition(option).help}
@@ -1124,7 +1160,7 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
                       }))
                     }
                   >
-                    {direction === "desc" ? "High first" : "Low first"}
+                    {directionLabel(rule.metric, direction)}
                   </button>
                 ))}
               </div>
@@ -1195,6 +1231,7 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
               ...draft,
               filters: {
                 ...DEFAULT_FILTERS,
+                rolling: { ...store.settings.defaultRollingWindow },
                 sourceModes: [...(DEFAULT_FILTERS.sourceModes ?? [])],
                 contentRatings: [...DEFAULT_FILTERS.contentRatings],
                 metricRanges: [],
@@ -1273,7 +1310,7 @@ function MetricRangeEditor({ ranges, onChange }: { ranges: MetricRange[]; onChan
 }
 
 function MetricSlotPicker({ slots, onChange }: { slots: MetricId[]; onChange: (slots: MetricId[]) => void }) {
-  const current = slots.length ? slots.slice(0, 3) : ["fanFavouriteRaw", "popularity", "favourites"] as MetricId[];
+  const current = slots.length ? slots.slice(0, 3) : (["fanFavouriteDiscoveryPercentile"] as MetricId[]);
   const toggle = (metric: MetricId) => {
     if (current.includes(metric)) {
       onChange(current.filter((item) => item !== metric));
@@ -1399,15 +1436,18 @@ function SearchPage() {
       query.trim()
         ? store.catalog
             .filter((item) => {
-              if (!item.display_title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) return false;
+              const title = localDisplayTitle(item, store.settings, store.titleOverrides);
+              if (!title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) return false;
               if (!["safe", "suggestive"].includes(String(item.content_rating ?? ""))) return false;
               if (!store.settings.searchRelationshipTags && item.tag_ids.some((id) => sensitiveTagGroups.relationship.has(id))) return false;
               if (!store.settings.searchAdultTags && item.tag_ids.some((id) => sensitiveTagGroups.adult.has(id))) return false;
               return true;
             })
-            .sort((a, b) => a.display_title.localeCompare(b.display_title))
+            .sort((a, b) =>
+              localDisplayTitle(a, store.settings, store.titleOverrides).localeCompare(localDisplayTitle(b, store.settings, store.titleOverrides)),
+            )
         : [],
-    [query, sensitiveTagGroups, store.catalog, store.settings.searchAdultTags, store.settings.searchRelationshipTags],
+    [query, sensitiveTagGroups, store.catalog, store.settings, store.titleOverrides],
   );
   useEffect(() => {
     sessionStorage.setItem("manhwa-search-query", query);
@@ -1477,7 +1517,7 @@ function RecommendationsPage() {
   const [selectedId, setSelectedId] = useState<number | null>(Number(params.id) || null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingShelf, setEditingShelf] = useState<RecommendationShelf | null>(null);
-  const defaultRecommendationTitle = store.catalog.find((item) => item.display_title.toLocaleLowerCase() === "bastard");
+  const defaultRecommendationTitle = store.catalog.find((item) => localDisplayTitle(item, store.settings, store.titleOverrides).toLocaleLowerCase() === "bastard");
   const selected =
     store.catalog.find((item) => item.id === selectedId) ??
     store.catalog.find((item) => item.id === Number(params.id)) ??
@@ -1485,7 +1525,7 @@ function RecommendationsPage() {
     store.catalog[0];
   const candidates = search.trim()
     ? store.catalog
-        .filter((item) => item.display_title.toLowerCase().includes(search.trim().toLowerCase()))
+        .filter((item) => localDisplayTitle(item, store.settings, store.titleOverrides).toLowerCase().includes(search.trim().toLowerCase()))
         .slice(0, 12)
     : [];
   const saveShelf = (shelf: RecommendationShelf) => {
@@ -1519,7 +1559,7 @@ function RecommendationsPage() {
       </div>
       <div className="field">
         <label htmlFor="base-title">Base title</label>
-        <input id="base-title" className="input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={selected?.display_title ?? "Search title"} />
+        <input id="base-title" className="input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={selected ? localDisplayTitle(selected, store.settings, store.titleOverrides) : "Search title"} />
       </div>
       {candidates.length > 0 && (
         <section>
@@ -1533,7 +1573,7 @@ function RecommendationsPage() {
               onClick={() => { setSelectedId(series.id); setSearch(""); }}
             >
               <Cover series={series} />
-              <strong className="title-name">{series.display_title}</strong>
+              <strong className="title-name">{localDisplayTitle(series, store.settings, store.titleOverrides)}</strong>
               <span className="muted tiny">Fan% {formatMetricValue(series, "fanFavouriteRaw", store.history, store.syncMeta?.historyLastDate)}</span>
             </button>
           ))}
@@ -1545,7 +1585,7 @@ function RecommendationsPage() {
           <Cover series={selected} priority />
           <div>
             <span className="muted tiny">Selected</span>
-            <h2>{selected.display_title}</h2>
+            <h2>{localDisplayTitle(selected, store.settings, store.titleOverrides)}</h2>
             <p className="muted tiny">Recommendations prioritize shared tags, then shelf-specific sorting.</p>
           </div>
         </section>
@@ -1814,6 +1854,12 @@ function SettingsPage() {
           <label>Accent color</label>
           <input className="input" type="color" value={store.settings.accentColor} onChange={(event) => store.updateSettings({ accentColor: event.target.value })} />
         </div>
+        <ToggleRow
+          label="Local title overrides"
+          description="Enable custom per-title names on this device from each title's detail settings."
+          value={store.settings.enableTitleOverrides}
+          onChange={(enableTitleOverrides) => store.updateSettings({ enableTitleOverrides })}
+        />
       </SettingsSection>
 
       <SettingsSection title="Data & Sync">
@@ -1849,6 +1895,44 @@ function SettingsPage() {
           value={store.settings.searchAdultTags}
           onChange={(searchAdultTags) => store.updateSettings({ searchAdultTags })}
         />
+      </SettingsSection>
+
+      <SettingsSection title="Feed Defaults">
+        <div className="field">
+          <label>Default rolling mode</label>
+          <div className="segmented compact-segments">
+            {(["none", "last", "fixed"] as const).map((mode) => (
+              <button
+                className={`segment ${store.settings.defaultRollingWindow.mode === mode ? "active" : ""}`}
+                type="button"
+                key={mode}
+                onClick={() => store.updateSettings({ defaultRollingWindow: { ...store.settings.defaultRollingWindow, mode } })}
+              >
+                {mode === "last" ? "Last X" : mode}
+              </button>
+            ))}
+          </div>
+        </div>
+        <NumberField
+          label="Default rolling amount"
+          value={store.settings.defaultRollingWindow.amount}
+          onChange={(amount) => store.updateSettings({ defaultRollingWindow: { ...store.settings.defaultRollingWindow, amount: amount ?? 1 } })}
+        />
+        <div className="field">
+          <label>Default rolling unit</label>
+          <div className="segmented compact-segments">
+            {(["days", "weeks", "months", "years"] as const).map((unit) => (
+              <button
+                className={`segment ${store.settings.defaultRollingWindow.unit === unit ? "active" : ""}`}
+                type="button"
+                key={unit}
+                onClick={() => store.updateSettings({ defaultRollingWindow: { ...store.settings.defaultRollingWindow, unit } })}
+              >
+                {unit}
+              </button>
+            ))}
+          </div>
+        </div>
       </SettingsSection>
 
       <SettingsSection title="Sharing & Backup">
@@ -1973,6 +2057,7 @@ function TitleDetailPage() {
           : catalogItem,
     [catalogItem, detail],
   );
+  const displayTitle = series ? localDisplayTitle(series, store.settings, store.titleOverrides) : undefined;
   if (!series) {
     return (
       <div className="page">
@@ -2002,7 +2087,7 @@ function TitleDetailPage() {
       <section className="detail-identity">
         {visible.cover && (series.cover ? <img className="detail-cover" src={series.cover} alt="" /> : <div className="detail-cover cover-fallback">No cover</div>)}
         <div className="detail-copy">
-          {visible.title && <h1 className="detail-title">{series.display_title}</h1>}
+          {visible.title && <h1 className="detail-title">{displayTitle}</h1>}
           {visible.authorsArtists && (
             <p className="detail-creators">{uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable"}</p>
           )}
@@ -2062,7 +2147,13 @@ function TitleDetailPage() {
         })}
       </section>
       <BottomDrawer title="Detail Settings" open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DetailSettingsDrawer visible={visible} onChange={setVisible} />
+        <DetailSettingsDrawer
+          visible={visible}
+          onChange={setVisible}
+          titleOverrideEnabled={store.settings.enableTitleOverrides}
+          titleOverride={store.titleOverrides[String(series.id)] ?? ""}
+          onTitleOverrideChange={(title) => store.setTitleOverride(series.id, title)}
+        />
       </BottomDrawer>
     </div>
   );
@@ -2075,6 +2166,7 @@ function uniqueNames(...groups: (string[] | undefined)[]) {
 function RichDescription({ text }: { text: string }) {
   const paragraphs = text
     .replace(/\r\n/g, "\n")
+    .replace(/\[([^\]]+)\]\s*\n+\s*\((https?:\/\/[^)]+)\)/g, "[$1]($2)")
     .split(/\n{2,}/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
@@ -2184,9 +2276,15 @@ function DetailLinks({ series }: { series: SeriesCatalog }) {
 function DetailSettingsDrawer({
   visible,
   onChange,
+  titleOverrideEnabled,
+  titleOverride,
+  onTitleOverrideChange,
 }: {
   visible: AppSettings["detailVisible"];
   onChange: React.Dispatch<React.SetStateAction<AppSettings["detailVisible"]>>;
+  titleOverrideEnabled: boolean;
+  titleOverride: string;
+  onTitleOverrideChange: (title: string) => void;
 }) {
   const fields: [keyof AppSettings["detailVisible"], string, string][] = [
     ["cover", "Cover", "Show the title artwork."],
@@ -2208,6 +2306,18 @@ function DetailSettingsDrawer({
   ];
   return (
     <div className="settings-list detail-toggle-list">
+      {titleOverrideEnabled && (
+        <div className="field">
+          <label htmlFor="local-title-override">Local title name</label>
+          <input
+            id="local-title-override"
+            className="input"
+            value={titleOverride}
+            onChange={(event) => onTitleOverrideChange(event.target.value)}
+            placeholder="Use a custom title on this device"
+          />
+        </div>
+      )}
       {fields.map(([key, label, description]) => (
         <ToggleRow
           key={key}
@@ -2391,6 +2501,7 @@ function SharePanel({ payload }: { payload: SharePayload }) {
 function makeSnapshot(store: ReturnType<typeof useAppStore>) {
   return {
     feeds: store.feeds,
+    titleOverrides: store.titleOverrides,
     settings: store.settings,
     activeFeedId: store.activeFeedId,
     lastRoute: window.location.hash,

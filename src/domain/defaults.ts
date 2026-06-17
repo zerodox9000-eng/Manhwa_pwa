@@ -96,8 +96,8 @@ export const DEFAULT_FILTERS: FeedFilters = {
   includeEstimatedDates: true,
   dateField: "none",
   rolling: {
-    mode: "none",
-    amount: 7,
+    mode: "last",
+    amount: 1,
     unit: "days",
   },
   labelIds: [],
@@ -143,6 +143,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   bottomNavItems: ["home", "feeds", "search", "recommendations", "settings"],
   controlPlacement: "toolbar",
   restoreLastSession: true,
+  enableTitleOverrides: false,
+  defaultRollingWindow: {
+    mode: "last",
+    amount: 1,
+    unit: "days",
+  },
   nonAniListPlacement: "bottom",
   sharingDefault: "feed",
   sfwShareDefault: true,

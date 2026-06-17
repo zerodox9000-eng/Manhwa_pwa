@@ -182,7 +182,7 @@ export interface FeedFilters {
   maxMeanScore: number | null;
   metricRanges: MetricRange[];
   includeEstimatedDates: boolean;
-  dateField: "none" | "release" | "end";
+  dateField: "none" | "release" | "end" | "added";
   rolling: RollingWindow;
   labelIds: string[];
 }
@@ -303,6 +303,8 @@ export interface AppSettings {
   bottomNavItems: string[];
   controlPlacement: ControlPlacement;
   restoreLastSession: boolean;
+  enableTitleOverrides: boolean;
+  defaultRollingWindow: RollingWindow;
   nonAniListPlacement: NonAniListPlacement;
   sharingDefault: "feed" | "folder" | "settings" | "full";
   sfwShareDefault: boolean;
@@ -326,6 +328,7 @@ export interface AppStateSnapshot {
   feeds: Feed[];
   folders?: Folder[];
   labels?: UserLabel[];
+  titleOverrides?: Record<string, string>;
   settings: AppSettings;
   activeFeedId: string | null;
   lastRoute: string;
