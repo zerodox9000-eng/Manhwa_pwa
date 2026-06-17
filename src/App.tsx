@@ -1,5 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Switch from "@radix-ui/react-switch";
+import { toPng } from "html-to-image";
 import {
   ArrowLeft,
   Check,
@@ -43,8 +44,7 @@ import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, run
 import { formatMetricValue, historyDeltaForWindow, isRollingMetric, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveDisplayTitle } from "./domain/catalog";
-import { decodeSharePayload, exportCsv, findEquivalentFeed, findFeedNameConflict, makeShareUrl, type SharePayload } from "./domain/share";
-import { APP_MOTION, motionDuration } from "./domain/motion";
+import { decodeSharePayload, exportCsv, findEquivalentFeed, makeShareUrl, type SharePayload } from "./domain/share";
 import type {
   AppSettings,
   ContentRating,
@@ -262,14 +262,11 @@ function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
   const pagerRef = useRef<HTMLDivElement | null>(null);
-  const pointerRef = useRef<{ id: number; x: number; y: number; lastX: number; lastT: number; velocityX: number; mode: "pending" | "horizontal" | "vertical" } | null>(null);
   const scrollPositions = useRef<Record<string, number>>(readFeedScrollPositions());
   const feedPanelRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const persistScrollRaf = useRef<number | null>(null);
-  const offsetRef = useRef(0);
-  const rafRef = useRef<number | null>(null);
-  const [pagerOffset, setPagerOffset] = useState(0);
-  const [pagerAnimating, setPagerAnimating] = useState(false);
+  const pagerScrollTimer = useRef<number | null>(null);
+  const isResettingPager = useRef(false);
   const activeFeed = store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null;
   const activeIndex = activeFeed ? store.feeds.findIndex((item) => item.id === activeFeed.id) : -1;
   const previousFeed = activeIndex > 0 ? store.feeds[activeIndex - 1] : null;
@@ -278,15 +275,6 @@ function HomePage() {
   useEffect(() => {
     if (!store.activeFeedId && store.feeds[0]) store.setActiveFeedId(store.feeds[0].id);
   }, [store]);
-
-  const setPagerOffsetRaf = useCallback((value: number) => {
-    offsetRef.current = value;
-    if (rafRef.current != null) return;
-    rafRef.current = window.requestAnimationFrame(() => {
-      rafRef.current = null;
-      setPagerOffset(offsetRef.current);
-    });
-  }, []);
 
   const persistFeedScroll = useCallback(() => {
     try {
@@ -328,7 +316,17 @@ function HomePage() {
   }, [restoreFeedScroll, saveCurrentScroll, store]);
 
   useEffect(() => {
-    if (activeFeed) restoreFeedScroll(activeFeed.id);
+    if (!activeFeed) return;
+    restoreFeedScroll(activeFeed.id);
+    const pager = pagerRef.current;
+    if (!pager) return;
+    isResettingPager.current = true;
+    requestAnimationFrame(() => {
+      pager.scrollTo({ left: pager.clientWidth, top: 0, behavior: "auto" });
+      requestAnimationFrame(() => {
+        isResettingPager.current = false;
+      });
+    });
   }, [activeFeed, restoreFeedScroll]);
 
   useEffect(
@@ -336,27 +334,32 @@ function HomePage() {
       saveCurrentScroll();
       persistFeedScroll();
       if (persistScrollRaf.current != null) window.cancelAnimationFrame(persistScrollRaf.current);
-      if (rafRef.current != null) window.cancelAnimationFrame(rafRef.current);
+      if (pagerScrollTimer.current != null) window.clearTimeout(pagerScrollTimer.current);
     },
     [persistFeedScroll, saveCurrentScroll],
   );
 
-  const settlePager = () => {
-    setPagerAnimating(true);
-    setPagerOffsetRaf(0);
-    window.setTimeout(() => setPagerAnimating(false), motionDuration(APP_MOTION.snapBackMs) + APP_MOTION.settleMs);
-  };
+  const settleNativePager = useCallback(() => {
+    const pager = pagerRef.current;
+    if (!pager || isResettingPager.current || activeIndex < 0) return;
+    const width = Math.max(1, pager.clientWidth);
+    const left = pager.scrollLeft;
+    if (left < width * 0.58 && previousFeed) {
+      switchToFeed(previousFeed.id, true);
+      return;
+    }
+    if (left > width * 1.42 && nextFeed) {
+      switchToFeed(nextFeed.id, true);
+      return;
+    }
+    pager.scrollTo({ left: width, behavior: "smooth" });
+  }, [activeIndex, nextFeed, previousFeed, switchToFeed]);
 
-  const finishPager = (targetIndex: number, finalOffset: number) => {
-    setPagerAnimating(true);
-    setPagerOffsetRaf(finalOffset);
-    window.setTimeout(() => {
-      const target = store.feeds[targetIndex];
-      switchToFeed(target.id, true);
-      setPagerAnimating(false);
-      setPagerOffsetRaf(0);
-    }, motionDuration(APP_MOTION.pagerCommitMs));
-  };
+  const handlePagerScroll = useCallback(() => {
+    if (isResettingPager.current) return;
+    if (pagerScrollTimer.current != null) window.clearTimeout(pagerScrollTimer.current);
+    pagerScrollTimer.current = window.setTimeout(settleNativePager, 90);
+  }, [settleNativePager]);
 
   const renderPagerPanel = (feed: Feed | null, inactive = false) => (
     <div
@@ -390,57 +393,8 @@ function HomePage() {
       ) : (
         <div
           ref={pagerRef}
-          className={`feed-pager ${pagerAnimating ? "animating" : ""}`}
-          style={{ "--pager-offset": `${pagerOffset}px` } as React.CSSProperties}
-          onPointerDown={(event) => {
-            if (!event.isPrimary || event.pointerType === "mouse") return;
-            pointerRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, lastX: event.clientX, lastT: performance.now(), velocityX: 0, mode: "pending" };
-          }}
-          onPointerMove={(event) => {
-            const start = pointerRef.current;
-            if (!start || start.id !== event.pointerId || !event.isPrimary) return;
-            const dx = event.clientX - start.x;
-            const dy = event.clientY - start.y;
-            const now = performance.now();
-            const dt = Math.max(1, now - start.lastT);
-            start.velocityX = (event.clientX - start.lastX) / dt;
-            start.lastX = event.clientX;
-            start.lastT = now;
-            if (start.mode === "pending") {
-              if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-              start.mode = Math.abs(dx) > Math.abs(dy) * 1.2 ? "horizontal" : "vertical";
-              if (start.mode === "horizontal") event.currentTarget.setPointerCapture(event.pointerId);
-            }
-            if (start.mode !== "horizontal") return;
-            event.preventDefault();
-            const canMove = dx < 0 ? Boolean(nextFeed) : Boolean(previousFeed);
-            const resisted = canMove ? dx : dx * 0.28;
-            const width = pagerRef.current?.clientWidth || window.innerWidth || 360;
-            setPagerAnimating(false);
-            setPagerOffsetRaf(Math.max(-width, Math.min(width, resisted)));
-          }}
-          onPointerUp={(event) => {
-            const start = pointerRef.current;
-            pointerRef.current = null;
-            if (!start || start.id !== event.pointerId) return;
-            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-            const dx = event.clientX - start.x;
-            const dy = event.clientY - start.y;
-            const width = pagerRef.current?.clientWidth || window.innerWidth || 360;
-            const distanceCommit = Math.abs(dx) > Math.min(72, width * 0.14);
-            const velocityCommit = Math.abs(start.velocityX) > 0.45;
-            if (start.mode !== "horizontal" || !(distanceCommit || velocityCommit) || Math.abs(dx) < Math.abs(dy) * 1.2) {
-              settlePager();
-              return;
-            }
-            const targetIndex = dx < 0 ? activeIndex + 1 : activeIndex - 1;
-            if (targetIndex < 0 || targetIndex >= store.feeds.length) {
-              settlePager();
-              return;
-            }
-            finishPager(targetIndex, dx < 0 ? -width : width);
-          }}
-          onPointerCancel={settlePager}
+          className="feed-pager"
+          onScroll={handlePagerScroll}
         >
           <div className="feed-pager-track">
             {renderPagerPanel(previousFeed, true)}
@@ -683,8 +637,8 @@ function TitleCollection({
     if (columns === 1) return 660;
     if (columns === 2) return 360;
     if (columns === 3) return 270;
-    if (columns === 4) return 225;
-    return 184;
+    if (columns === 4) return 172;
+    return 142;
   }, [columns]);
   useEffect(() => {
     setScrollElement(collectionRef.current?.closest<HTMLElement>(".feed-pager-panel") ?? null);
@@ -723,7 +677,7 @@ function TitleCollection({
             className={`virtual-title-row title-grid columns-${columns} density-${feed.view.gridDensity}`}
             data-index={virtualRow.index}
             key={virtualRow.key}
-            ref={virtualizer.measureElement}
+            ref={columns <= 3 ? virtualizer.measureElement : undefined}
             style={{ transform: `translateY(${virtualRow.start}px)`, "--grid-columns": columns } as React.CSSProperties}
           >
             {rowItems.map((series, index) => (
@@ -744,8 +698,25 @@ function TitleCollection({
   );
 }
 
-function Cover({ series, priority = false, titleOverride }: { series: SeriesCatalog; priority?: boolean; titleOverride?: string }) {
+function coverUrlForGrid(url: string, columns?: FeedViewSettings["gridColumns"]) {
+  if (!columns) return url;
+  const size = columns >= 5 ? 150 : columns === 4 ? 190 : columns === 3 ? 250 : 350;
+  return url.replace(/\/x\d+@1\//, `/x${size}@1/`);
+}
+
+function Cover({
+  series,
+  priority = true,
+  titleOverride,
+  columns,
+}: {
+  series: SeriesCatalog;
+  priority?: boolean;
+  titleOverride?: string;
+  columns?: FeedViewSettings["gridColumns"];
+}) {
   const displayTitle = titleOverride || series.display_title;
+  const coverSrc = series.cover ? coverUrlForGrid(series.cover, columns) : null;
   const initials = displayTitle
     .split(/\s+/)
     .filter(Boolean)
@@ -755,8 +726,8 @@ function Cover({ series, priority = false, titleOverride }: { series: SeriesCata
     .toUpperCase();
   return (
     <div className="cover-wrap">
-      {series.cover ? (
-        <img src={series.cover} alt="" loading={priority ? "eager" : "lazy"} decoding="async" fetchPriority={priority ? "high" : "auto"} />
+      {coverSrc ? (
+        <img src={coverSrc} alt="" loading={priority ? "eager" : "lazy"} decoding="async" fetchPriority={priority ? "high" : "auto"} />
       ) : (
         <div className="cover-fallback cover-fallback-initials">{initials || "ML"}</div>
       )}
@@ -822,7 +793,7 @@ function TitleCard({
         onMouseEnter={preload}
       >
         <div className="poster-shell">
-          <Cover series={series} priority={rank <= 18} titleOverride={displayTitle} />
+          <Cover series={series} priority titleOverride={displayTitle} columns={view.gridColumns} />
           {view.visible.rank && <span className="rank">{rank}</span>}
           <div className="poster-metrics">
             <TitleMetrics series={series} view={view} compact history={history} latestDate={latestDate} metricWindow={metricWindow} />
@@ -2350,23 +2321,18 @@ function TitleDetailPage() {
         {visible.cover && (series.cover ? <img className="detail-cover" src={series.cover} alt="" /> : <div className="detail-cover cover-fallback">No cover</div>)}
         <div className="detail-copy">
           {visible.title && <h1 className="detail-title">{displayTitle}</h1>}
-          {visible.authorsArtists && (
-            <p className="detail-creators">{uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable"}</p>
-          )}
           <p className="detail-facts">
             {[visible.year && series.year ? String(series.year) : "", visible.status ? series.status ?? "" : "", visible.chapters && series.total_chapters ? `${series.total_chapters} chapters` : ""]
               .filter(Boolean)
               .join(" / ")}
           </p>
+          {visible.authorsArtists && (
+            <p className="detail-creators">{uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable"}</p>
+          )}
         </div>
       </section>
       <DetailStats series={series} visible={visible} history={store.history} latestDate={store.syncMeta?.historyLastDate} />
       {visible.genreTags && <section className="detail-block"><GenreChips series={series} tagsById={tagsById} /></section>}
-      {visible.links && (
-        <section className="detail-block detail-links">
-          <DetailLinks series={series} />
-        </section>
-      )}
       {visible.description && (
         <section className="detail-block">
           <h2 className="section-title">Description</h2>
@@ -2387,6 +2353,12 @@ function TitleDetailPage() {
               <SkeletonBlock className="skeleton-line short" />
             </div>
           )}
+        </section>
+      )}
+      {visible.links && (
+        <section className="detail-block detail-links">
+          <h2 className="section-title">Links</h2>
+          <DetailLinks series={series} />
         </section>
       )}
       {visible.allTags && (
@@ -2445,9 +2417,8 @@ function uniqueNames(...groups: (string[] | undefined)[]) {
 }
 
 function RichDescription({ text }: { text: string }) {
-  const paragraphs = text
+  const paragraphs = normalizeDescriptionMarkdown(text)
     .replace(/\r\n/g, "\n")
-    .replace(/\[([^\]]+)\]\s*\n+\s*\((https?:\/\/[^)]+)\)/g, "[$1]($2)")
     .split(/\n{2,}/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
@@ -2496,9 +2467,20 @@ function DetailStats({
   );
 }
 
+function normalizeDescriptionMarkdown(text: string) {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\[([^\]]+)\]\s*\n+\s*\((https?:\/\/[^)]+)\)/g, "[$1]($2)")
+    .replace(/([.!?])\s+(\*\*(?:Original Webtoon|Official|Note|Source)[^*]*:\*\*)/gi, "$1\n\n$2")
+    .replace(/\s+(\*\*Original Webtoon:\*\*)/gi, "\n\n$1")
+    .replace(/\s+(\*\*Official (?:English|Translation|Raw):\*\*)/gi, "\n\n$1")
+    .replace(/\s+(\*Note:[^*]+\*)/gi, "\n\n$1")
+    .replace(/\s+\((Source:[^)]+)\)/gi, "\n\n($1)");
+}
+
 function renderInlineMarkdown(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
-  const pattern = /(\[[^\]]+\]\s*\(\s*https?:\/\/[^)\s]+\s*\)|\*\*[^*]+\*\*|\*[^*\n]+\*|https?:\/\/[^\s)]+)/g;
+  const pattern = /(\[[^\]]+\]\s*\(\s*https?:\/\/[^)\s]+\s*\)|\*\*[^*]+\*\*|\*[^*\n]+\*|https?:\/\/[^\s),]+)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -2566,12 +2548,14 @@ function plainDescription(text?: string | null) {
 
 function DetailSharePanel({ series, description, tagsById }: { series: SeriesCatalog; description?: string | null; tagsById: Map<number, TagNode> }) {
   const store = useAppStore();
+  const previewRef = useRef<HTMLDivElement | null>(null);
   const [includeCover, setIncludeCover] = useState(true);
   const [includeMeta, setIncludeMeta] = useState(true);
   const [includeStats, setIncludeStats] = useState(true);
   const [includeGenres, setIncludeGenres] = useState(true);
   const [includeDescription, setIncludeDescription] = useState(true);
   const [recommendationCount, setRecommendationCount] = useState<0 | 3 | 5 | 10>(3);
+  const [imageStatus, setImageStatus] = useState<string>("");
   const displayTitle = localDisplayTitle(series, store.settings, store.titleOverrides);
   const shortDescription = plainDescription(description).slice(0, 260);
   const sharePayload: SharePayload = {
@@ -2596,11 +2580,55 @@ function DetailSharePanel({ series, description, tagsById }: { series: SeriesCat
     ["Pop", formatMetricValue(series, "popularity", store.history, store.syncMeta?.historyLastDate)],
     ["Fav", formatMetricValue(series, "favourites", store.history, store.syncMeta?.historyLastDate)],
   ].filter(([, value]) => value !== "n/a");
+  const imageName = `${displayTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64) || "manhwa-lib"}-share.png`;
+
+  const renderShareImage = async () => {
+    if (!previewRef.current) return null;
+    setImageStatus("Rendering image...");
+    const dataUrl = await toPng(previewRef.current, {
+      cacheBust: true,
+      pixelRatio: Math.min(3, window.devicePixelRatio || 2),
+      backgroundColor: "#07080c",
+      fetchRequestInit: { cache: "force-cache" },
+    });
+    const blob = await (await fetch(dataUrl)).blob();
+    return { dataUrl, blob };
+  };
+
+  const downloadShareImage = async () => {
+    try {
+      const image = await renderShareImage();
+      if (!image) return;
+      const link = document.createElement("a");
+      link.href = image.dataUrl;
+      link.download = imageName;
+      link.click();
+      setImageStatus("Image downloaded.");
+    } catch (error) {
+      setImageStatus(error instanceof Error ? `Image export failed: ${error.message}` : "Image export failed.");
+    }
+  };
+
+  const shareImage = async () => {
+    try {
+      const image = await renderShareImage();
+      if (!image) return;
+      const file = new File([image.blob], imageName, { type: "image/png" });
+      if (navigator.canShare?.({ files: [file] }) && navigator.share) {
+        await navigator.share({ title: displayTitle, text: shortDescription || displayTitle, files: [file] });
+        setImageStatus("Image shared.");
+        return;
+      }
+      await downloadShareImage();
+    } catch (error) {
+      setImageStatus(error instanceof Error ? `Image share failed: ${error.message}` : "Image share failed.");
+    }
+  };
 
   return (
     <div className="detail-share-panel">
-      <div className="detail-share-preview">
-        {includeCover && series.cover && <img src={series.cover} alt="" />}
+      <div className="detail-share-preview" ref={previewRef}>
+        {includeCover && series.cover && <img src={series.cover} alt="" crossOrigin="anonymous" />}
         <div className="detail-share-copy">
           <h2>{displayTitle}</h2>
           {includeMeta && (
@@ -2661,6 +2689,15 @@ function DetailSharePanel({ series, description, tagsById }: { series: SeriesCat
           </div>
         </div>
       </div>
+      <div className="toolbar">
+        <button className="button primary" type="button" onClick={() => void downloadShareImage()}>
+          <Download size={16} /> Download image
+        </button>
+        <button className="button" type="button" onClick={() => void shareImage()}>
+          <Share2 size={16} /> Share image
+        </button>
+      </div>
+      {imageStatus && <p className="muted tiny">{imageStatus}</p>}
       <SharePanel payload={sharePayload} />
     </div>
   );
@@ -2748,7 +2785,7 @@ function LearnPage() {
         </LearnItem>
         <LearnItem title="Offline And Sharing">
           Catalog, tags, history, feeds, settings, and opened details are cached locally. Share links contain compressed
-          config data and open an import preview before changing anything.
+          config data and open the shared feed or title directly.
         </LearnItem>
         <LearnItem title="Other Sources">
           Non-AniList titles prefer <a href="https://www.mangaupdates.com" target="_blank" rel="noreferrer">MangaUpdates</a>, then{" "}
@@ -2779,6 +2816,7 @@ function ImportPage() {
   const store = useAppStore();
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const appliedRef = useRef(false);
   const payload = useMemo(() => {
     const encoded = params.get("p");
     if (!encoded) return null;
@@ -2809,7 +2847,7 @@ function ImportPage() {
     };
   }, [payload]);
 
-  const apply = (mode: "merge" | "replace") => {
+  const apply = useCallback((mode: "merge" | "replace") => {
     if (!payload) return;
     if (payload.kind === "title") {
       navigate(`/title/${payload.titleId}`, { replace: true });
@@ -2833,12 +2871,17 @@ function ImportPage() {
     if (payload.kind === "labels") store.importSnapshot({ labels: payload.labels }, mode);
     if (payload.kind === "full") store.importSnapshot(payload.snapshot, mode);
     navigate("/", { replace: true });
-  };
-  const feedConflict = payload?.kind === "feed" ? findFeedNameConflict(store.feeds, payload.feed) : null;
+  }, [navigate, payload, store]);
+
+  useEffect(() => {
+    if (!payload || appliedRef.current) return;
+    appliedRef.current = true;
+    apply("merge");
+  }, [apply, payload]);
 
   return (
     <div className="page">
-      <h1>Import Preview</h1>
+      <h1>Opening Share</h1>
       {!payload ? (
         <div className="empty-state">This share link could not be decoded.</div>
       ) : (
@@ -2851,28 +2894,10 @@ function ImportPage() {
               : payload.kind === "title"
                 ? payload.description || payload.title || "Open this title in Manhwa Lib."
               : payload.kind === "feed"
-                ? "Review this feed before adding it to your library."
-                : "Review before applying this shared configuration."}
+                ? "Opening this feed."
+                : "Applying this shared configuration."}
           </span>
-          {payload.kind === "feed" && findEquivalentFeed(store.feeds, payload.feed) && (
-            <span className="muted tiny">You already have this exact feed. Add will open the existing copy.</span>
-          )}
-          {feedConflict && (
-            <span className="muted tiny">A feed named {feedConflict.name} already exists, but this shared feed has different settings.</span>
-          )}
-          <div className="toolbar">
-            <button className="button primary" type="button" onClick={() => apply("merge")}>
-              {payload.kind === "title" ? "Open" : "Add"}
-            </button>
-            {(payload.kind === "settings" || payload.kind === "full") && (
-              <button className="button" type="button" onClick={() => apply("replace")}>
-                Replace settings/full backup
-              </button>
-            )}
-            <button className="button" type="button" onClick={() => navigate("/")}>
-              Do not add
-            </button>
-          </div>
+          <SkeletonBlock className="skeleton-line" />
         </div>
       )}
     </div>

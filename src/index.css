@@ -1995,6 +1995,58 @@ textarea,
   background: rgba(16, 17, 22, 0.94);
 }
 
+/* Dense-grid performance pass. */
+.title-grid.columns-4,
+.title-grid.columns-5 {
+  align-items: start;
+}
+
+.title-grid.columns-4 .title-card-wrap,
+.title-grid.columns-5 .title-card-wrap {
+  content-visibility: visible;
+  contain: layout paint style;
+}
+
+.title-grid.columns-4 .title-meta,
+.title-grid.columns-5 .title-meta {
+  padding-top: 5px;
+}
+
+.title-grid.columns-4 .title-name,
+.title-grid.columns-5 .title-name {
+  min-height: 0;
+  -webkit-line-clamp: 2;
+  line-height: 1.14;
+}
+
+.title-grid.columns-4 .title-name {
+  font-size: 10.5px;
+}
+
+.title-grid.columns-5 .title-name {
+  font-size: 8.8px;
+}
+
+.title-grid.columns-4 .poster-shell,
+.title-grid.columns-5 .poster-shell,
+.title-grid.columns-4 .cover-wrap,
+.title-grid.columns-5 .cover-wrap {
+  transform: translateZ(0);
+}
+
+.title-grid.columns-4 .compact-metrics span,
+.title-grid.columns-5 .compact-metrics span {
+  max-width: calc(100% - 2px);
+  justify-content: center;
+  text-align: center;
+  backdrop-filter: blur(8px);
+}
+
+.title-grid.columns-4 .compact-metrics b,
+.title-grid.columns-5 .compact-metrics b {
+  display: inline;
+}
+
 .nav-item {
   flex: 1 1 0;
   min-height: 43px;
@@ -3114,4 +3166,35 @@ textarea,
 .segmented.mini {
   grid-template-columns: repeat(4, minmax(38px, 1fr));
   min-width: 170px;
+}
+
+/* Final native feed pager override: browser scroll-snap owns horizontal paging. */
+.feed-pager {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.feed-pager::-webkit-scrollbar {
+  display: none;
+}
+
+.feed-pager-track,
+.feed-pager.animating .feed-pager-track,
+.feed-pager.settling .feed-pager-track {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 300%;
+  height: 100%;
+  transform: none !important;
+  transition: none !important;
+}
+
+.feed-pager-panel {
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
 }
