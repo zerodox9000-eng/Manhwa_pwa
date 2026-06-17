@@ -11,6 +11,44 @@ type ReturnScrollTarget = {
 let restoreProtectionUntil = 0;
 let storageGuardInstalled = false;
 
+function installFeedSpacingOverride() {
+  if (document.getElementById("feed-spacing-regression-fix")) return;
+
+  const style = document.createElement("style");
+  style.id = "feed-spacing-regression-fix";
+  style.textContent = `
+    .home-page > .feed-tabs {
+      margin-bottom: 0 !important;
+    }
+
+    .feed-pager-panel {
+      padding-top: 0 !important;
+    }
+
+    .feed-pager-panel > .section:first-child {
+      margin-top: 6px !important;
+      margin-bottom: 10px !important;
+    }
+
+    .feed-pager-panel > .section:first-child .feed-action-row {
+      margin-bottom: 0 !important;
+    }
+
+    .feed-pager-panel .feed-view-header {
+      margin-top: 0 !important;
+    }
+
+    .feed-pager-panel .single-line-title {
+      margin-top: 0 !important;
+    }
+
+    .feed-pager-panel .virtual-title-grid {
+      margin-top: 4px !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 function readFeedScrollPositions() {
   try {
     const parsed = JSON.parse(sessionStorage.getItem(FEED_SCROLL_SESSION_KEY) ?? "{}") as Record<string, unknown>;
@@ -197,6 +235,7 @@ function saveBeforeTitleNavigation(event: Event) {
   if (isTitleLink(event.target)) saveActiveFeedScroll(true, event.target);
 }
 
+installFeedSpacingOverride();
 installSessionStorageGuard();
 
 let lastHash = window.location.hash;
