@@ -2610,7 +2610,7 @@ textarea,
   display: grid;
   grid-template-columns: repeat(3, 100%);
   height: 100%;
-  transform: translate3d(calc(-100% + var(--pager-offset, 0px)), 0, 0);
+  transform: translate3d(calc(-33.333333% + var(--pager-offset, 0px)), 0, 0);
   opacity: 1;
   transition: opacity 120ms ease;
   will-change: transform;
@@ -3207,12 +3207,36 @@ textarea,
   font-size: 13px;
 }
 
-.share-recs span {
-  display: block;
-  color: rgba(247, 247, 251, 0.86);
-  white-space: nowrap;
+.share-rec-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.share-rec-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.share-rec-card img {
+  width: 100%;
+  aspect-ratio: 0.72;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.share-rec-card span {
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
+  color: rgba(247, 247, 251, 0.88);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.18;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .segmented.mini {
@@ -3220,15 +3244,16 @@ textarea,
   min-width: 170px;
 }
 
-/* Final native feed pager override: browser scroll-snap owns horizontal paging. */
+/* Final feed pager override: app-controlled transform owns horizontal paging. */
 .feed-pager {
-  overflow-x: auto !important;
+  overflow-x: hidden !important;
   overflow-y: hidden !important;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  touch-action: pan-x pan-y;
+  scroll-snap-type: none;
+  scroll-behavior: auto;
+  touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  user-select: none;
 }
 
 .feed-pager::-webkit-scrollbar {
@@ -3242,13 +3267,18 @@ textarea,
   grid-template-columns: repeat(3, minmax(0, 1fr));
   width: 300%;
   height: 100%;
-  transform: none !important;
+  transform: translate3d(calc(-33.333333% + var(--pager-offset, 0px)), 0, 0) !important;
   transition: none !important;
+  will-change: transform;
+}
+
+.feed-pager.animating .feed-pager-track {
+  transition: transform 230ms cubic-bezier(0.2, 0.86, 0.22, 1) !important;
 }
 
 .feed-pager-panel {
-  scroll-snap-align: center;
-  scroll-snap-stop: always;
+  scroll-snap-align: none;
+  scroll-snap-stop: normal;
 }
 
 .feed-tabs {
@@ -3295,6 +3325,37 @@ textarea,
   font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.detail-facts-bar {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  gap: 0;
+  margin-top: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.03)),
+    rgba(18, 20, 27, 0.56);
+  box-shadow: 0 9px 22px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px) saturate(1.14);
+}
+
+.detail-fact-value {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.detail-fact-value + .detail-fact-value {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Detail page glass polish. Keep last so older detail/link blocks cannot override it. */
@@ -3357,14 +3418,14 @@ textarea,
 
 .link-chip {
   justify-content: center;
-  min-height: 42px;
+  min-height: 44px;
   border-radius: 13px;
   border-color: rgba(173, 192, 255, 0.28);
   background:
     linear-gradient(180deg, rgba(173, 192, 255, 0.12), rgba(173, 192, 255, 0.025)),
     rgba(17, 19, 28, 0.62);
   color: #dfe6ff;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 900;
   text-decoration: none;
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);

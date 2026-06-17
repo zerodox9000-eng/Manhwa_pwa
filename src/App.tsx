@@ -8,7 +8,6 @@ import {
   Database,
   Download,
   EllipsisVertical,
-  ExternalLink,
   Filter,
   GripVertical,
   Home,
@@ -25,7 +24,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   HashRouter,
@@ -261,13 +260,23 @@ function BottomDrawer({
 function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
+  const [pagerState, setPagerState] = useState({ offset: 0, animating: false });
   const pagerRef = useRef<HTMLDivElement | null>(null);
   const scrollPositions = useRef<Record<string, number>>(readFeedScrollPositions());
   const feedPanelRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const persistScrollRaf = useRef<number | null>(null);
-  const pagerScrollTimer = useRef<number | null>(null);
-  const isResettingPager = useRef(false);
-  const pagerResetToken = useRef(0);
+  const pagerLockRef = useRef(false);
+  const pagerOffsetRef = useRef(0);
+  const suppressPagerClickRef = useRef(false);
+  const pagerGesture = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    lastX: number;
+    lastTime: number;
+    active: boolean;
+    cancelled: boolean;
+  } | null>(null);
   const activeFeed = store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null;
   const activeIndex = activeFeed ? store.feeds.findIndex((item) => item.id === activeFeed.id) : -1;
   const previousFeed = activeIndex > 0 ? store.feeds[activeIndex - 1] : null;
@@ -300,37 +309,6 @@ function HomePage() {
     persistFeedScroll();
   }, [activeFeed, persistFeedScroll]);
 
-  const recenterPager = useCallback((duration = 260) => {
-    const pager = pagerRef.current;
-    if (!pager) return;
-    const resetToken = pagerResetToken.current + 1;
-    pagerResetToken.current = resetToken;
-    isResettingPager.current = true;
-    pager.style.scrollSnapType = "none";
-    pager.style.scrollBehavior = "auto";
-    const center = () => {
-      if (pagerResetToken.current !== resetToken) return;
-      const currentPager = pagerRef.current;
-      if (!currentPager) return;
-      currentPager.scrollTo({ left: currentPager.clientWidth, top: 0, behavior: "auto" });
-    };
-    requestAnimationFrame(() => {
-      center();
-      window.setTimeout(center, 40);
-      window.setTimeout(center, 120);
-      window.setTimeout(() => {
-        if (pagerResetToken.current !== resetToken) return;
-        center();
-        const currentPager = pagerRef.current;
-        if (currentPager) {
-          currentPager.style.removeProperty("scroll-snap-type");
-          currentPager.style.removeProperty("scroll-behavior");
-        }
-        isResettingPager.current = false;
-      }, duration);
-    });
-  }, []);
-
   const restoreFeedScroll = useCallback((feedId: string) => {
     const y = scrollPositions.current[feedId] ?? 0;
     requestAnimationFrame(() => {
@@ -348,49 +326,120 @@ function HomePage() {
     const hadScroll = Object.prototype.hasOwnProperty.call(scrollPositions.current, feedId);
     store.setActiveFeedId(feedId);
     if (resetIfNew && !hadScroll) scrollPositions.current[feedId] = 0;
+    pagerOffsetRef.current = 0;
+    setPagerState({ offset: 0, animating: false });
     restoreFeedScroll(feedId);
   }, [restoreFeedScroll, saveCurrentScroll, store]);
 
   useEffect(() => {
     if (!activeFeed) return;
     restoreFeedScroll(activeFeed.id);
-    recenterPager();
-  }, [activeFeed, recenterPager, restoreFeedScroll]);
+  }, [activeFeed, restoreFeedScroll]);
 
   useEffect(
     () => () => {
       saveCurrentScroll();
       persistFeedScroll();
       if (persistScrollRaf.current != null) window.cancelAnimationFrame(persistScrollRaf.current);
-      if (pagerScrollTimer.current != null) window.clearTimeout(pagerScrollTimer.current);
     },
     [persistFeedScroll, saveCurrentScroll],
   );
 
-  const settleNativePager = useCallback(() => {
-    const pager = pagerRef.current;
-    if (!pager || isResettingPager.current || activeIndex < 0) return;
-    const width = Math.max(1, pager.clientWidth);
-    const left = pager.scrollLeft;
-    if (Math.abs(left - width) < 4) return;
-    if (left < width * 0.58 && previousFeed) {
-      isResettingPager.current = true;
-      switchToFeed(previousFeed.id, true);
-      return;
-    }
-    if (left > width * 1.42 && nextFeed) {
-      isResettingPager.current = true;
-      switchToFeed(nextFeed.id, true);
-      return;
-    }
-    pager.scrollTo({ left: width, behavior: "smooth" });
-  }, [activeIndex, nextFeed, previousFeed, switchToFeed]);
+  const finishPagerReturn = useCallback(() => {
+    pagerOffsetRef.current = 0;
+    setPagerState({ offset: 0, animating: true });
+    window.setTimeout(() => setPagerState({ offset: 0, animating: false }), 230);
+  }, []);
 
-  const handlePagerScroll = useCallback(() => {
-    if (isResettingPager.current) return;
-    if (pagerScrollTimer.current != null) window.clearTimeout(pagerScrollTimer.current);
-    pagerScrollTimer.current = window.setTimeout(settleNativePager, 90);
-  }, [settleNativePager]);
+  const commitPagerSwipe = useCallback((targetFeed: Feed, direction: "previous" | "next") => {
+    const width = pagerRef.current?.clientWidth ?? window.innerWidth;
+    pagerLockRef.current = true;
+    saveCurrentScroll();
+    if (!Object.prototype.hasOwnProperty.call(scrollPositions.current, targetFeed.id)) scrollPositions.current[targetFeed.id] = 0;
+    pagerOffsetRef.current = direction === "next" ? -width : width;
+    setPagerState({ offset: direction === "next" ? -width : width, animating: true });
+    window.setTimeout(() => {
+      store.setActiveFeedId(targetFeed.id);
+      pagerOffsetRef.current = 0;
+      setPagerState({ offset: 0, animating: false });
+      pagerLockRef.current = false;
+      restoreFeedScroll(targetFeed.id);
+    }, 230);
+  }, [restoreFeedScroll, saveCurrentScroll, store]);
+
+  const handlePagerPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (pagerLockRef.current || pagerState.animating || activeIndex < 0) return;
+    if (event.button !== 0) return;
+    pagerGesture.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastTime: performance.now(),
+      active: false,
+      cancelled: false,
+    };
+  }, [activeIndex, pagerState.animating]);
+
+  const handlePagerPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = pagerGesture.current;
+    if (!gesture || gesture.cancelled || gesture.pointerId !== event.pointerId || pagerLockRef.current) return;
+    const dx = event.clientX - gesture.startX;
+    const dy = event.clientY - gesture.startY;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    if (!gesture.active) {
+      if (absY > 10 && absY > absX * 1.05) {
+        gesture.cancelled = true;
+        return;
+      }
+      if (absX < 16 || absX < absY * 1.35) return;
+      gesture.active = true;
+      suppressPagerClickRef.current = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    event.preventDefault();
+    const width = pagerRef.current?.clientWidth ?? window.innerWidth;
+    const blocked = (dx > 0 && !previousFeed) || (dx < 0 && !nextFeed);
+    const offset = Math.max(-width * 0.96, Math.min(width * 0.96, blocked ? dx * 0.26 : dx));
+    gesture.lastX = event.clientX;
+    gesture.lastTime = performance.now();
+    pagerOffsetRef.current = offset;
+    setPagerState({ offset, animating: false });
+  }, [nextFeed, previousFeed]);
+
+  const handlePagerPointerEnd = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const gesture = pagerGesture.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    pagerGesture.current = null;
+    if (gesture.active) {
+      event.preventDefault();
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        // Pointer capture may already be released by the browser.
+      }
+    }
+    const width = pagerRef.current?.clientWidth ?? window.innerWidth;
+    const offset = pagerOffsetRef.current;
+    const threshold = Math.min(150, width * 0.26);
+    if (gesture.active && offset <= -threshold && nextFeed) {
+      commitPagerSwipe(nextFeed, "next");
+    } else if (gesture.active && offset >= threshold && previousFeed) {
+      commitPagerSwipe(previousFeed, "previous");
+    } else if (gesture.active) {
+      finishPagerReturn();
+    }
+  }, [commitPagerSwipe, finishPagerReturn, nextFeed, previousFeed]);
+
+  const handlePagerClickCapture = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!suppressPagerClickRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    window.setTimeout(() => {
+      suppressPagerClickRef.current = false;
+    }, 0);
+  }, []);
 
   const renderPagerPanel = (feed: Feed | null, inactive = false) => (
     <div
@@ -424,12 +473,14 @@ function HomePage() {
       ) : (
         <div
           ref={pagerRef}
-          className="feed-pager"
-          onScroll={handlePagerScroll}
-          onPointerUp={() => window.setTimeout(settleNativePager, 40)}
-          onTouchEnd={() => window.setTimeout(settleNativePager, 40)}
+          className={`feed-pager ${pagerState.animating ? "animating" : ""}`}
+          onClickCapture={handlePagerClickCapture}
+          onPointerCancel={handlePagerPointerEnd}
+          onPointerDown={handlePagerPointerDown}
+          onPointerMove={handlePagerPointerMove}
+          onPointerUp={handlePagerPointerEnd}
         >
-          <div className="feed-pager-track">
+          <div className="feed-pager-track" style={{ "--pager-offset": `${pagerState.offset}px` } as React.CSSProperties}>
             {renderPagerPanel(previousFeed, true)}
             {renderPagerPanel(activeFeed, false)}
             {renderPagerPanel(nextFeed, true)}
@@ -2311,18 +2362,15 @@ function TitleDetailPage() {
         {visible.cover && (series.cover ? <img className="detail-cover" src={series.cover} alt="" /> : <div className="detail-cover cover-fallback">No cover</div>)}
         <div className="detail-copy">
           {visible.title && <h1 className="detail-title">{displayTitle}</h1>}
-          {detailFacts.length > 0 && (
-            <div className="detail-facts" aria-label="Title facts">
-              {detailFacts.map(([label, value]) => (
-                <span className="detail-fact-pill" key={label}>
-                  <small>{label}</small>
-                  <strong>{value}</strong>
-                </span>
-              ))}
-            </div>
-          )}
           {visible.authorsArtists && (
             <p className="detail-creators">{uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable"}</p>
+          )}
+          {detailFacts.length > 0 && (
+            <div className="detail-facts detail-facts-bar" aria-label="Title facts">
+              {detailFacts.map(([label, value]) => (
+                <span className="detail-fact-value" key={label}>{value}{label === "Chapters" ? " chapters" : ""}</span>
+              ))}
+            </div>
           )}
         </div>
       </section>
@@ -2524,7 +2572,7 @@ function DetailLinks({ series }: { series: SeriesCatalog }) {
     <div className="chips link-chips">
       {links.map(([label, href]) => (
         <a className="chip link-chip" href={href} target="_blank" rel="noreferrer" key={label}>
-          {label} <ExternalLink size={13} />
+          {label}
         </a>
       ))}
     </div>
@@ -2671,9 +2719,12 @@ function DetailSharePanel({ series, description, tagsById }: { series: SeriesCat
         {recommendationCount > 0 && recs.length > 0 && (
           <section className="detail-share-section share-recs">
             <h3>Top matches</h3>
-            <div>
+            <div className="share-rec-grid">
               {recs.slice(0, recommendationCount).map((item) => (
-                <span key={item.id}>{localDisplayTitle(item, store.settings, store.titleOverrides)}</span>
+                <div className="share-rec-card" key={item.id}>
+                  {item.cover && <img src={coverUrlForGrid(item.cover, 3)} alt="" crossOrigin="anonymous" />}
+                  <span>{localDisplayTitle(item, store.settings, store.titleOverrides)}</span>
+                </div>
               ))}
             </div>
           </section>
