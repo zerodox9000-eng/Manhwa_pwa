@@ -267,6 +267,7 @@ function HomePage() {
   const persistScrollRaf = useRef<number | null>(null);
   const pagerScrollTimer = useRef<number | null>(null);
   const isResettingPager = useRef(false);
+  const pagerResetToken = useRef(0);
   const activeFeed = store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null;
   const activeIndex = activeFeed ? store.feeds.findIndex((item) => item.id === activeFeed.id) : -1;
   const previousFeed = activeIndex > 0 ? store.feeds[activeIndex - 1] : null;
@@ -299,6 +300,37 @@ function HomePage() {
     persistFeedScroll();
   }, [activeFeed, persistFeedScroll]);
 
+  const recenterPager = useCallback((duration = 260) => {
+    const pager = pagerRef.current;
+    if (!pager) return;
+    const resetToken = pagerResetToken.current + 1;
+    pagerResetToken.current = resetToken;
+    isResettingPager.current = true;
+    pager.style.scrollSnapType = "none";
+    pager.style.scrollBehavior = "auto";
+    const center = () => {
+      if (pagerResetToken.current !== resetToken) return;
+      const currentPager = pagerRef.current;
+      if (!currentPager) return;
+      currentPager.scrollTo({ left: currentPager.clientWidth, top: 0, behavior: "auto" });
+    };
+    requestAnimationFrame(() => {
+      center();
+      window.setTimeout(center, 40);
+      window.setTimeout(center, 120);
+      window.setTimeout(() => {
+        if (pagerResetToken.current !== resetToken) return;
+        center();
+        const currentPager = pagerRef.current;
+        if (currentPager) {
+          currentPager.style.removeProperty("scroll-snap-type");
+          currentPager.style.removeProperty("scroll-behavior");
+        }
+        isResettingPager.current = false;
+      }, duration);
+    });
+  }, []);
+
   const restoreFeedScroll = useCallback((feedId: string) => {
     const y = scrollPositions.current[feedId] ?? 0;
     requestAnimationFrame(() => {
@@ -308,6 +340,10 @@ function HomePage() {
   }, []);
 
   const switchToFeed = useCallback((feedId: string, resetIfNew = false) => {
+    if (store.activeFeedId === feedId) {
+      restoreFeedScroll(feedId);
+      return;
+    }
     saveCurrentScroll();
     const hadScroll = Object.prototype.hasOwnProperty.call(scrollPositions.current, feedId);
     store.setActiveFeedId(feedId);
@@ -318,16 +354,8 @@ function HomePage() {
   useEffect(() => {
     if (!activeFeed) return;
     restoreFeedScroll(activeFeed.id);
-    const pager = pagerRef.current;
-    if (!pager) return;
-    isResettingPager.current = true;
-    requestAnimationFrame(() => {
-      pager.scrollTo({ left: pager.clientWidth, top: 0, behavior: "auto" });
-      requestAnimationFrame(() => {
-        isResettingPager.current = false;
-      });
-    });
-  }, [activeFeed, restoreFeedScroll]);
+    recenterPager();
+  }, [activeFeed, recenterPager, restoreFeedScroll]);
 
   useEffect(
     () => () => {
@@ -344,11 +372,14 @@ function HomePage() {
     if (!pager || isResettingPager.current || activeIndex < 0) return;
     const width = Math.max(1, pager.clientWidth);
     const left = pager.scrollLeft;
+    if (Math.abs(left - width) < 4) return;
     if (left < width * 0.58 && previousFeed) {
+      isResettingPager.current = true;
       switchToFeed(previousFeed.id, true);
       return;
     }
     if (left > width * 1.42 && nextFeed) {
+      isResettingPager.current = true;
       switchToFeed(nextFeed.id, true);
       return;
     }
@@ -395,6 +426,8 @@ function HomePage() {
           ref={pagerRef}
           className="feed-pager"
           onScroll={handlePagerScroll}
+          onPointerUp={() => window.setTimeout(settleNativePager, 40)}
+          onTouchEnd={() => window.setTimeout(settleNativePager, 40)}
         >
           <div className="feed-pager-track">
             {renderPagerPanel(previousFeed, true)}
@@ -649,7 +682,7 @@ function TitleCollection({
   const virtualizer = useVirtualizer({
     count: rowCount,
     estimateSize,
-    overscan: 6,
+    overscan: columns >= 4 ? 3 : 5,
     getScrollElement: () => scrollElement ?? (typeof document === "undefined" ? null : ((document.scrollingElement ?? document.documentElement) as HTMLElement)),
     getItemKey: (index) => `${feed.id}:${columns}:${index}`,
   });
@@ -672,6 +705,11 @@ function TitleCollection({
       {virtualizer.getVirtualItems().map((virtualRow) => {
         const start = virtualRow.index * columns;
         const rowItems = items.slice(start, start + columns);
+        const scrollTop = scrollElement?.scrollTop ?? 0;
+        const estimatedRowHeight = estimateSize();
+        const firstVisibleRow = Math.max(0, Math.floor(scrollTop / Math.max(1, estimatedRowHeight)));
+        const priorityRows = columns >= 4 ? 2 : 3;
+        const priority = virtualRow.index >= firstVisibleRow && virtualRow.index < firstVisibleRow + priorityRows;
         return (
           <div
             className={`virtual-title-row title-grid columns-${columns} density-${feed.view.gridDensity}`}
@@ -689,6 +727,7 @@ function TitleCollection({
                 history={history}
                 latestDate={latestDate}
                 metricWindow={metricWindow}
+                priority={priority}
               />
             ))}
           </div>
@@ -700,13 +739,13 @@ function TitleCollection({
 
 function coverUrlForGrid(url: string, columns?: FeedViewSettings["gridColumns"]) {
   if (!columns) return url;
-  const size = columns >= 5 ? 150 : columns === 4 ? 190 : columns === 3 ? 250 : 350;
+  const size = columns >= 3 ? 250 : 350;
   return url.replace(/\/x\d+@1\//, `/x${size}@1/`);
 }
 
 function Cover({
   series,
-  priority = true,
+  priority = false,
   titleOverride,
   columns,
 }: {
@@ -772,6 +811,7 @@ function TitleCard({
   history,
   latestDate,
   metricWindow,
+  priority,
 }: {
   series: SeriesCatalog;
   rank: number;
@@ -779,6 +819,7 @@ function TitleCard({
   history: HistoryMap;
   latestDate?: string | null;
   metricWindow?: { from: string; to: string } | null;
+  priority?: boolean;
 }) {
   const store = useAppStore();
   const displayTitle = localDisplayTitle(series, store.settings, store.titleOverrides);
@@ -793,7 +834,7 @@ function TitleCard({
         onMouseEnter={preload}
       >
         <div className="poster-shell">
-          <Cover series={series} priority titleOverride={displayTitle} columns={view.gridColumns} />
+          <Cover series={series} priority={priority} titleOverride={displayTitle} columns={view.gridColumns} />
           {view.visible.rank && <span className="rank">{rank}</span>}
           <div className="poster-metrics">
             <TitleMetrics series={series} view={view} compact history={history} latestDate={latestDate} metricWindow={metricWindow} />
@@ -1068,49 +1109,6 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
       sourceMode: normalized.length === 2 ? "mixed" : normalized[0],
     });
   };
-  const applyPreset = (preset: "release" | "added" | "fan-rank") => {
-    setDraft((current) => {
-      if (preset === "release") {
-        return {
-          ...current,
-          filters: {
-            ...current.filters,
-            dateField: "release",
-            sourceMode: "mixed",
-            sourceModes: ["anilist", "non-anilist"],
-            rolling: current.filters.rolling.mode === "none" ? { ...store.settings.defaultRollingWindow } : current.filters.rolling,
-          },
-          sort: [{ id: crypto.randomUUID(), metric: "releaseDate", direction: "desc" }],
-          view: { ...current.view, metricSlots: ["releaseDate", "fanFavouriteDiscoveryPercentile"].slice(0, 3) as MetricId[] },
-        };
-      }
-      if (preset === "added") {
-        return {
-          ...current,
-          filters: {
-            ...current.filters,
-            dateField: "none",
-            sourceMode: "mixed",
-            sourceModes: ["anilist", "non-anilist"],
-          },
-          sort: [{ id: crypto.randomUUID(), metric: "mangabakaLatestRank", direction: "asc" }],
-          view: { ...current.view, metricSlots: ["year"] },
-        };
-      }
-      return {
-        ...current,
-        filters: {
-          ...current.filters,
-          dateField: "none",
-          sourceMode: "anilist",
-          sourceModes: ["anilist"],
-        },
-        sort: [{ id: crypto.randomUUID(), metric: "fanFavouriteDiscoveryPercentile", direction: "desc" }],
-        view: { ...current.view, metricSlots: ["fanFavouriteDiscoveryPercentile"] },
-      };
-    });
-  };
-
   useEffect(() => {
     if (!anilistLocked) return;
     if (draft.filters.sourceMode !== "anilist" || draft.filters.sourceModes?.some((mode) => mode !== "anilist")) {
@@ -1152,21 +1150,6 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
         value={draft.showDescription}
         onChange={(showDescription) => setDraft({ ...draft, showDescription })}
       />
-
-      <div className="field">
-        <span className="small-label">Quick presets</span>
-        <div className="segmented">
-          <button className="segment" type="button" onClick={() => applyPreset("release")}>
-            Use as Release feed
-          </button>
-          <button className="segment" type="button" onClick={() => applyPreset("added")}>
-            Use as Latest-added feed
-          </button>
-          <button className="segment" type="button" onClick={() => applyPreset("fan-rank")}>
-            Use as Fan Rank feed
-          </button>
-        </div>
-      </div>
 
       <h2 className="section-title">Filters</h2>
       <div className="field">
@@ -2288,6 +2271,13 @@ function TitleDetailPage() {
     [catalogItem, validDetail],
   );
   const displayTitle = series ? localDisplayTitle(series, store.settings, store.titleOverrides) : undefined;
+  const detailFacts = series
+    ? [
+        visible.year && series.year ? ["Year", String(series.year)] : null,
+        visible.status && series.status ? ["Status", series.status] : null,
+        visible.chapters && series.total_chapters ? ["Chapters", `${series.total_chapters}`] : null,
+      ].filter((item): item is [string, string] => Boolean(item))
+    : [];
   if (!series) {
     return (
       <div className="page">
@@ -2321,18 +2311,22 @@ function TitleDetailPage() {
         {visible.cover && (series.cover ? <img className="detail-cover" src={series.cover} alt="" /> : <div className="detail-cover cover-fallback">No cover</div>)}
         <div className="detail-copy">
           {visible.title && <h1 className="detail-title">{displayTitle}</h1>}
-          <p className="detail-facts">
-            {[visible.year && series.year ? String(series.year) : "", visible.status ? series.status ?? "" : "", visible.chapters && series.total_chapters ? `${series.total_chapters} chapters` : ""]
-              .filter(Boolean)
-              .join(" / ")}
-          </p>
+          {detailFacts.length > 0 && (
+            <div className="detail-facts" aria-label="Title facts">
+              {detailFacts.map(([label, value]) => (
+                <span className="detail-fact-pill" key={label}>
+                  <small>{label}</small>
+                  <strong>{value}</strong>
+                </span>
+              ))}
+            </div>
+          )}
           {visible.authorsArtists && (
             <p className="detail-creators">{uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable"}</p>
           )}
         </div>
       </section>
       <DetailStats series={series} visible={visible} history={store.history} latestDate={store.syncMeta?.historyLastDate} />
-      {visible.genreTags && <section className="detail-block"><GenreChips series={series} tagsById={tagsById} /></section>}
       {visible.description && (
         <section className="detail-block">
           <h2 className="section-title">Description</h2>
@@ -2355,6 +2349,7 @@ function TitleDetailPage() {
           )}
         </section>
       )}
+      {visible.genreTags && <section className="detail-block detail-genres"><GenreChips series={series} tagsById={tagsById} /></section>}
       {visible.links && (
         <section className="detail-block detail-links">
           <h2 className="section-title">Links</h2>
@@ -2581,6 +2576,11 @@ function DetailSharePanel({ series, description, tagsById }: { series: SeriesCat
     ["Fav", formatMetricValue(series, "favourites", store.history, store.syncMeta?.historyLastDate)],
   ].filter(([, value]) => value !== "n/a");
   const imageName = `${displayTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64) || "manhwa-lib"}-share.png`;
+  const shareFacts = [
+    series.year ? ["Year", String(series.year)] : null,
+    series.status ? ["Status", series.status] : null,
+    series.total_chapters ? ["Chapters", `${series.total_chapters}`] : null,
+  ].filter((item): item is [string, string] => Boolean(item));
 
   const renderShareImage = async () => {
     if (!previewRef.current) return null;
@@ -2627,53 +2627,68 @@ function DetailSharePanel({ series, description, tagsById }: { series: SeriesCat
 
   return (
     <div className="detail-share-panel">
-      <div className="detail-share-preview" ref={previewRef}>
-        {includeCover && series.cover && <img src={series.cover} alt="" crossOrigin="anonymous" />}
-        <div className="detail-share-copy">
-          <h2>{displayTitle}</h2>
-          {includeMeta && (
-            <p className="muted">
-              {[series.year, series.status, series.total_chapters ? `${series.total_chapters} chapters` : ""].filter(Boolean).join(" / ")}
-            </p>
-          )}
-          {includeStats && stats.length > 0 && (
-            <div className="detail-share-stats">
-              {stats.map(([label, value]) => (
-                <span key={label}>
-                  <strong>{value}</strong>
-                  <small>{label}</small>
-                </span>
-              ))}
-            </div>
-          )}
-          {includeGenres && genreTags.length > 0 && (
-            <div className="chips compact-share-chips">
-              {genreTags.map((tag) => (
-                <span className="chip" key={tag.id}>{tag.name}</span>
-              ))}
-            </div>
-          )}
-          {includeDescription && shortDescription && <p className="share-card-description">{shortDescription}</p>}
-          {recommendationCount > 0 && recs.length > 0 && (
-            <div className="share-recs">
-              <strong>Top matches</strong>
+      <div className="detail-share-preview detail-share-page" ref={previewRef}>
+        {series.cover && <img className="detail-share-bg" src={series.cover} alt="" crossOrigin="anonymous" />}
+        <div className="detail-share-identity">
+          {includeCover && series.cover && <img className="detail-share-cover" src={series.cover} alt="" crossOrigin="anonymous" />}
+          <div className="detail-share-copy">
+            <h2>{displayTitle}</h2>
+            {includeMeta && shareFacts.length > 0 && (
+              <div className="detail-facts detail-share-facts">
+                {shareFacts.map(([label, value]) => (
+                  <span className="detail-fact-pill" key={label}>
+                    <small>{label}</small>
+                    <strong>{value}</strong>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        {includeStats && stats.length > 0 && (
+          <div className="detail-share-stats">
+            {stats.map(([label, value]) => (
+              <span key={label}>
+                <strong>{value}</strong>
+                <small>{label}</small>
+              </span>
+            ))}
+          </div>
+        )}
+        {includeGenres && genreTags.length > 0 && (
+          <div className="chips compact-share-chips">
+            {genreTags.map((tag) => (
+              <span className="chip" key={tag.id}>{tag.name}</span>
+            ))}
+          </div>
+        )}
+        {includeDescription && description && (
+          <section className="detail-share-section">
+            <h3>Description</h3>
+            <RichDescription text={description} />
+          </section>
+        )}
+        {recommendationCount > 0 && recs.length > 0 && (
+          <section className="detail-share-section share-recs">
+            <h3>Top matches</h3>
+            <div>
               {recs.slice(0, recommendationCount).map((item) => (
                 <span key={item.id}>{localDisplayTitle(item, store.settings, store.titleOverrides)}</span>
               ))}
             </div>
-          )}
-        </div>
+          </section>
+        )}
       </div>
       <div className="settings-list">
-        <ToggleRow label="Cover" description="Show the title artwork in the share preview." value={includeCover} onChange={setIncludeCover} />
+        <ToggleRow label="Cover" description="Show the title artwork in the share image." value={includeCover} onChange={setIncludeCover} />
         <ToggleRow label="Year/status/chapters" description="Show compact title facts." value={includeMeta} onChange={setIncludeMeta} />
         <ToggleRow label="Stats" description="Show Fan Rank, popularity, and favourites when available." value={includeStats} onChange={setIncludeStats} />
         <ToggleRow label="Genres" description="Show main genre chips." value={includeGenres} onChange={setIncludeGenres} />
-        <ToggleRow label="Short description" description="Show a compact synopsis preview." value={includeDescription} onChange={setIncludeDescription} />
+        <ToggleRow label="Description" description="Show the full formatted synopsis in the share image." value={includeDescription} onChange={setIncludeDescription} />
         <div className="setting-row">
           <div>
             <strong>Recommendations</strong>
-            <div className="muted tiny">Optional top matches in the screenshot-friendly card.</div>
+            <div className="muted tiny">Optional top matches in the screenshot-style image.</div>
           </div>
           <div className="segmented mini">
             {[0, 3, 5, 10].map((count) => (

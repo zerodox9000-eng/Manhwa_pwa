@@ -321,13 +321,72 @@ function sharedValues(left: string[], right: string[]) {
   return [...new Set(left)].filter((value) => rightSet.has(value));
 }
 
+function addTextTerms(features: Record<string, number>, text: string | undefined | null, weight: number, prefix = "") {
+  for (const token of normalizeText(text ?? "").split(" ")) {
+    if (token.length >= 3 && !TEXT_STOPWORDS.has(token)) addFeature(features, `${prefix}${token}`, weight);
+  }
+}
+
+function addContextArray(features: Record<string, number>, prefix: string, values: string[] | undefined, weight: number) {
+  for (const value of values ?? []) addFeature(features, `${prefix}:${value}`, weight);
+}
+
+function roleStrength(role: "none" | "minor" | "major" | "core") {
+  if (role === "core") return 1.5;
+  if (role === "major") return 1;
+  if (role === "minor") return 0.35;
+  return 0;
+}
+
+function contextFeatureVector(feature: RecommendationFeature) {
+  const features: Record<string, number> = {};
+  const context = feature.context;
+  if (!context) return features;
+  if (context.primaryProfile) addFeature(features, `primary:${context.primaryProfile}`, 3.2);
+  for (const group of context.profileGroups ?? []) addFeature(features, `profile:${group}`, PRIMARY_PROFILE_GROUPS.has(group) ? 2.4 : 1.2);
+  for (const anchor of context.primaryAnchors ?? []) addFeature(features, `anchor:${anchor}`, 3);
+  addContextArray(features, "setting", context.storySignals.setting, 1.05);
+  addContextArray(features, "role", context.storySignals.protagonistRole, 1.15);
+  addContextArray(features, "career", context.storySignals.careerDomain, 2.15);
+  addContextArray(features, "premise", context.storySignals.premiseMechanic, 2.25);
+  addContextArray(features, "conflict", context.storySignals.conflictType, 1.95);
+  addContextArray(features, "progression", context.storySignals.progressionType, 1.65);
+  addContextArray(features, "tone", context.storySignals.tone, 0.85);
+  addContextArray(features, "world", context.storySignals.worldType, 1.75);
+  const romance = roleStrength(context.storySignals.romanceRole);
+  const regression = roleStrength(context.storySignals.regressionRole);
+  const system = roleStrength(context.storySignals.systemRole);
+  if (romance) addFeature(features, `romance-role:${context.storySignals.romanceRole}`, romance);
+  if (regression) addFeature(features, `regression-role:${context.storySignals.regressionRole}`, regression);
+  if (system) addFeature(features, `system-role:${context.storySignals.systemRole}`, system);
+  for (const term of context.evidence?.descriptionTerms ?? []) addTextTerms(features, term, 0.9, "desc:");
+  for (const term of context.searchKeywords ?? []) addTextTerms(features, term, 0.65, "kw:");
+  addTextTerms(features, context.semanticSummary, 0.75, "summary:");
+  return features;
+}
+
+function contextTextFeatures(feature: RecommendationFeature) {
+  const features = { ...feature.textFeatures };
+  const context = feature.context;
+  if (!context) return features;
+  for (const term of context.evidence?.descriptionTerms ?? []) addTextTerms(features, term, 2.2);
+  for (const term of context.searchKeywords ?? []) addTextTerms(features, term, 1.15);
+  for (const term of context.evidence?.titleTerms ?? []) addTextTerms(features, term, 1.35);
+  addTextTerms(features, context.semanticSummary, 1.6);
+  return features;
+}
+
 function contextSimilarity(base: RecommendationFeature, candidate: RecommendationFeature) {
   if (!base.context || !candidate.context) return 0;
-  const samePrimary = base.context.primaryProfile && base.context.primaryProfile === candidate.context.primaryProfile ? 0.28 : 0;
-  const groupScore = jaccard(base.context.profileGroups, candidate.context.profileGroups) * 0.28;
-  const anchorScore = jaccard(base.context.primaryAnchors, candidate.context.primaryAnchors) * 0.18;
-  const signalScore = jaccard(flattenSignals(base), flattenSignals(candidate)) * 0.22;
-  const keywordScore = jaccard(base.context.searchKeywords ?? [], candidate.context.searchKeywords ?? []) * 0.04;
+  const samePrimary = base.context.primaryProfile && base.context.primaryProfile === candidate.context.primaryProfile ? 0.2 : 0;
+  const groupScore = jaccard(base.context.profileGroups, candidate.context.profileGroups) * 0.18;
+  const anchorScore = jaccard(base.context.primaryAnchors, candidate.context.primaryAnchors) * 0.2;
+  const signalScore = cosine(contextFeatureVector(base), contextFeatureVector(candidate)) * 0.34;
+  const keywordScore =
+    jaccard([...(base.context.searchKeywords ?? []), ...(base.context.evidence?.descriptionTerms ?? [])], [
+      ...(candidate.context.searchKeywords ?? []),
+      ...(candidate.context.evidence?.descriptionTerms ?? []),
+    ]) * 0.08;
   const confidence = Math.min(base.context.confidence ?? 0.5, candidate.context.confidence ?? 0.5);
   return (samePrimary + groupScore + anchorScore + signalScore + keywordScore) * (0.55 + confidence * 0.45);
 }
@@ -588,7 +647,7 @@ function qualityScore(feature: RecommendationFeature) {
 export function scoreRecommendation(base: RecommendationFeature, candidate: RecommendationFeature, mode: "strict" | "relaxed" = "strict") {
   const profileScore = weightedOverlap(base.profileGroups, candidate.profileGroups);
   const tagScore = cosine(base.tagFeatures, candidate.tagFeatures);
-  const textScore = cosine(base.textFeatures, candidate.textFeatures);
+  const textScore = cosine(contextTextFeatures(base), contextTextFeatures(candidate));
   const contextScore = contextSimilarity(base, candidate);
   const qScore = qualityScore(candidate);
   const basePrimaryAnchors = anchorSet(base);
@@ -612,11 +671,11 @@ export function scoreRecommendation(base: RecommendationFeature, candidate: Reco
     candidate.profileGroups.includes("korean-business");
 
   const finalScore =
-    profileScore * 0.25 +
-    contextScore * 0.3 +
-    tagScore * 0.18 +
-    textScore * 0.14 +
-    qScore * 0.08 +
+    profileScore * 0.22 +
+    contextScore * 0.4 +
+    tagScore * 0.1 +
+    textScore * 0.24 +
+    qScore * 0.04 +
     anchorCoverage * 0.12 +
     Math.min(sharedPrimaryAnchors, 3) * 0.03 +
     (sharedKoreanBusinessRegression ? 0.18 : 0);
@@ -648,7 +707,7 @@ export function debugRecommendationMatch(args: {
   const score = scoreRecommendation(baseFeature, candidateFeature, mode);
   const profileScore = weightedOverlap(baseFeature.profileGroups, candidateFeature.profileGroups);
   const tagScore = cosine(baseFeature.tagFeatures, candidateFeature.tagFeatures);
-  const textScore = cosine(baseFeature.textFeatures, candidateFeature.textFeatures);
+  const textScore = cosine(contextTextFeatures(baseFeature), contextTextFeatures(candidateFeature));
   const contextScore = contextSimilarity(baseFeature, candidateFeature);
   const qScore = qualityScore(candidateFeature);
   const baseAnchors = [...anchorSet(baseFeature)];

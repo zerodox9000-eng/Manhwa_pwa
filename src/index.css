@@ -3070,65 +3070,107 @@ textarea,
   gap: 16px;
 }
 
-.detail-share-preview {
+.detail-share-preview.detail-share-page {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(92px, 0.36fr) minmax(0, 1fr);
-  gap: 14px;
-  padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  border-radius: 16px;
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.035)),
-    rgba(12, 13, 18, 0.72);
-  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(18px) saturate(1.16);
+  gap: 16px;
+  width: min(430px, 100%);
+  margin: 0 auto;
+  overflow: hidden;
+  padding: 22px 18px 20px;
+  border: 1px solid rgba(255, 255, 255, 0.095);
+  border-radius: 22px;
+  background: #07080c;
+  box-shadow: 0 24px 58px rgba(0, 0, 0, 0.36);
+  isolation: isolate;
 }
 
-.detail-share-preview img {
+.detail-share-preview.detail-share-page::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  background:
+    linear-gradient(180deg, rgba(7, 8, 12, 0.2), #07080c 340px),
+    linear-gradient(90deg, rgba(7, 8, 12, 0.62), rgba(7, 8, 12, 0.16), rgba(7, 8, 12, 0.7));
+}
+
+.detail-share-bg {
+  position: absolute;
+  inset: -26px -26px auto;
+  z-index: -2;
+  width: calc(100% + 52px);
+  height: 330px;
+  object-fit: cover;
+  filter: blur(24px) saturate(0.95);
+  opacity: 0.56;
+  transform: scale(1.04);
+}
+
+.detail-share-identity {
+  display: grid;
+  grid-template-columns: 124px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  min-height: 176px;
+}
+
+.detail-share-cover {
   width: 100%;
   aspect-ratio: 0.72;
   object-fit: cover;
-  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);
 }
 
 .detail-share-copy {
   display: grid;
-  align-content: start;
-  gap: 8px;
+  align-content: center;
+  gap: 10px;
   min-width: 0;
 }
 
 .detail-share-copy h2 {
   margin: 0;
-  font-size: clamp(20px, 6vw, 30px);
-  line-height: 1.06;
+  font-size: clamp(24px, 7vw, 36px);
+  line-height: 1.08;
   letter-spacing: 0;
+}
+
+.detail-share-facts {
+  margin: 0;
 }
 
 .detail-share-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  gap: 9px;
 }
 
 .detail-share-stats span {
   display: grid;
   place-items: center;
-  min-height: 52px;
-  padding: 6px;
-  border-radius: 11px;
-  background: rgba(20, 22, 30, 0.46);
+  min-height: 62px;
+  padding: 8px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025)),
+    rgba(20, 22, 30, 0.52);
   text-align: center;
+  backdrop-filter: blur(12px) saturate(1.12);
 }
 
 .detail-share-stats strong {
-  font-size: 17px;
+  color: #fff;
+  font-size: 22px;
   line-height: 1;
 }
 
 .detail-share-stats small {
-  color: var(--muted);
+  color: #b8c0d6;
   font-weight: 800;
 }
 
@@ -3140,24 +3182,34 @@ textarea,
   padding: 5px 8px;
 }
 
-.share-card-description {
-  display: -webkit-box;
+.detail-share-section {
+  display: grid;
+  gap: 10px;
+}
+
+.detail-share-section h3 {
   margin: 0;
-  overflow: hidden;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  color: rgba(247, 247, 251, 0.92);
-  line-height: 1.45;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.detail-share-section .rich-description {
+  font-size: 14px;
+  line-height: 1.58;
 }
 
 .share-recs {
   display: grid;
-  gap: 3px;
-  font-size: 12px;
+  gap: 8px;
+  font-size: 13px;
 }
 
 .share-recs span {
-  color: var(--muted);
+  display: block;
+  color: rgba(247, 247, 251, 0.86);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3197,4 +3249,154 @@ textarea,
 .feed-pager-panel {
   scroll-snap-align: center;
   scroll-snap-stop: always;
+}
+
+.feed-tabs {
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+}
+
+.detail-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 10px 0 9px;
+}
+
+.detail-fact-pill {
+  display: grid;
+  gap: 2px;
+  min-width: 64px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 13px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.025)),
+    rgba(18, 20, 27, 0.58);
+  color: #f7f7fb;
+  line-height: 1;
+  text-align: center;
+  box-shadow: 0 9px 22px rgba(0, 0, 0, 0.23), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px) saturate(1.15);
+}
+
+.detail-fact-pill small {
+  color: #b8c0d6;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.detail-fact-pill strong {
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Detail page glass polish. Keep last so older detail/link blocks cannot override it. */
+.detail-page > .detail-block:not(.detail-recommendations) {
+  width: min(820px, 100%);
+  margin: 16px auto;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.095);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.018)),
+    rgba(10, 11, 16, 0.36);
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  backdrop-filter: blur(14px) saturate(1.1);
+}
+
+.detail-page > .detail-block:not(.detail-recommendations) .section-title {
+  margin-bottom: 13px;
+}
+
+.rich-description {
+  gap: 13px;
+  color: rgba(249, 250, 255, 0.92);
+  font-size: 16px;
+  line-height: 1.66;
+}
+
+.rich-description p {
+  margin: 0;
+  max-width: 72ch;
+}
+
+.rich-description strong,
+.rich-description em {
+  color: #ffffff;
+}
+
+.rich-description a {
+  display: inline;
+  color: #adc0ff;
+  font-weight: 850;
+  text-decoration: none;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.rich-description a:hover {
+  text-decoration: underline;
+}
+
+.detail-links {
+  width: min(820px, 100%);
+}
+
+.link-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 9px;
+}
+
+.link-chip {
+  justify-content: center;
+  min-height: 42px;
+  border-radius: 13px;
+  border-color: rgba(173, 192, 255, 0.28);
+  background:
+    linear-gradient(180deg, rgba(173, 192, 255, 0.12), rgba(173, 192, 255, 0.025)),
+    rgba(17, 19, 28, 0.62);
+  color: #dfe6ff;
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(12px);
+}
+
+.link-chip:hover {
+  border-color: rgba(173, 192, 255, 0.58);
+  background:
+    linear-gradient(180deg, rgba(173, 192, 255, 0.18), rgba(173, 192, 255, 0.055)),
+    rgba(24, 27, 40, 0.72);
+}
+
+@media (max-width: 520px) {
+  .detail-page > .detail-block:not(.detail-recommendations) {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .rich-description {
+    font-size: 15px;
+    line-height: 1.62;
+  }
+
+  .link-chips {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .link-chip {
+    min-height: 39px;
+    padding-inline: 8px;
+    font-size: 12px;
+  }
 }
