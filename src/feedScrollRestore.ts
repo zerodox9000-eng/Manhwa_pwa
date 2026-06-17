@@ -17,33 +17,18 @@ function installFeedSpacingOverride() {
   const style = document.createElement("style");
   style.id = "feed-spacing-regression-fix";
   style.textContent = `
-    .home-page > .feed-tabs {
-      margin-bottom: 0 !important;
+    .title-card .title-meta {
+      padding-top: 10px !important;
     }
 
-    .feed-pager-panel {
-      padding-top: 0 !important;
+    .title-grid.columns-1 .title-card .title-meta,
+    .title-grid.columns-2 .title-card .title-meta {
+      padding-top: 12px !important;
     }
 
-    .feed-pager-panel > .section:first-child {
-      margin-top: 6px !important;
-      margin-bottom: 10px !important;
-    }
-
-    .feed-pager-panel > .section:first-child .feed-action-row {
-      margin-bottom: 0 !important;
-    }
-
-    .feed-pager-panel .feed-view-header {
-      margin-top: 0 !important;
-    }
-
-    .feed-pager-panel .single-line-title {
-      margin-top: 0 !important;
-    }
-
-    .feed-pager-panel .virtual-title-grid {
-      margin-top: 4px !important;
+    .title-grid.columns-4 .title-card .title-meta,
+    .title-grid.columns-5 .title-card .title-meta {
+      padding-top: 8px !important;
     }
   `;
   document.head.appendChild(style);
