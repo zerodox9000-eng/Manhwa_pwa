@@ -75,7 +75,8 @@ function guardedFeedScrollValue(value: string) {
 
   try {
     const parsed = JSON.parse(value) as Record<string, unknown>;
-    const incoming = typeof parsed[target.feedId] === "number" && Number.isFinite(parsed[target.feedId]) ? parsed[target.feedId] : 0;
+    const savedValue = parsed[target.feedId];
+    const incoming = typeof savedValue === "number" && Number.isFinite(savedValue) ? savedValue : 0;
 
     // This is the actual regression guard: React cleanup can run after the feed panel ref is nulled,
     // which writes the active feed scroll as 0. Keep the last title-opening position instead.
