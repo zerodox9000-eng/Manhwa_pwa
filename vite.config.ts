@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: process.env.NODE_ENV === 'production' ? '/Manhwa_pwa/' : '/',
+  base: process.env.NODE_ENV === 'production' ? '/ml-preview/' : '/',
   plugins: [
     react(),
     VitePWA({
@@ -19,8 +19,8 @@ export default defineConfig({
         background_color: '#0d0d12',
         display: 'standalone',
         orientation: 'portrait',
-        scope: '/Manhwa_pwa/',
-        start_url: '/Manhwa_pwa/',
+        scope: '/ml-preview/',
+        start_url: '/ml-preview/',
         icons: [
           {
             src: 'pwa-192.png',
@@ -43,7 +43,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        navigateFallback: '/Manhwa_pwa/index.html',
+        navigateFallback: '/ml-preview/index.html',
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,
