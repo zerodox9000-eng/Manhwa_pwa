@@ -24,7 +24,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   HashRouter,
   Link,
@@ -41,7 +41,7 @@ import { resolveRollingWindow } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
-import { resolveDisplayTitle } from "./domain/catalog";
+import { resolveVisibleTitle } from "./domain/displayTitle";
 import { decodeSharePayload, exportCsv, makeShareUrl, type SharePayload } from "./domain/share";
 import type {
   AppSettings,
@@ -74,6 +74,10 @@ const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.
 const resetPageScroll = () => window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
+
+function visibleTitle(series: SeriesCatalog, titleOverrides: Record<number, string> = {}, fallback?: SeriesCatalog) {
+  return resolveVisibleTitle(series, titleOverrides, fallback);
+}
 
 function App() {
   return (
@@ -543,7 +547,9 @@ function LoadMore({ visibleCount, total, onMore }: { visibleCount: number; total
 }
 
 function Cover({ series, priority = false }: { series: SeriesCatalog; priority?: boolean }) {
-  const initials = series.display_title
+  const store = useAppStore();
+  const title = visibleTitle(series, store.titleOverrides);
+  const initials = title
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
@@ -606,6 +612,8 @@ function TitleCard({
   latestDate?: string | null;
   metricWindow?: { from: string; to: string } | null;
 }) {
+  const store = useAppStore();
+  const title = visibleTitle(series, store.titleOverrides);
   return (
     <div className="title-card-wrap">
       <Link to={`/title/${series.id}`} className="title-card" data-testid="title-card">
@@ -617,7 +625,7 @@ function TitleCard({
           </div>
         </div>
         <div className="title-meta">
-          <span className="title-name">{series.display_title}</span>
+          <span className="title-name">{title}</span>
         </div>
       </Link>
     </div>
@@ -1394,20 +1402,21 @@ function SearchPage() {
     return feed;
   }, []);
   const sensitiveTagGroups = useMemo(() => buildSensitiveTagGroups(store.tags), [store.tags]);
+  const getTitle = useCallback((item: SeriesCatalog) => visibleTitle(item, store.titleOverrides), [store.titleOverrides]);
   const results = useMemo(
     () =>
       query.trim()
         ? store.catalog
             .filter((item) => {
-              if (!item.display_title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) return false;
+              if (!getTitle(item).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) return false;
               if (!["safe", "suggestive"].includes(String(item.content_rating ?? ""))) return false;
               if (!store.settings.searchRelationshipTags && item.tag_ids.some((id) => sensitiveTagGroups.relationship.has(id))) return false;
               if (!store.settings.searchAdultTags && item.tag_ids.some((id) => sensitiveTagGroups.adult.has(id))) return false;
               return true;
             })
-            .sort((a, b) => a.display_title.localeCompare(b.display_title))
+            .sort((a, b) => getTitle(a).localeCompare(getTitle(b)))
         : [],
-    [query, sensitiveTagGroups, store.catalog, store.settings.searchAdultTags, store.settings.searchRelationshipTags],
+    [getTitle, query, sensitiveTagGroups, store.catalog, store.settings.searchAdultTags, store.settings.searchRelationshipTags],
   );
   useEffect(() => {
     sessionStorage.setItem("manhwa-search-query", query);
@@ -1439,7 +1448,7 @@ function SearchPage() {
           )}
         </div>
       </form>
-      {query.trim() ? (
+        {query.trim() ? (
         <TitleCollection
           items={results}
           feed={searchFeed}
@@ -1477,7 +1486,8 @@ function RecommendationsPage() {
   const [selectedId, setSelectedId] = useState<number | null>(Number(params.id) || null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingShelf, setEditingShelf] = useState<RecommendationShelf | null>(null);
-  const defaultRecommendationTitle = store.catalog.find((item) => item.display_title.toLocaleLowerCase() === "bastard");
+  const getTitle = useCallback((item: SeriesCatalog) => visibleTitle(item, store.titleOverrides), [store.titleOverrides]);
+  const defaultRecommendationTitle = store.catalog.find((item) => getTitle(item).toLocaleLowerCase() === "bastard");
   const selected =
     store.catalog.find((item) => item.id === selectedId) ??
     store.catalog.find((item) => item.id === Number(params.id)) ??
@@ -1485,7 +1495,7 @@ function RecommendationsPage() {
     store.catalog[0];
   const candidates = search.trim()
     ? store.catalog
-        .filter((item) => item.display_title.toLowerCase().includes(search.trim().toLowerCase()))
+        .filter((item) => getTitle(item).toLowerCase().includes(search.trim().toLowerCase()))
         .slice(0, 12)
     : [];
   const saveShelf = (shelf: RecommendationShelf) => {
@@ -1519,7 +1529,7 @@ function RecommendationsPage() {
       </div>
       <div className="field">
         <label htmlFor="base-title">Base title</label>
-        <input id="base-title" className="input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={selected?.display_title ?? "Search title"} />
+        <input id="base-title" className="input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={selected ? getTitle(selected) : "Search title"} />
       </div>
       {candidates.length > 0 && (
         <section>
@@ -1533,7 +1543,7 @@ function RecommendationsPage() {
               onClick={() => { setSelectedId(series.id); setSearch(""); }}
             >
               <Cover series={series} />
-              <strong className="title-name">{series.display_title}</strong>
+              <strong className="title-name">{getTitle(series)}</strong>
               <span className="muted tiny">Fan% {formatMetricValue(series, "fanFavouriteRaw", store.history, store.syncMeta?.historyLastDate)}</span>
             </button>
           ))}
@@ -1545,7 +1555,7 @@ function RecommendationsPage() {
           <Cover series={selected} priority />
           <div>
             <span className="muted tiny">Selected</span>
-            <h2>{selected.display_title}</h2>
+            <h2>{getTitle(selected)}</h2>
             <p className="muted tiny">Recommendations prioritize shared tags, then shelf-specific sorting.</p>
           </div>
         </section>
@@ -1911,8 +1921,10 @@ function TitleDetailPage() {
   const navigate = useNavigate();
   const params = useParams();
   const id = Number(params.id);
+  const invalidRoute = !Number.isFinite(id) || id <= 0;
   const catalogItem = store.catalog.find((item) => item.id === id);
   const [detail, setDetail] = useState<SeriesDetail | null>(null);
+  const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("Loading detail");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showAllRecommendations, setShowAllRecommendations] = useState(false);
@@ -1942,129 +1954,235 @@ function TitleDetailPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!id) return;
+    setDetail(null);
+    setLoading(true);
+    setStatus("Loading detail");
+    if (invalidRoute) {
+      setStatus("Invalid title route");
+      setLoading(false);
+      return;
+    }
     void fetchSeriesDetail(store.settings.dataSourceUrl, id)
       .then((value) => {
-        if (!cancelled) setDetail(value);
+        if (!cancelled) {
+          setDetail(value);
+          setLoading(false);
+          setStatus("");
+        }
       })
-      .catch((error) => setStatus(error instanceof Error ? error.message : "Could not load detail"));
+      .catch((error) => {
+        if (!cancelled) {
+          setStatus(error instanceof Error ? error.message : "Could not load detail");
+          setLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [id, store.settings.dataSourceUrl]);
+  }, [id, invalidRoute, store.settings.dataSourceUrl]);
 
-  const series = useMemo(
-    () =>
-      detail && catalogItem
-        ? {
-            ...detail,
-            display_title: resolveDisplayTitle(detail, catalogItem),
-            stats: catalogItem.stats,
-            analytics: catalogItem.analytics,
-            source: catalogItem.source ?? detail.source,
-            published: catalogItem.published ?? detail.published,
-            last_updated_at: catalogItem.last_updated_at ?? detail.last_updated_at,
-            authors: catalogItem.authors?.length ? catalogItem.authors : detail.authors,
-            artists: catalogItem.artists?.length ? catalogItem.artists : detail.artists,
-            links: { ...(detail.links ?? {}), ...(catalogItem.links ?? {}) },
-          }
-        : detail
-          ? { ...detail, display_title: resolveDisplayTitle(detail) }
-          : catalogItem,
-    [catalogItem, detail],
-  );
-  if (!series) {
-    return (
-      <div className="page">
-        <button className="button" type="button" onClick={() => navigate(-1)}>
-          <ArrowLeft size={16} /> Back
-        </button>
-        <p className="muted">{status}</p>
-      </div>
-    );
-  }
+  const series = useMemo(() => {
+    if (!detail || detail.id !== id) return null;
+    const localTitle = resolveVisibleTitle(detail, store.titleOverrides, catalogItem ?? undefined);
+    return catalogItem
+      ? {
+          ...detail,
+          display_title: localTitle,
+          stats: catalogItem.stats,
+          analytics: catalogItem.analytics,
+          source: catalogItem.source ?? detail.source,
+          published: catalogItem.published ?? detail.published,
+          last_updated_at: catalogItem.last_updated_at ?? detail.last_updated_at,
+          authors: catalogItem.authors?.length ? catalogItem.authors : detail.authors,
+          artists: catalogItem.artists?.length ? catalogItem.artists : detail.artists,
+          links: { ...(detail.links ?? {}), ...(catalogItem.links ?? {}) },
+        }
+      : { ...detail, display_title: localTitle };
+  }, [catalogItem, detail, id, store.titleOverrides]);
+
+  const loadingDetail = !invalidRoute && (loading || Boolean(detail && detail.id !== id));
+  const showError = invalidRoute || (!loading && !detail && status && status !== "Loading detail");
 
   return (
     <div className="detail-page">
-      {series.cover && <img className="detail-bg" src={series.cover} alt="" />}
+      {series?.cover && <img className="detail-bg" src={series.cover} alt="" />}
       <div className="detail-top-actions">
         <button className="icon-button" type="button" onClick={() => navigate(-1)} aria-label="Back">
           <ArrowLeft size={22} />
         </button>
         <span className="spacer" />
-        <Link className="icon-button" to={`/recommendations/${series.id}`} aria-label="Recommendations">
-          <Sparkles size={20} />
-        </Link>
+        {!loadingDetail ? (
+          <Link className="icon-button" to={`/recommendations/${series!.id}`} aria-label="Recommendations">
+            <Sparkles size={20} />
+          </Link>
+        ) : (
+          <button className="icon-button" type="button" aria-label="Recommendations" disabled>
+            <Sparkles size={20} />
+          </button>
+        )}
         <button className="icon-button" type="button" onClick={() => setSettingsOpen(true)} aria-label="Detail settings">
           <EllipsisVertical size={20} />
         </button>
       </div>
-      <section className="detail-identity">
-        {visible.cover && (series.cover ? <img className="detail-cover" src={series.cover} alt="" /> : <div className="detail-cover cover-fallback">No cover</div>)}
-        <div className="detail-copy">
-          {visible.title && <h1 className="detail-title">{series.display_title}</h1>}
-          {visible.authorsArtists && (
-            <p className="detail-creators">{uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable"}</p>
-          )}
-          <p className="detail-facts">
-            {[visible.year && series.year ? String(series.year) : "", visible.status ? series.status ?? "" : "", visible.chapters && series.total_chapters ? `${series.total_chapters} chapters` : ""]
-              .filter(Boolean)
-              .join(" / ")}
-          </p>
-        </div>
-      </section>
-      <DetailStats series={series} visible={visible} history={store.history} latestDate={store.syncMeta?.historyLastDate} />
-      {visible.genreTags && <section className="detail-block"><GenreChips series={series} tagsById={tagsById} /></section>}
-      {visible.links && (
-        <section className="detail-block detail-links">
-          <DetailLinks series={series} />
-        </section>
-      )}
-      {visible.description && detail?.description && (
-        <section className="detail-block">
-          <h2 className="section-title">Description</h2>
-          <RichDescription text={detail.description} />
-        </section>
-      )}
-      {visible.allTags && (
-        <section className="detail-block">
-          <h2 className="section-title">Tags</h2>
-          <div className="chips">
-            {series.tag_ids
-              .map((tagId) => tagsById.get(tagId))
-              .filter(Boolean)
-              .map((tag) => (
-                <span className="chip" key={tag!.id}>
-                  {tag!.name}
-                </span>
-              ))}
-          </div>
-        </section>
-      )}
-      <section className="detail-block detail-recommendations">
-        <div className="row">
-          <h2 className="section-title">Recommendations</h2>
-          <span className="spacer" />
-          <button className="button ghost" type="button" onClick={() => setShowAllRecommendations((value) => !value)}>
-            {showAllRecommendations ? "Show less" : "Show more"}
-          </button>
-        </div>
-        {store.settings.recommendationShelves.slice(0, showAllRecommendations ? undefined : 1).map((shelf) => {
-          const recFeed = createFeed(shelf.name);
-          recFeed.id = `detail-rec-${series.id}-${shelf.id}`;
-          recFeed.view.gridColumns = 3;
-          return (
-            <div className="detail-rec-section" key={shelf.id}>
-              <h3>{shelf.name}</h3>
-              <RecommendationResults base={series} shelf={shelf} feed={recFeed} limit={showAllRecommendations ? 20 : 6} />
+      {loadingDetail ? (
+        <DetailSkeleton />
+      ) : series ? (
+        <>
+          <section className="detail-identity">
+            {visible.cover && (
+              <div className="detail-cover-shell">
+                {series.cover ? <img className="detail-cover" src={series.cover} alt="" /> : <div className="detail-cover cover-fallback">No cover</div>}
+              </div>
+            )}
+            <div className="detail-copy">
+              {visible.title && <h1 className="detail-title">{series.display_title}</h1>}
+              {visible.authorsArtists && (
+                <p className="detail-creators">{uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable"}</p>
+              )}
             </div>
-          );
-        })}
-      </section>
+          </section>
+          <section className="detail-meta-strip" aria-label="Publication details">
+            {visible.year && series.year ? (
+              <div className="detail-meta-chip">
+                <span>Year</span>
+                <strong>{series.year}</strong>
+              </div>
+            ) : null}
+            {visible.status && series.status ? (
+              <div className="detail-meta-chip">
+                <span>Status</span>
+                <strong>{series.status}</strong>
+              </div>
+            ) : null}
+            {visible.chapters && series.total_chapters ? (
+              <div className="detail-meta-chip">
+                <span>Chapters</span>
+                <strong>{series.total_chapters}</strong>
+              </div>
+            ) : null}
+          </section>
+          <DetailStats series={series} visible={visible} history={store.history} latestDate={store.syncMeta?.historyLastDate} />
+          {visible.description && detail?.description && (
+            <section className="detail-block">
+              <h2 className="section-title">Description</h2>
+              <RichDescription text={detail.description} />
+            </section>
+          )}
+          {visible.genreTags && (
+            <section className="detail-block">
+              <GenreChips series={series} tagsById={tagsById} />
+            </section>
+          )}
+          {visible.links && (
+            <section className="detail-block detail-links">
+              <DetailLinks series={series} />
+            </section>
+          )}
+          {visible.allTags && (
+            <section className="detail-block">
+              <h2 className="section-title">Tags</h2>
+              <div className="chips">
+                {series.tag_ids
+                  .map((tagId) => tagsById.get(tagId))
+                  .filter(Boolean)
+                  .map((tag) => (
+                    <span className="chip" key={tag!.id}>
+                      {tag!.name}
+                    </span>
+                  ))}
+              </div>
+            </section>
+          )}
+          <section className="detail-block detail-recommendations">
+            <div className="row">
+              <h2 className="section-title">Recommendations</h2>
+              <span className="spacer" />
+              <button className="button ghost" type="button" onClick={() => setShowAllRecommendations((value) => !value)}>
+                {showAllRecommendations ? "Show less" : "Show more"}
+              </button>
+            </div>
+            {store.settings.recommendationShelves.slice(0, showAllRecommendations ? undefined : 1).map((shelf) => {
+              const recFeed = createFeed(shelf.name);
+              recFeed.id = `detail-rec-${series!.id}-${shelf.id}`;
+              recFeed.view.gridColumns = 3;
+              return (
+                <div className="detail-rec-section" key={shelf.id}>
+                  <h3>{shelf.name}</h3>
+                  <RecommendationResults base={series} shelf={shelf} feed={recFeed} limit={showAllRecommendations ? 20 : 6} />
+                </div>
+              );
+            })}
+          </section>
+        </>
+      ) : showError ? (
+        <div className="detail-error">
+          <p className="muted">{status}</p>
+        </div>
+      ) : (
+        <DetailSkeleton />
+      )}
       <BottomDrawer title="Detail Settings" open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DetailSettingsDrawer visible={visible} onChange={setVisible} />
+        <DetailSettingsDrawer series={series} visible={visible} onChange={setVisible} />
       </BottomDrawer>
     </div>
+  );
+}
+
+function DetailSkeleton() {
+  return (
+    <>
+      <section className="detail-identity detail-skeleton-identity" aria-hidden="true">
+        <div className="detail-cover-shell">
+          <div className="detail-cover skeleton-box" />
+        </div>
+        <div className="detail-copy">
+          <div className="skeleton-line skeleton-line-title" />
+          <div className="skeleton-line skeleton-line-creators" />
+        </div>
+      </section>
+      <section className="detail-meta-strip detail-skeleton-strip" aria-hidden="true">
+        <div className="detail-meta-chip skeleton-chip" />
+        <div className="detail-meta-chip skeleton-chip" />
+        <div className="detail-meta-chip skeleton-chip" />
+      </section>
+      <section className="detail-stat-grid detail-skeleton-stats" aria-hidden="true">
+        <div className="detail-stat skeleton-stat" />
+        <div className="detail-stat skeleton-stat" />
+        <div className="detail-stat skeleton-stat" />
+      </section>
+      <section className="detail-block" aria-hidden="true">
+        <h2 className="section-title">Description</h2>
+        <div className="skeleton-paragraph">
+          <span className="skeleton-line skeleton-line-body" />
+          <span className="skeleton-line skeleton-line-body" />
+          <span className="skeleton-line skeleton-line-body short" />
+        </div>
+      </section>
+      <section className="detail-block" aria-hidden="true">
+        <div className="chips">
+          <span className="chip skeleton-chip" />
+          <span className="chip skeleton-chip" />
+          <span className="chip skeleton-chip" />
+        </div>
+      </section>
+      <section className="detail-block" aria-hidden="true">
+        <div className="chips link-chips">
+          <span className="chip link-chip skeleton-chip" />
+          <span className="chip link-chip skeleton-chip" />
+          <span className="chip link-chip skeleton-chip" />
+        </div>
+      </section>
+      <section className="detail-block detail-recommendations" aria-hidden="true">
+        <div className="row">
+          <h2 className="section-title">Recommendations</h2>
+        </div>
+        <div className="title-grid columns-3 recommendation-picker detail-skeleton-rec-grid">
+          <div className="recommendation-pick skeleton-rec" />
+          <div className="recommendation-pick skeleton-rec" />
+          <div className="recommendation-pick skeleton-rec" />
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -2182,12 +2300,19 @@ function DetailLinks({ series }: { series: SeriesCatalog }) {
 }
 
 function DetailSettingsDrawer({
+  series,
   visible,
   onChange,
 }: {
+  series: SeriesCatalog | null;
   visible: AppSettings["detailVisible"];
   onChange: React.Dispatch<React.SetStateAction<AppSettings["detailVisible"]>>;
 }) {
+  const store = useAppStore();
+  const [draft, setDraft] = useState("");
+  useEffect(() => {
+    setDraft(series ? store.titleOverrides[series.id] ?? "" : "");
+  }, [series?.id, store.titleOverrides, series]);
   const fields: [keyof AppSettings["detailVisible"], string, string][] = [
     ["cover", "Cover", "Show the title artwork."],
     ["title", "Title", "Show the primary title."],
@@ -2208,6 +2333,46 @@ function DetailSettingsDrawer({
   ];
   return (
     <div className="settings-list detail-toggle-list">
+      <section className="detail-override-row">
+        <h3 className="section-title">Local title override</h3>
+        <p className="muted tiny">Stored only on this device. It replaces the resolved title anywhere the app renders this title.</p>
+        <div className="field">
+          <label htmlFor="detail-title-override">Display name</label>
+          <input
+            id="detail-title-override"
+            className="input"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder={series ? visibleTitle(series, store.titleOverrides) : "Type a local name"}
+            disabled={!series}
+          />
+        </div>
+        <div className="toolbar">
+          <button
+            className="button primary"
+            type="button"
+            onClick={() => {
+              if (!series) return;
+              store.setTitleOverride(series.id, draft);
+            }}
+            disabled={!series}
+          >
+            Save override
+          </button>
+          <button
+            className="button"
+            type="button"
+            onClick={() => {
+              if (!series) return;
+              setDraft("");
+              store.clearTitleOverride(series.id);
+            }}
+            disabled={!series || !store.titleOverrides[series.id]}
+          >
+            Clear
+          </button>
+        </div>
+      </section>
       {fields.map(([key, label, description]) => (
         <ToggleRow
           key={key}

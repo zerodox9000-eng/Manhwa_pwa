@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { normalizeCatalog, resolveDisplayTitle } from "./catalog";
+import { resolveVisibleTitle } from "./displayTitle";
 import { formatMetricValue, metricValue } from "./metrics";
 import type { HistoryMap, SeriesCatalog } from "./types";
 
@@ -194,6 +195,18 @@ describe("catalog normalization", () => {
     } as SeriesCatalog;
 
     expect(resolveDisplayTitle(detail)).toBe("I Became a Married Man in Another World");
+  });
+
+  it("lets a local override win before the resolver result", () => {
+    const detail = {
+      ...base,
+      id: 13,
+      display_title: "Her Game of Go",
+      mangabaka_title: "Her Game of Go",
+    } as SeriesCatalog;
+
+    expect(resolveVisibleTitle(detail, { 13: "Local title name" })).toBe("Local title name");
+    expect(resolveVisibleTitle(detail, { 13: "   " })).toBe("Her Game of Go");
   });
 
   it("falls back to romanized titles when no English or display title exists", () => {
