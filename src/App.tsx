@@ -2203,9 +2203,9 @@ function DetailSkeleton({ series }: { series: SeriesCatalog | null }) {
         <div className="detail-meta-chip skeleton-chip" />
       </section>
       <section className="detail-stat-grid detail-skeleton-grid detail-skeleton-stats" aria-hidden="true">
-        <div className="detail-stat skeleton-stat" />
-        <div className="detail-stat skeleton-stat" />
-        <div className="detail-stat skeleton-stat" />
+        <div className="detail-stat skeleton-stat skeleton-stat-compact" />
+        <div className="detail-stat skeleton-stat skeleton-stat-compact" />
+        <div className="detail-stat skeleton-stat skeleton-stat-compact" />
         {hiddenStats.length > 0 && <span className="visually-hidden">{hiddenStats.join(" ")}</span>}
       </section>
       <section className="detail-block" aria-hidden="true">
