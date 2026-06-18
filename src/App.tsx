@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useRegisterSW } from "virtual:pwa-register/react";
 import {
   HashRouter,
   Link,
@@ -71,6 +72,8 @@ const SORT_OPTIONS: MetricId[] = METRIC_DEFINITIONS.map((definition) => definiti
 const RANGE_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.filterable);
 const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.id !== "title" && definition.id !== "mangabakaLatestRank");
 const resetPageScroll = () => window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+const RECOMMENDATION_MIN_RESULTS = 9;
+const RECOMMENDATION_MAX_RESULTS = 18;
 
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 
@@ -110,11 +113,20 @@ function App() {
 function AppFrame() {
   const store = useAppStore();
   const nav = NAV_ITEMS.filter((item) => store.settings.bottomNavItems.includes(item.id));
+  const { needRefresh, updateServiceWorker } = useRegisterSW({
+    onRegisteredSW() {
+      void 0;
+    },
+  });
 
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", store.settings.accentColor);
     document.title = store.settings.appName || "Manhwa Lib";
   }, [store.settings.accentColor, store.settings.appName]);
+
+  useEffect(() => {
+    if (needRefresh) void updateServiceWorker(true);
+  }, [needRefresh, updateServiceWorker]);
 
   return (
     <div className="app-shell">
@@ -1644,7 +1656,7 @@ function RecommendationsPage() {
                   <Trash2 size={16} />
                 </button>
               </div>
-              <RecommendationResults base={selected} shelf={shelf} feed={recFeed} limit={20} />
+              <RecommendationResults base={selected} shelf={shelf} feed={recFeed} limit={RECOMMENDATION_MAX_RESULTS} />
             </section>
           );
         })}
@@ -1704,13 +1716,14 @@ function RecommendationResults({
   const store = useAppStore();
   const [items, setItems] = useState<SeriesCatalog[] | null>(null);
   const shelfKey = JSON.stringify(shelf);
+  const visibleLimit = Math.min(RECOMMENDATION_MAX_RESULTS, Math.max(RECOMMENDATION_MIN_RESULTS, limit));
 
   useEffect(() => {
     let cancelled = false;
     setItems(null);
     const handle = window.setTimeout(() => {
       if (cancelled) return;
-      const ranked = recommendationItems(base, shelf, store).slice(0, limit);
+      const ranked = recommendationItems(base, shelf, store).slice(0, visibleLimit);
       if (!cancelled) setItems(ranked);
     }, 24);
     return () => {
@@ -1721,7 +1734,7 @@ function RecommendationResults({
     base,
     base.id,
     feed.id,
-    limit,
+    visibleLimit,
     shelf,
     shelfKey,
     store,
@@ -2158,7 +2171,12 @@ function TitleDetailPage() {
               return (
                 <div className="detail-rec-section" key={shelf.id}>
                   <h3>{shelf.name}</h3>
-                  <RecommendationResults base={series} shelf={shelf} feed={recFeed} limit={showAllRecommendations ? 20 : 6} />
+                  <RecommendationResults
+                    base={series}
+                    shelf={shelf}
+                    feed={recFeed}
+                    limit={showAllRecommendations ? RECOMMENDATION_MAX_RESULTS : RECOMMENDATION_MIN_RESULTS}
+                  />
                 </div>
               );
             })}
