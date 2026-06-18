@@ -2515,9 +2515,9 @@ textarea,
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   scrollbar-width: none;
-  touch-action: pan-x pan-y pinch-zoom;
+  touch-action: pan-x;
 }
 
 :root[data-motion="off"] .feed-pager {
@@ -2535,6 +2535,7 @@ textarea,
   overflow: hidden;
   scroll-snap-align: start;
   scroll-snap-stop: always;
+  touch-action: pan-y;
 }
 
 .feed-scroll {
@@ -2544,6 +2545,7 @@ textarea,
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding: 14px 14px calc(96px + env(safe-area-inset-bottom));
   scrollbar-width: none;
 }
