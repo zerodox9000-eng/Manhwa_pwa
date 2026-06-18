@@ -1495,6 +1495,7 @@ function SearchPage() {
         keys: [
           { name: "display_title", weight: 0.55 },
           { name: "animeplanet_title", weight: 0.5 },
+          { name: "mangaupdates_title", weight: 0.35 },
           { name: "mangabaka_title", weight: 0.2 },
           { name: "native_title", weight: 0.18 },
           { name: "romanized_title", weight: 0.18 },

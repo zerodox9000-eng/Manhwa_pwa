@@ -9,7 +9,9 @@ const detailDir = path.join(backend, "details");
 const byId = new Map(all.map((item) => [item.id, item]));
 const output = [];
 const apCache = new Map();
+const muCache = new Map();
 const scrapeAnimePlanetTitles = process.env.AP_TITLE_SCRAPE === "1";
+const scrapeMangaUpdatesTitles = process.env.MU_TITLE_SCRAPE !== "0";
 
 function cleanText(value) {
   return (value ?? "").trim();
@@ -90,6 +92,58 @@ async function resolveAnimePlanetTitle(item) {
   return deriveAnimePlanetTitle(item);
 }
 
+function mangaUpdatesSourceUrl(item) {
+  return item?.source?.mangaupdates?.url ?? (item?.source?.mangaupdates?.id ? `https://www.mangaupdates.com/series/${item.source.mangaupdates.id}` : null);
+}
+
+function deriveMangaUpdatesTitle(item) {
+  const raw = item?.mangaupdates_title ?? item?.display_title ?? item?.mangabaka_title ?? "";
+  const title = cleanText(raw);
+  return isPlaceholderTitle(title) ? null : title;
+}
+
+async function scrapeMangaUpdatesTitle(url) {
+  if (!url) return null;
+  if (muCache.has(url)) return muCache.get(url);
+
+  let title = null;
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage({
+      viewport: { width: 1280, height: 1200 },
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+    });
+    page.setDefaultTimeout(15000);
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+    const heading = cleanText(await page.locator("h1").first().textContent().catch(() => ""));
+    const raw = heading || cleanText(await page.title());
+    title = raw
+      .replace(/\s*\|\s*MangaUpdates.*$/i, "")
+      .replace(/\s*Manga\s*$/i, "")
+      .trim();
+    if (isPlaceholderTitle(title)) title = null;
+  } catch {
+    title = null;
+  } finally {
+    await browser?.close().catch(() => {});
+  }
+
+  muCache.set(url, title);
+  return title;
+}
+
+async function resolveMangaUpdatesTitle(item) {
+  const url = mangaUpdatesSourceUrl(item);
+  if (!url) return null;
+  if (scrapeMangaUpdatesTitles) {
+    const scraped = await scrapeMangaUpdatesTitle(url);
+    if (scraped) return scraped;
+  }
+  return deriveMangaUpdatesTitle(item);
+}
+
 for (const file of fs.readdirSync(detailDir)) {
   if (!file.endsWith(".json")) continue;
   const detail = JSON.parse(fs.readFileSync(path.join(detailDir, file), "utf8"));
@@ -97,11 +151,13 @@ for (const file of fs.readdirSync(detailDir)) {
   const links = { ...(detail.links ?? {}) };
   links.mangabaka = `https://mangabaka.org/${detail.id}`;
   const animeplanet_title = (await resolveAnimePlanetTitle(detail)) ?? (await resolveAnimePlanetTitle(base)) ?? base.animeplanet_title ?? detail.animeplanet_title ?? null;
+  const mangaupdates_title = (await resolveMangaUpdatesTitle(detail)) ?? (await resolveMangaUpdatesTitle(base)) ?? base.mangaupdates_title ?? detail.mangaupdates_title ?? null;
   output.push({
     ...base,
     id: detail.id,
     display_title: detail.display_title,
     animeplanet_title,
+    mangaupdates_title,
     cover: detail.cover ?? base.cover ?? null,
     year: detail.year ?? base.year ?? null,
     status: detail.status ?? base.status ?? null,
@@ -128,6 +184,6 @@ const json = JSON.stringify(output);
 fs.writeFileSync("public/data/query-index.json.gz", zlib.gzipSync(json, { level: 9 }));
 fs.writeFileSync(
   "public/data/query-index-meta.json",
-  JSON.stringify({ generatedAt: new Date().toISOString(), totalSeries: output.length, animePlanetTitles: true, scraped: scrapeAnimePlanetTitles }, null, 2),
+  JSON.stringify({ generatedAt: new Date().toISOString(), totalSeries: output.length, animePlanetTitles: true, mangaupdatesTitles: true, scraped: { animePlanet: scrapeAnimePlanetTitles, mangaUpdates: scrapeMangaUpdatesTitles } }, null, 2),
 );
 console.log(`Generated ${output.length} query-index records (${Buffer.byteLength(json)} bytes json).`);

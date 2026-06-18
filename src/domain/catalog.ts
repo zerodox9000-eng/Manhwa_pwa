@@ -88,6 +88,14 @@ function preferredTitleCandidates(item: SeriesCatalog) {
     raw.animePlanetTitle,
     raw.animeplanetTitle,
   ]);
+  const mangaUpdates = candidateStrings([
+    item.mangaupdates_title,
+    raw.mangaupdates_title,
+    raw.mangaupdatesTitle,
+    raw.mangaUpdatesTitle,
+    raw.mangaupdates_title_english,
+    raw.mangaupdatesEnglishTitle,
+  ]);
   const explicitEnglish = candidateStrings([
     raw.english_title,
     raw.title_english,
@@ -123,6 +131,7 @@ function preferredTitleCandidates(item: SeriesCatalog) {
 
   return {
     animeplanet: animePlanet,
+    mangaupdates: mangaUpdates,
     display:
       displayTitle &&
       !PLACEHOLDER_TITLE.test(displayTitle) &&
@@ -167,6 +176,7 @@ export function resolveDisplayTitle(item: SeriesCatalog, fallback?: SeriesCatalo
   const tiers = records.map(preferredTitleCandidates);
   const title = firstCandidate([
     tiers.flatMap((tier) => tier.animeplanet),
+    tiers.flatMap((tier) => tier.mangaupdates),
     tiers.flatMap((tier) => tier.display),
     tiers.flatMap((tier) => tier.explicitEnglish),
     tiers.flatMap((tier) => tier.englishPrimaryOfficial),

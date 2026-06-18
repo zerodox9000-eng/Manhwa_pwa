@@ -88,6 +88,7 @@ function mergeLiveCatalog(liveCatalog: SeriesCatalog[], enrichedCatalog: SeriesC
       last_updated_at: fixedLive.last_updated_at ?? enriched.last_updated_at,
       display_title: resolveDisplayTitle(enriched, fixedLive),
       animeplanet_title: fixedLive.animeplanet_title ?? enriched.animeplanet_title,
+      mangaupdates_title: fixedLive.mangaupdates_title ?? enriched.mangaupdates_title,
       mangabaka_title: fixedLive.mangabaka_title ?? enriched.mangabaka_title,
       native_title: fixedLive.native_title ?? enriched.native_title,
       romanized_title: fixedLive.romanized_title ?? enriched.romanized_title,
