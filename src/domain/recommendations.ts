@@ -29,6 +29,8 @@ const PROFILE_WEIGHTS: Record<string, number> = {
   "medical-core": 4.4,
   "engineering-core": 5.0,
   "meta-core": 4.6,
+  "female-lead-core": 5.2,
+  "male-lead-core": 5.2,
   "business-career-regression": 5.6,
   "korean-corporate-regression": 6.4,
   "sci-fi-business-regression": 7,
@@ -70,6 +72,8 @@ const PRIMARY_PROFILE_GROUPS = new Set([
   "medical-core",
   "engineering-core",
   "meta-core",
+  "female-lead-core",
+  "male-lead-core",
   "business-career-regression",
   "korean-corporate-regression",
   "sci-fi-business-regression",
@@ -106,6 +110,8 @@ const CORE_PROFILE_GROUPS = new Set([
   "medical-core",
   "engineering-core",
   "meta-core",
+  "female-lead-core",
+  "male-lead-core",
 ]);
 
 const STORY_FAMILY_PATTERNS: Array<{ id: string; tag: RegExp; text: RegExp; anchor?: boolean }> = [
@@ -193,6 +199,18 @@ const STORY_FAMILY_PATTERNS: Array<{ id: string; tag: RegExp; text: RegExp; anch
     tag: /webtoon|game world|virtual reality|system administrator|reader|character/,
     text: /webtoon|game world|virtual reality|system|reader|character|inside the story|fiction|meta/,
   },
+  {
+    id: "female-lead-core",
+    tag: /female lead|female protagonist|female oriented|josei|shoujo|girls love|heroine|woman|women|girl|daughter|wife|widow|princess|queen|concubine|lady|empress|maid|sister|mother/,
+    text: /female lead|female protagonist|heroine|woman|women|girl|daughter|wife|widow|princess|queen|concubine|lady|empress|maid|sister|mother/,
+    anchor: true,
+  },
+  {
+    id: "male-lead-core",
+    tag: /male lead|male protagonist|male oriented|shounen|boys love|hero|man|men|boy|husband|son|brother|father|gentleman/,
+    text: /male lead|male protagonist|hero|man|men|boy|husband|son|brother|father|gentleman/,
+    anchor: true,
+  },
 ];
 
 const TEXT_STOPWORDS = new Set([
@@ -278,11 +296,22 @@ function addFeature(features: Record<string, number>, key: string, value: number
   features[key] = Number(((features[key] ?? 0) + value).toFixed(4));
 }
 
-function familySignalsFor(series: SeriesCatalog, tagsById: Map<number, TagNode>) {
+function featureTextKeys(feature?: RecommendationFeature) {
+  if (!feature) return "";
+  return Object.entries(feature.textFeatures)
+    .flatMap(([key, value]) => {
+      const count = Math.max(1, Math.min(3, Math.round(value)));
+      return Array.from({ length: count }, () => key);
+    })
+    .join(" ");
+}
+
+function familySignalsFor(series: SeriesCatalog, tagsById: Map<number, TagNode>, extraText = "") {
   const signals: Record<string, number> = {};
   const text = normalizeText(
     [
       featureTermText(series),
+      extraText,
       ...(series.tag_ids ?? [])
         .map((id) => tagsById.get(id))
         .filter((tag): tag is TagNode => Boolean(tag))
@@ -301,11 +330,11 @@ function familySignalsFor(series: SeriesCatalog, tagsById: Map<number, TagNode>)
   return signals;
 }
 
-function buildDominantContext(series: SeriesCatalog, tagsById: Map<number, TagNode>) {
+function buildDominantContext(series: SeriesCatalog, tagsById: Map<number, TagNode>, extraText = "") {
   const tags = seriesTagTexts(series, tagsById);
   if (!tags.length) return { profileGroups: [], primaryAnchors: [] };
   const titleText = featureTermText(series);
-  const familySignals = familySignalsFor(series, tagsById);
+  const familySignals = familySignalsFor(series, tagsById, extraText);
   const groups = new Set<string>();
   const anchors = new Set<string>();
 
@@ -390,7 +419,9 @@ function buildDominantContext(series: SeriesCatalog, tagsById: Map<number, TagNo
       family === "game-core" ||
       family === "court-core" ||
       family === "family-politics-core" ||
-      family === "engineering-core"
+      family === "engineering-core" ||
+      family === "female-lead-core" ||
+      family === "male-lead-core"
     ) {
       anchors.add(family);
     }
@@ -422,7 +453,7 @@ function buildDominantContext(series: SeriesCatalog, tagsById: Map<number, TagNo
 }
 
 function withDominantContext(series: SeriesCatalog, feature: RecommendationFeature, tagsById: Map<number, TagNode>) {
-  const context = buildDominantContext(series, tagsById);
+  const context = buildDominantContext(series, tagsById, featureTextKeys(feature));
   if (context.profileGroups.length === 0) return feature;
   return {
     ...feature,
@@ -470,6 +501,8 @@ export function buildFallbackRecommendationFeature(series: SeriesCatalog, tagsBy
   if (hasText(text, /south korea|korean|seoul|chaebol|kdrama|naver|kakao|webtoon/)) profileGroups.add("modern-korea");
   if (hasText(text, /working|office|company|ceo|director|secretary|coworker|employee|career|manager/)) profileGroups.add("modern-workplace");
   if (hasText(text, /romance|marriage|pregnancy|dating|couple|wife|husband|fiance|one-night stand|love triangle|male lead falls in love|mature romance/)) profileGroups.add("romance-core");
+  if (hasText(text, /female lead|female protagonist|heroine|woman|women|girl|daughter|wife|widow|princess|queen|concubine|lady|empress|maid|sister|mother|josei|shoujo/)) profileGroups.add("female-lead-core");
+  if (hasText(text, /male lead|male protagonist|hero|man|men|boy|husband|son|brother|father|gentleman|shounen/)) profileGroups.add("male-lead-core");
   if (hasText(text, /horror|gore|ghost|zombie|death game|survival horror|psychological horror/)) profileGroups.add("horror-survival");
   if (hasText(text, /murim|wuxia|martial arts|cultivation|sect|martial artist|ancient china|chinese ambience|chinese mythology/)) profileGroups.add("murim-wuxia");
   if (hasText(text, /wuxia|cultivation|sect|ancient china|chinese ambience|chinese mythology/)) profileGroups.add("chinese-murim");
@@ -502,6 +535,8 @@ export function buildFallbackRecommendationFeature(series: SeriesCatalog, tagsBy
   if (profileGroups.has("business-career") && profileGroups.has("modern-korea")) profileGroups.add("korean-business");
   if (profileGroups.has("business-career") && profileGroups.has("romance-core")) profileGroups.add("romance-heavy");
   if (profileGroups.has("romance-core") && profileGroups.has("modern-workplace") && !profileGroups.has("business-career")) profileGroups.add("office-romance");
+  if (profileGroups.has("female-lead-core") && profileGroups.has("romance-core")) profileGroups.add("female-led-romance");
+  if (profileGroups.has("male-lead-core") && profileGroups.has("business-career")) profileGroups.add("male-led-business");
 
   const tagFeatures: Record<string, number> = {};
   for (const tagId of series.tag_ids ?? []) {
@@ -605,6 +640,8 @@ function storyAffinity(base: RecommendationFeature, candidate: RecommendationFea
     (baseGroups.has("game-core") && hasAny(candidateGroups, ["business-core", "romance-core"]) && !candidateGroups.has("game-core") ? 0.24 : 1) *
     (baseGroups.has("court-core") && hasAny(candidateGroups, ["business-core", "murim-core", "game-core"]) && !candidateGroups.has("court-core") ? 0.05 : 1) *
     (baseGroups.has("romance-core") && hasAny(candidateGroups, ["business-core", "murim-core", "game-core"]) && !candidateGroups.has("romance-core") ? 0.55 : 1) *
+    (baseGroups.has("female-lead-core") && candidateGroups.has("male-lead-core") && !candidateGroups.has("female-lead-core") ? 0.22 : 1) *
+    (baseGroups.has("male-lead-core") && candidateGroups.has("female-lead-core") && !candidateGroups.has("male-lead-core") ? 0.22 : 1) *
     (baseGroups.has("survival-core") && candidateGroups.has("romance-core") && !candidateGroups.has("survival-core") ? 0.4 : 1);
 
   const anchorPenalty = baseAnchors.size > 0 && sharedAnchors === 0 ? 0.7 : 1;

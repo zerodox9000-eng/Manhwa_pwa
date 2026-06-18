@@ -59,6 +59,8 @@ function feature(
         "romance-core",
         "psychological-core",
         "engineering-core",
+        "female-lead-core",
+        "male-lead-core",
         "business-career-regression",
         "corporate-workplace",
         "korean-business",
@@ -299,6 +301,39 @@ describe("rankRecommendations", () => {
     }).map((item) => item.id);
 
     expect(ranked[0]).toBe(302);
-    expect(ranked.indexOf(301)).toBeGreaterThan(ranked.indexOf(302));
+    expect(ranked).not.toContain(301);
+  });
+
+  it("keeps female-led court and romance titles away from male-led action titles", () => {
+    const localTags = [
+      tag(1, "Female Lead", "Character Types > Female Lead"),
+      tag(2, "Male Lead", "Character Types > Male Lead"),
+      tag(3, "Concubine", "Settings > Palace > Concubine"),
+      tag(4, "Court", "Settings > Palace > Court"),
+      tag(5, "Romance", "Genres > Romance", { is_genre: true }),
+      tag(6, "Action", "Genres > Action", { is_genre: true }),
+    ];
+    const localTitles = [
+      taggedSeries(400, "Concubine Walkthrough", [1, 3, 4, 5], 97),
+      taggedSeries(401, "Royal Strategy Romance", [1, 3, 4, 5], 93),
+      taggedSeries(402, "Male Action Hero", [2, 6], 99),
+    ];
+    const localFeatures = [
+      feature(400, ["court-core", "family-politics-core", "female-lead-core", "romance-core"], { heroine: 3, concubine: 3, queen: 2, romance: 2, female: 2 }, 97),
+      feature(401, ["court-core", "female-lead-core", "romance-core"], { heroine: 2, court: 3, romance: 3, female: 2 }, 93),
+      feature(402, ["male-lead-core"], { hero: 3, male: 3, action: 3 }, 99),
+    ];
+    const ranked = rankRecommendations({
+      base: localTitles[0],
+      candidates: localTitles.slice(1),
+      tags: localTags,
+      features: localFeatures,
+      shelf,
+      history: {},
+      latestDate: null,
+    }).map((item) => item.id);
+
+    expect(ranked[0]).toBe(401);
+    expect(ranked).not.toContain(402);
   });
 });
