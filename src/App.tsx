@@ -23,7 +23,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Fuse from "fuse.js";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import {
   HashRouter,
@@ -38,7 +39,7 @@ import {
 } from "react-router-dom";
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT } from "./domain/defaults";
 import { resolveRollingWindow } from "./domain/dates";
-import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
+import { feedUsesAniListOnlyParameters, isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
@@ -1472,26 +1473,39 @@ function SearchPage() {
     feed.view = { ...feed.view, gridColumns: 3 };
     return feed;
   }, []);
-  const sensitiveTagGroups = useMemo(() => buildSensitiveTagGroups(store.tags), [store.tags]);
   const getTitle = useCallback((item: SeriesCatalog) => visibleTitle(item, store.titleOverrides), [store.titleOverrides]);
-  const results = useMemo(
+  const inputQuery = query;
+  const deferredQuery = useDeferredValue(inputQuery);
+  const searchIndex = useMemo(
     () =>
-      query.trim()
-        ? store.catalog
-            .filter((item) => {
-              if (!getTitle(item).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) return false;
-              if (!["safe", "suggestive"].includes(String(item.content_rating ?? ""))) return false;
-              if (!store.settings.searchRelationshipTags && item.tag_ids.some((id) => sensitiveTagGroups.relationship.has(id))) return false;
-              if (!store.settings.searchAdultTags && item.tag_ids.some((id) => sensitiveTagGroups.adult.has(id))) return false;
-              return true;
-            })
-            .sort((a, b) => getTitle(a).localeCompare(getTitle(b)))
-        : [],
-    [getTitle, query, sensitiveTagGroups, store.catalog, store.settings.searchAdultTags, store.settings.searchRelationshipTags],
+      new Fuse(store.catalog, {
+        includeScore: true,
+        shouldSort: true,
+        ignoreLocation: true,
+        minMatchCharLength: 2,
+        threshold: 0.28,
+        keys: [
+          { name: "display_title", weight: 0.55 },
+          { name: "mangabaka_title", weight: 0.2 },
+          { name: "native_title", weight: 0.18 },
+          { name: "romanized_title", weight: 0.18 },
+          { name: "authors", weight: 0.1 },
+          { name: "artists", weight: 0.1 },
+        ],
+      }),
+    [store.catalog],
   );
+  const results = useMemo(() => {
+    const term = deferredQuery.trim();
+    if (!term) return [];
+    return searchIndex
+      .search(term, { limit: 60 })
+      .map((result) => result.item)
+      .sort((a, b) => getTitle(a).localeCompare(getTitle(b)));
+  }, [deferredQuery, getTitle, searchIndex]);
   useEffect(() => {
-    sessionStorage.setItem("manhwa-search-query", query);
-  }, [query]);
+    sessionStorage.setItem("manhwa-search-query", inputQuery);
+  }, [inputQuery]);
   const remember = (value = query) => {
     const clean = value.trim();
     if (!clean) return;
