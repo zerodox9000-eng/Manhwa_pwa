@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, createFeed } from "./defaults";
-import { feedUsesAniListOnlyParameters, runFeedQuery } from "./query";
+import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, runFeedQuery } from "./query";
 import type { HistoryMap, SeriesCatalog, TagNode } from "./types";
 
 const tags: TagNode[] = [
   { id: 1, name: "Action", path: "Genres > Action", is_genre: true, parent_id: null, level: 1 },
+  { id: 7, name: "Boys Love", path: "Themes > Relationship > Boys Love", is_genre: false, parent_id: null, level: 3 },
+  { id: 8, name: "School Boys Love", path: "Themes > Relationship > Boys Love > School Boys Love", is_genre: false, parent_id: 7, level: 4 },
   { id: 2, name: "Hentai", path: "Sexual Content > Intensity > Hentai", is_genre: true, parent_id: null, level: 2 },
   { id: 3, name: "Fantasy", path: "Themes > Fantasy", is_genre: true, parent_id: null, level: 2 },
   { id: 4, name: "Isekai", path: "Themes > Fantasy > Isekai", is_genre: false, parent_id: 3, level: 3 },
@@ -131,6 +133,13 @@ describe("runFeedQuery", () => {
       metaHistoryLast: "2024-05-10",
     });
     expect(result.items.map((item) => item.id)).toEqual([40]);
+  });
+
+  it("includes Boys Love descendants in the global relationship sensitive group", () => {
+    const groups = buildSensitiveTagGroups(tags);
+    expect(groups.relationship.has(7)).toBe(true);
+    expect(groups.relationship.has(8)).toBe(true);
+    expect(groups.relationship.has(5)).toBe(false);
   });
 
   it("segments non-AniList titles by source mode", () => {

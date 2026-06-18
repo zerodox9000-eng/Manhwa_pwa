@@ -27,8 +27,31 @@ function buildExactTagSet(tags: TagNode[], names: Set<string>) {
   return new Set(tags.filter((tag) => names.has(tag.name.trim().toLocaleLowerCase())).map((tag) => tag.id));
 }
 
+function buildDescendantTagSet(tags: TagNode[], roots: Set<number>) {
+  if (roots.size === 0) return new Set<number>();
+  const byParent = new Map<number, number[]>();
+  for (const tag of tags) {
+    if (tag.parent_id == null) continue;
+    const children = byParent.get(tag.parent_id) ?? [];
+    children.push(tag.id);
+    byParent.set(tag.parent_id, children);
+  }
+  const collected = new Set<number>(roots);
+  const queue = [...roots];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const childId of byParent.get(current) ?? []) {
+      if (collected.has(childId)) continue;
+      collected.add(childId);
+      queue.push(childId);
+    }
+  }
+  return collected;
+}
+
 export function buildSensitiveTagGroups(tags: TagNode[]) {
-  const relationship = buildExactTagSet(tags, RELATIONSHIP_SENSITIVE_NAMES);
+  const relationshipRoots = buildExactTagSet(tags, RELATIONSHIP_SENSITIVE_NAMES);
+  const relationship = buildDescendantTagSet(tags, relationshipRoots);
   const adult = buildExactTagSet(tags, ADULT_SENSITIVE_NAMES);
   return {
     relationship,
