@@ -635,6 +635,14 @@ export function scoreRecommendation(base: RecommendationFeature, candidate: Reco
   const sharedPrimaryAnchors = sharedCount(basePrimaryAnchors, anchorSet(candidate));
   const anchorCoverage = basePrimaryAnchors.size ? sharedPrimaryAnchors / basePrimaryAnchors.size : 0;
   const affinity = storyAffinity(base, candidate, { profileScore, tagScore, textScore }) * (mode === "strict" ? 1 : 0.92);
+  const baseCoreGroups = base.profileGroups.filter((group) => CORE_PROFILE_GROUPS.has(group));
+  const candidateCoreGroups = candidate.profileGroups.filter((group) => CORE_PROFILE_GROUPS.has(group));
+  const coreOverlap = weightedOverlap(baseCoreGroups, candidateCoreGroups);
+  const baseAnchors = anchorSet(base);
+  const candidateAnchors = anchorSet(candidate);
+  const sharedCoreAnchors = sharedCount(baseAnchors, candidateAnchors);
+
+  if (baseCoreGroups.length > 0 && mode === "relaxed" && coreOverlap < 0.28 && sharedCoreAnchors === 0) return null;
 
   const sharedKoreanBusinessRegression =
     ((base.profileGroups.includes("sci-fi-business-regression") &&
