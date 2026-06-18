@@ -72,7 +72,7 @@ const SORT_OPTIONS: MetricId[] = METRIC_DEFINITIONS.map((definition) => definiti
 const RANGE_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.filterable);
 const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.id !== "title" && definition.id !== "mangabakaLatestRank");
 const resetPageScroll = () => window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-const RECOMMENDATION_MIN_RESULTS = 9;
+const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
 
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
@@ -1716,7 +1716,7 @@ function RecommendationResults({
   const store = useAppStore();
   const [items, setItems] = useState<SeriesCatalog[] | null>(null);
   const shelfKey = JSON.stringify(shelf);
-  const visibleLimit = Math.min(RECOMMENDATION_MAX_RESULTS, Math.max(RECOMMENDATION_MIN_RESULTS, limit));
+  const visibleLimit = Math.min(RECOMMENDATION_MAX_RESULTS, Math.max(RECOMMENDATION_DEFAULT_RESULTS, limit));
 
   useEffect(() => {
     let cancelled = false;
@@ -2175,7 +2175,7 @@ function TitleDetailPage() {
                     base={series}
                     shelf={shelf}
                     feed={recFeed}
-                    limit={showAllRecommendations ? RECOMMENDATION_MAX_RESULTS : RECOMMENDATION_MIN_RESULTS}
+                    limit={showAllRecommendations ? RECOMMENDATION_MAX_RESULTS : RECOMMENDATION_DEFAULT_RESULTS}
                   />
                 </div>
               );
@@ -2253,9 +2253,9 @@ function DetailSkeleton({ series }: { series: SeriesCatalog | null }) {
           <h2 className="section-title">Recommendations</h2>
         </div>
         <div className="title-grid columns-3 recommendation-picker detail-skeleton-rec-grid">
-          <div className="recommendation-pick skeleton-rec" />
-          <div className="recommendation-pick skeleton-rec" />
-          <div className="recommendation-pick skeleton-rec" />
+          {Array.from({ length: RECOMMENDATION_DEFAULT_RESULTS }).map((_, index) => (
+            <div className="recommendation-pick skeleton-rec" key={index} />
+          ))}
         </div>
       </section>
     </>
