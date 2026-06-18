@@ -247,7 +247,7 @@ export function runFeedQuery(args: {
     for (const rule of feed.sort) {
       let av = metricValue(a, rule.metric, history, metaHistoryLast);
       let bv = metricValue(b, rule.metric, history, metaHistoryLast);
-      if (growthWindow && rule.metric.includes("Growth")) {
+      if (growthWindow && (rule.metric.includes("Growth") || rule.metric.includes("Delta"))) {
         av = historyDeltaForWindow(a.id, rule.metric, history, growthWindow.from, growthWindow.to) ?? av;
         bv = historyDeltaForWindow(b.id, rule.metric, history, growthWindow.from, growthWindow.to) ?? bv;
       }
