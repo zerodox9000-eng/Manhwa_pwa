@@ -122,9 +122,9 @@ a {
 
 .section-title {
   margin: 0 0 12px;
-  color: rgba(236, 240, 255, 0.82);
+  color: rgba(230, 236, 249, 0.8);
   font-size: 13px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
@@ -2343,7 +2343,8 @@ textarea,
 
 /* Restored detail and wide-layout polish after duplicate cleanup. */
 .detail-block p {
-  line-height: 1.68;
+  color: rgba(236, 240, 249, 0.9);
+  line-height: 1.65;
 }
 
 .detail-block .section-title {
@@ -2356,7 +2357,7 @@ textarea,
 
 .detail-rec-section h3 {
   margin: 2px 0 12px;
-  color: var(--foreground);
+  color: rgba(236, 240, 249, 0.9);
   font-size: 15px;
   line-height: 1.2;
 }
@@ -2364,6 +2365,7 @@ textarea,
 .rich-description {
   display: grid;
   gap: 12px;
+  color: rgba(236, 240, 249, 0.92);
 }
 
 .rich-description p {
@@ -2372,7 +2374,7 @@ textarea,
 }
 
 .rich-description a {
-  color: #9db7ff;
+  color: #aec4ff;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
@@ -2871,7 +2873,7 @@ textarea,
   border-radius: 10px;
   background: rgba(27, 31, 46, 0.72);
   border: 1px solid rgba(151, 174, 255, 0.36);
-  color: #dbe4ff;
+  color: #e2e8ff;
   font-weight: 850;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
