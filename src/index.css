@@ -1253,17 +1253,20 @@ select {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  margin: 18px 0;
+  margin: 14px 0 18px;
 }
 
 .detail-stat {
   display: grid;
-  gap: 3px;
-  padding: 12px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.055);
-  backdrop-filter: blur(14px) saturate(1.12);
+  gap: 4px;
+  padding: 11px 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 10px 24px rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(16px) saturate(1.14);
   text-align: center;
 }
 
@@ -1404,7 +1407,8 @@ select {
 }
 
 .detail-stat strong {
-  font-size: 19px;
+  font-size: 18px;
+  line-height: 1.02;
 }
 
 .detail-stat span {
@@ -1413,15 +1417,15 @@ select {
 }
 
 .detail-block {
-  margin: 18px 0;
+  margin: 16px 0;
   padding: 14px 14px 15px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.045);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.05);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 10px 24px rgba(0, 0, 0, 0.12);
-  backdrop-filter: blur(14px) saturate(1.1);
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 24px rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(16px) saturate(1.12);
 }
 
 html {
@@ -2020,19 +2024,19 @@ textarea,
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  margin: 18px 0;
+  margin: 14px 0 18px;
 }
 
 .detail-block {
-  margin: 18px 0;
+  margin: 16px 0;
   padding: 14px 14px 15px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.045);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.05);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    0 10px 24px rgba(0, 0, 0, 0.12);
-  backdrop-filter: blur(14px) saturate(1.1);
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 24px rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(16px) saturate(1.12);
 }
 
 /* True final regression overrides: keep this block at EOF. */
@@ -2294,13 +2298,16 @@ textarea,
 
 .detail-stat-grid {
   width: min(720px, 100%);
-  margin: 22px auto 18px;
+  margin: 16px auto 18px;
 }
 
 .detail-stat {
-  border: 0;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 10px 24px rgba(0, 0, 0, 0.14);
 }
 
 @media (max-width: 420px) {
@@ -2334,6 +2341,13 @@ textarea,
 
 .detail-block .chips {
   margin-bottom: 0;
+}
+
+.detail-rec-section h3 {
+  margin: 2px 0 12px;
+  color: var(--foreground);
+  font-size: 15px;
+  line-height: 1.2;
 }
 
 .rich-description {
@@ -2872,6 +2886,8 @@ textarea,
   place-items: center;
   text-align: center;
   min-width: 0;
+  gap: 4px;
+  padding: 11px 8px 10px;
 }
 
 .detail-stat strong,
