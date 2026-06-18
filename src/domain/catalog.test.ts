@@ -197,16 +197,16 @@ describe("catalog normalization", () => {
     expect(resolveDisplayTitle(detail)).toBe("I Became a Married Man in Another World");
   });
 
-  it("lets a local override win before the resolver result", () => {
+  it("prefers the Anime-Planet title when it exists", () => {
     const detail = {
       ...base,
       id: 13,
       display_title: "Her Game of Go",
       mangabaka_title: "Her Game of Go",
+      animeplanet_title: "Anime-Planet English Title",
     } as SeriesCatalog;
 
-    expect(resolveVisibleTitle(detail, { 13: "Local title name" })).toBe("Local title name");
-    expect(resolveVisibleTitle(detail, { 13: "   " })).toBe("Her Game of Go");
+    expect(resolveVisibleTitle(detail)).toBe("Anime-Planet English Title");
   });
 
   it("falls back to romanized titles when no English or display title exists", () => {

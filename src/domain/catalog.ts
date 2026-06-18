@@ -82,6 +82,12 @@ function titleEntryGroups(item: SeriesCatalog) {
 function preferredTitleCandidates(item: SeriesCatalog) {
   const raw = item as SeriesCatalog & Record<string, unknown>;
   const titleGroups = titleEntryGroups(item);
+  const animePlanet = candidateStrings([
+    item.animeplanet_title,
+    raw.animeplanet_title,
+    raw.animePlanetTitle,
+    raw.animeplanetTitle,
+  ]);
   const explicitEnglish = candidateStrings([
     raw.english_title,
     raw.title_english,
@@ -116,6 +122,7 @@ function preferredTitleCandidates(item: SeriesCatalog) {
   );
 
   return {
+    animeplanet: animePlanet,
     display:
       displayTitle &&
       !PLACEHOLDER_TITLE.test(displayTitle) &&
@@ -159,6 +166,7 @@ export function resolveDisplayTitle(item: SeriesCatalog, fallback?: SeriesCatalo
   const records = fallback ? [fallback, item] : [item];
   const tiers = records.map(preferredTitleCandidates);
   const title = firstCandidate([
+    tiers.flatMap((tier) => tier.animeplanet),
     tiers.flatMap((tier) => tier.display),
     tiers.flatMap((tier) => tier.explicitEnglish),
     tiers.flatMap((tier) => tier.englishPrimaryOfficial),
@@ -235,6 +243,7 @@ function mergeRecord(left: SeriesCatalog, right: SeriesCatalog) {
       ...(left.merged_ids ?? []),
       ...(right.merged_ids ?? []),
     ]),
+    animeplanet_title: preferred.animeplanet_title ?? secondary.animeplanet_title ?? null,
     mangabaka_title: preferred.mangabaka_title ?? secondary.mangabaka_title ?? null,
     native_title: preferred.native_title ?? secondary.native_title ?? null,
     romanized_title: preferred.romanized_title ?? secondary.romanized_title ?? null,
@@ -348,6 +357,7 @@ export function normalizeCatalog(
       ...merged,
       merged_ids: ids,
       display_title: resolveDisplayTitle(merged),
+      animeplanet_title: merged.animeplanet_title ?? null,
       first_seen_at: firstSeen,
       published,
       year: hasActualStartDate ? Number(published.start_date!.slice(0, 4)) : merged.year,

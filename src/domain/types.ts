@@ -43,6 +43,7 @@ export interface SeriesCatalog {
   id: number;
   merged_ids?: number[];
   display_title: string;
+  animeplanet_title?: string | null;
   mangabaka_title?: string | null;
   native_title?: string | null;
   romanized_title?: string | null;

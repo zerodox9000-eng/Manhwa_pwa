@@ -78,8 +78,8 @@ const RECOMMENDATION_MAX_RESULTS = 18;
 
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 
-function visibleTitle(series: SeriesCatalog, titleOverrides: Record<number, string> = {}, fallback?: SeriesCatalog) {
-  return resolveVisibleTitle(series, titleOverrides, fallback);
+function visibleTitle(series: SeriesCatalog, fallback?: SeriesCatalog) {
+  return resolveVisibleTitle(series, fallback);
 }
 
 function formatStatusLabel(value: string | null | undefined) {
@@ -584,8 +584,7 @@ function LoadMore({ visibleCount, total, onMore }: { visibleCount: number; total
 }
 
 function Cover({ series, priority = false }: { series: SeriesCatalog; priority?: boolean }) {
-  const store = useAppStore();
-  const title = visibleTitle(series, store.titleOverrides);
+  const title = visibleTitle(series);
   const initials = title
     .split(/\s+/)
     .filter(Boolean)
@@ -649,8 +648,7 @@ function TitleCard({
   latestDate?: string | null;
   metricWindow?: { from: string; to: string } | null;
 }) {
-  const store = useAppStore();
-  const title = visibleTitle(series, store.titleOverrides);
+  const title = visibleTitle(series);
   return (
     <div className="title-card-wrap">
       <Link to={`/title/${series.id}`} className="title-card" data-testid="title-card">
@@ -1473,7 +1471,7 @@ function SearchPage() {
     feed.view = { ...feed.view, gridColumns: 3 };
     return feed;
   }, []);
-  const getTitle = useCallback((item: SeriesCatalog) => visibleTitle(item, store.titleOverrides), [store.titleOverrides]);
+  const getTitle = useCallback((item: SeriesCatalog) => visibleTitle(item), []);
   const inputQuery = query;
   const deferredQuery = useDeferredValue(inputQuery);
   const searchIndex = useMemo(
@@ -1571,7 +1569,7 @@ function RecommendationsPage() {
   const [selectedId, setSelectedId] = useState<number | null>(Number(params.id) || null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingShelf, setEditingShelf] = useState<RecommendationShelf | null>(null);
-  const getTitle = useCallback((item: SeriesCatalog) => visibleTitle(item, store.titleOverrides), [store.titleOverrides]);
+  const getTitle = useCallback((item: SeriesCatalog) => visibleTitle(item), []);
   const defaultRecommendationTitle = store.catalog.find((item) => getTitle(item).toLocaleLowerCase() === "bastard");
   const selected =
     store.catalog.find((item) => item.id === selectedId) ??
@@ -2069,7 +2067,7 @@ function TitleDetailPage() {
 
   const series = useMemo(() => {
     if (!detail || detail.id !== id) return null;
-    const localTitle = resolveVisibleTitle(detail, store.titleOverrides, catalogItem ?? undefined);
+    const localTitle = resolveVisibleTitle(detail, catalogItem ?? undefined);
     return catalogItem
       ? {
           ...detail,
@@ -2084,7 +2082,7 @@ function TitleDetailPage() {
           links: { ...(detail.links ?? {}), ...(catalogItem.links ?? {}) },
         }
       : { ...detail, display_title: localTitle };
-  }, [catalogItem, detail, id, store.titleOverrides]);
+  }, [catalogItem, detail, id]);
 
   const loadingDetail = !invalidRoute && (loading || Boolean(detail && detail.id !== id));
   const showError = invalidRoute || (!loading && !detail && status && status !== "Loading detail");
@@ -2204,7 +2202,7 @@ function TitleDetailPage() {
         <DetailSkeleton series={null} />
       )}
       <BottomDrawer title="Detail Settings" open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DetailSettingsDrawer series={series} visible={visible} onChange={setVisible} />
+        <DetailSettingsDrawer visible={visible} onChange={setVisible} />
       </BottomDrawer>
     </div>
   );
@@ -2406,19 +2404,12 @@ function DetailLinks({ series }: { series: SeriesCatalog }) {
 }
 
 function DetailSettingsDrawer({
-  series,
   visible,
   onChange,
 }: {
-  series: SeriesCatalog | null;
   visible: AppSettings["detailVisible"];
   onChange: React.Dispatch<React.SetStateAction<AppSettings["detailVisible"]>>;
 }) {
-  const store = useAppStore();
-  const [draft, setDraft] = useState("");
-  useEffect(() => {
-    setDraft(series ? store.titleOverrides[series.id] ?? "" : "");
-  }, [series?.id, store.titleOverrides, series]);
   const fields: [keyof AppSettings["detailVisible"], string, string][] = [
     ["cover", "Cover", "Show the title artwork."],
     ["title", "Title", "Show the primary title."],
@@ -2439,46 +2430,6 @@ function DetailSettingsDrawer({
   ];
   return (
     <div className="settings-list detail-toggle-list">
-      <section className="detail-override-row">
-        <h3 className="section-title">Local title override</h3>
-        <p className="muted tiny">Stored only on this device. It replaces the resolved title anywhere the app renders this title.</p>
-        <div className="field">
-          <label htmlFor="detail-title-override">Display name</label>
-          <input
-            id="detail-title-override"
-            className="input"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder={series ? visibleTitle(series, store.titleOverrides) : "Type a local name"}
-            disabled={!series}
-          />
-        </div>
-        <div className="toolbar">
-          <button
-            className="button primary"
-            type="button"
-            onClick={() => {
-              if (!series) return;
-              store.setTitleOverride(series.id, draft);
-            }}
-            disabled={!series}
-          >
-            Save override
-          </button>
-          <button
-            className="button"
-            type="button"
-            onClick={() => {
-              if (!series) return;
-              setDraft("");
-              store.clearTitleOverride(series.id);
-            }}
-            disabled={!series || !store.titleOverrides[series.id]}
-          >
-            Clear
-          </button>
-        </div>
-      </section>
       {fields.map(([key, label, description]) => (
         <ToggleRow
           key={key}

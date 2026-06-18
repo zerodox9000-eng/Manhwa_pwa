@@ -18,7 +18,6 @@ import { db, loadSyncMeta } from "../db/appDb";
 import { loadBundledCatalog, loadCachedData, syncFrontendData } from "../services/dataService";
 
 const STORAGE_KEY = "manhwa-library-state-v1";
-const TITLE_OVERRIDES_KEY = "manhwa-library-title-overrides-v1";
 
 interface StoreState {
   ready: boolean;
@@ -32,11 +31,8 @@ interface StoreState {
   labels: UserLabel[];
   settings: AppSettings;
   activeFeedId: string | null;
-  titleOverrides: Record<number, string>;
   syncStatus: string;
   setActiveFeedId: (id: string | null) => void;
-  setTitleOverride: (id: number, title: string) => void;
-  clearTitleOverride: (id: number) => void;
   upsertFeed: (feed: Feed) => void;
   deleteFeed: (id: string) => void;
   moveFeed: (id: string, targetId: string) => void;
@@ -52,19 +48,6 @@ interface StoreState {
 function loadLocalSnapshot(): Partial<AppStateSnapshot> {
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as Partial<AppStateSnapshot>;
-  } catch {
-    return {};
-  }
-}
-
-function loadLocalTitleOverrides(): Record<number, string> {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(TITLE_OVERRIDES_KEY) ?? "{}") as Record<string, string>;
-    return Object.fromEntries(
-      Object.entries(parsed)
-        .map(([key, value]) => [Number(key), typeof value === "string" ? value.trim() : ""] as const)
-        .filter(([id, value]) => Number.isFinite(id) && value.length > 0),
-    );
   } catch {
     return {};
   }
@@ -199,7 +182,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
   const [settings, setSettings] = useState<AppSettings>(mergeSettings(local.settings));
   const [activeFeedId, setActiveFeedId] = useState<string | null>(local.activeFeedId ?? null);
-  const [titleOverrides, setTitleOverrides] = useState<Record<number, string>>(loadLocalTitleOverrides);
   const [syncStatus, setSyncStatus] = useState("");
 
   useEffect(() => {
@@ -275,10 +257,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
   }, [feeds, folders, labels, settings, activeFeedId]);
 
-  useEffect(() => {
-    localStorage.setItem(TITLE_OVERRIDES_KEY, JSON.stringify(titleOverrides));
-  }, [titleOverrides]);
-
   const refreshData = useCallback(async () => {
     setSyncStatus("Starting sync");
     try {
@@ -343,37 +321,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setSettings((current) => mergeSettings({ ...current, ...patch }));
   }, []);
 
-  const setTitleOverride = useCallback((id: number, title: string) => {
-    const clean = title.trim();
-    setTitleOverrides((current) => {
-      if (!clean) {
-        const next = { ...current };
-        delete next[id];
-        return next;
-      }
-      return { ...current, [id]: clean };
-    });
-  }, []);
-
-  const clearTitleOverride = useCallback((id: number) => {
-    setTitleOverrides((current) => {
-      if (!(id in current)) return current;
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
-  }, []);
-
   const resetLocalState = useCallback(async () => {
     localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(TITLE_OVERRIDES_KEY);
     await db.details.clear();
     setFeeds([]);
     setFolders([]);
     setLabels([]);
     setSettings(DEFAULT_SETTINGS);
     setActiveFeedId(null);
-    setTitleOverrides({});
   }, []);
 
   const importSnapshot = useCallback((snapshot: Partial<AppStateSnapshot>, mode: "merge" | "replace") => {
@@ -407,11 +362,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       labels,
       settings,
       activeFeedId,
-      titleOverrides,
       syncStatus,
       setActiveFeedId,
-      setTitleOverride,
-      clearTitleOverride,
       upsertFeed,
       deleteFeed,
       moveFeed,
@@ -435,11 +387,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       labels,
       settings,
       activeFeedId,
-      titleOverrides,
       syncStatus,
       setActiveFeedId,
-      setTitleOverride,
-      clearTitleOverride,
       upsertFeed,
       deleteFeed,
       moveFeed,
