@@ -114,6 +114,33 @@ const CORE_PROFILE_GROUPS = new Set([
   "male-lead-core",
 ]);
 
+const DOMINANT_CORE_PRIORITY = [
+  "business-career-regression",
+  "korean-corporate-regression",
+  "sci-fi-business-regression",
+  "game-system",
+  "business-career",
+  "corporate-workplace",
+  "korean-business",
+  "murim-wuxia",
+  "chinese-murim",
+  "court-core",
+  "family-politics-core",
+  "showbiz-career",
+  "sports-career",
+  "food-career",
+  "medical-career",
+  "engineering-builder",
+  "horror-survival",
+  "survival-core",
+  "psychological-core",
+  "school-life",
+  "romance-core",
+  "office-romance",
+  "female-lead-core",
+  "male-lead-core",
+] as const;
+
 const STORY_FAMILY_PATTERNS: Array<{ id: string; tag: RegExp; text: RegExp; anchor?: boolean }> = [
   {
     id: "business-core",
@@ -454,11 +481,13 @@ function buildDominantContext(series: SeriesCatalog, tagsById: Map<number, TagNo
 
 function withDominantContext(series: SeriesCatalog, feature: RecommendationFeature, tagsById: Map<number, TagNode>) {
   const context = buildDominantContext(series, tagsById, featureTextKeys(feature));
-  if (context.profileGroups.length === 0) return feature;
+  if (context.profileGroups.length === 0 && context.primaryAnchors.length === 0) return feature;
+  const mergedGroups = [...new Set([...feature.profileGroups, ...context.profileGroups])].sort();
+  const mergedAnchors = [...new Set([...feature.primaryAnchors, ...context.primaryAnchors])].sort();
   return {
     ...feature,
-    profileGroups: context.profileGroups,
-    primaryAnchors: context.primaryAnchors,
+    profileGroups: mergedGroups,
+    primaryAnchors: mergedAnchors,
   };
 }
 
@@ -616,6 +645,13 @@ function anchorSet(feature: RecommendationFeature) {
   return new Set(feature.primaryAnchors);
 }
 
+function dominantCoreGroup(groups: Set<string>) {
+  for (const group of DOMINANT_CORE_PRIORITY) {
+    if (groups.has(group)) return group;
+  }
+  return null;
+}
+
 function sharedCount(left: Set<string>, right: Set<string>) {
   let count = 0;
   for (const value of left) if (right.has(value)) count += 1;
@@ -644,6 +680,15 @@ function storyAffinity(base: RecommendationFeature, candidate: RecommendationFea
   const anchorOverlap = baseAnchors.size > 0 ? sharedAnchors / baseAnchors.size : 0;
   const supportOverlap = scores.profileScore;
   const signalOverlap = Math.max(scores.tagScore, scores.textScore);
+  const baseDominant = dominantCoreGroup(baseGroups);
+  const candidateDominant = dominantCoreGroup(candidateGroups);
+
+  if (baseDominant && candidateDominant && baseDominant !== candidateDominant) return 0;
+
+  if (baseCoreGroups.length > 0 && candidateCoreGroups.length > 0) {
+    const sharedCoreGroups = baseCoreGroups.filter((group) => candidateCoreGroups.includes(group));
+    if (sharedCoreGroups.length === 0) return 0;
+  }
 
   const crossDomainPenalty =
     (baseGroups.has("business-core") && hasAny(candidateGroups, ["murim-core", "game-core", "survival-core"]) && !candidateGroups.has("business-core") ? 0.18 : 1) *
@@ -661,7 +706,7 @@ function storyAffinity(base: RecommendationFeature, candidate: RecommendationFea
     0.12,
     Math.min(
       1,
-      (0.82 * coreOverlap + 0.08 * supportOverlap + 0.06 * anchorOverlap + 0.04 * signalOverlap) * crossDomainPenalty * anchorPenalty,
+      (0.9 * coreOverlap + 0.04 * supportOverlap + 0.04 * anchorOverlap + 0.02 * signalOverlap) * crossDomainPenalty * anchorPenalty,
     ),
   );
 
@@ -729,13 +774,13 @@ export function scoreRecommendation(base: RecommendationFeature, candidate: Reco
     Math.max(0.48, 1 - extraCoreGroups.length * 0.14);
 
   const finalScore =
-    (profileScore * 0.24 +
-      coreShape * 0.34 +
-      tagScore * 0.1 +
-      textScore * 0.2 +
-      qScore * 0.05 +
-      anchorCoverage * 0.08 +
-      Math.min(sharedPrimaryAnchors, 3) * 0.02 +
+    (profileScore * 0.16 +
+      coreShape * 0.46 +
+      tagScore * 0.06 +
+      textScore * 0.14 +
+      qScore * 0.03 +
+      anchorCoverage * 0.1 +
+      Math.min(sharedPrimaryAnchors, 3) * 0.03 +
       (sharedKoreanBusinessRegression ? 0.18 : 0)) *
     affinity *
     specificityPenalty(candidate) *
@@ -743,7 +788,7 @@ export function scoreRecommendation(base: RecommendationFeature, candidate: Reco
     coreConsistencyPenalty *
     foreignCorePenalty;
 
-  if (finalScore < (mode === "strict" ? 0.04 : 0.07)) return null;
+  if (finalScore < (mode === "strict" ? 0.01 : 0.04)) return null;
   return {
     finalScore,
     profileScore,
