@@ -1271,11 +1271,14 @@ select {
 }
 
 .detail-meta-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(74px, 1fr);
   gap: 0;
   margin: 6px 0 6px;
   padding: 0;
+  width: fit-content;
+  max-width: 100%;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
@@ -1291,7 +1294,7 @@ select {
   place-items: center;
   gap: 0;
   min-height: 30px;
-  padding: 2px 3px 2px;
+  padding: 2px 6px 2px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -1305,13 +1308,13 @@ select {
 
 .detail-meta-chip span {
   color: rgba(233, 239, 255, 0.72);
-  font-size: 7px;
-  letter-spacing: 0.075em;
+  font-size: 7.5px;
+  letter-spacing: 0.065em;
   text-transform: uppercase;
 }
 
 .detail-meta-chip strong {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1;
   letter-spacing: 0.01em;
 }
