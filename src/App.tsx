@@ -2089,27 +2089,27 @@ function TitleDetailPage() {
               {visible.authorsArtists && (
                 <p className="detail-creators">{uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable"}</p>
               )}
+              <section className="detail-meta-strip" aria-label="Publication details">
+                {visible.year && series.year ? (
+                  <div className="detail-meta-chip">
+                    <span>Year</span>
+                    <strong>{series.year}</strong>
+                  </div>
+                ) : null}
+                {visible.status && series.status ? (
+                  <div className="detail-meta-chip">
+                    <span>Status</span>
+                    <strong>{formatStatusLabel(series.status)}</strong>
+                  </div>
+                ) : null}
+                {visible.chapters && series.total_chapters ? (
+                  <div className="detail-meta-chip">
+                    <span>Chapters</span>
+                    <strong>{series.total_chapters}</strong>
+                  </div>
+                ) : null}
+              </section>
             </div>
-          </section>
-          <section className="detail-meta-strip" aria-label="Publication details">
-            {visible.year && series.year ? (
-              <div className="detail-meta-chip">
-                <span>Year</span>
-                <strong>{series.year}</strong>
-              </div>
-            ) : null}
-            {visible.status && series.status ? (
-              <div className="detail-meta-chip">
-                <span>Status</span>
-                <strong>{formatStatusLabel(series.status)}</strong>
-              </div>
-            ) : null}
-            {visible.chapters && series.total_chapters ? (
-              <div className="detail-meta-chip">
-                <span>Chapters</span>
-                <strong>{series.total_chapters}</strong>
-              </div>
-            ) : null}
           </section>
           <DetailStats series={series} visible={visible} history={store.history} latestDate={store.syncMeta?.historyLastDate} />
           {visible.description && detail?.description && (

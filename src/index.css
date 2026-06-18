@@ -1207,7 +1207,7 @@ select {
   display: grid;
   grid-template-columns: minmax(116px, 190px) minmax(0, 1fr);
   gap: 18px;
-  align-items: end;
+  align-items: start;
 }
 
 .detail-cover {
@@ -2035,7 +2035,7 @@ textarea,
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  margin: 14px 0 18px;
+  margin: 8px 0 18px;
 }
 
 .detail-block {
