@@ -48,6 +48,7 @@ export interface SeriesCatalog {
   native_title?: string | null;
   romanized_title?: string | null;
   titles?: SeriesTitle[];
+  tag_weights?: Record<number, number | string> | null;
   cover: string | null;
   year: number | null;
   status: string | null;
@@ -95,7 +96,9 @@ export interface RecommendationFeature {
   profileGroups: string[];
   primaryAnchors: string[];
   tagFeatures: Record<string, number>;
+  tagWeightSignal?: Record<string, number>;
   textFeatures: Record<string, number>;
+  storySignals?: Record<string, number>;
   quality: {
     discPct: number | null;
     fanPct: number | null;

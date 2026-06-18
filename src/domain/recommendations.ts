@@ -272,6 +272,60 @@ const TEXT_STOPWORDS = new Set([
   "world",
 ]);
 
+const TAG_TIER_WEIGHTS: Record<string, number> = {
+  core: 1,
+  defining: 0.8,
+  recurrent: 0.55,
+  incidental: 0.25,
+  unweighted: 0.45,
+};
+
+function normalizeSignalWeight(value: unknown, fallback = 0): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value <= 0) return 0;
+    if (value <= 1) return value;
+    if (value <= 5) return Math.min(1, value / 5);
+    if (value <= 100) return Math.min(1, value / 100);
+    return 1;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return TAG_TIER_WEIGHTS[normalized] ?? fallback;
+  }
+  if (typeof value === "boolean") return value ? 1 : fallback;
+  return fallback;
+}
+
+function seriesTagWeights(series: SeriesCatalog) {
+  const weights = new Map<number, number>();
+  const rawWeights = series.tag_weights ?? null;
+  if (!rawWeights) return weights;
+  for (const [key, raw] of Object.entries(rawWeights)) {
+    const id = Number(key);
+    if (!Number.isFinite(id)) continue;
+    const normalized = normalizeSignalWeight(raw, 0);
+    if (normalized > 0) weights.set(id, normalized);
+  }
+  return weights;
+}
+
+function storySignalKey(group: string) {
+  return `story:${group}`;
+}
+
+function featureStorySignals(feature?: RecommendationFeature) {
+  if (!feature) return {};
+  if (feature.storySignals && Object.keys(feature.storySignals).length > 0) return feature.storySignals;
+  const signals: Record<string, number> = {};
+  for (const group of feature.profileGroups ?? []) {
+    addFeature(signals, storySignalKey(group), PROFILE_WEIGHTS[group] ?? 1);
+  }
+  for (const anchor of feature.primaryAnchors ?? []) {
+    addFeature(signals, storySignalKey(anchor), (PROFILE_WEIGHTS[anchor] ?? 1) * 0.7);
+  }
+  return signals;
+}
+
 function normalizeText(value: string) {
   return value
     .replace(/https?:\/\/\S+/g, " ")
@@ -335,6 +389,7 @@ function featureTextKeys(feature?: RecommendationFeature) {
 
 function familySignalsFor(series: SeriesCatalog, tagsById: Map<number, TagNode>, extraText = "") {
   const signals: Record<string, number> = {};
+  const tagWeights = seriesTagWeights(series);
   const text = normalizeText(
     [
       featureTermText(series),
@@ -346,12 +401,15 @@ function familySignalsFor(series: SeriesCatalog, tagsById: Map<number, TagNode>,
     ].join(" "),
   );
   for (const family of STORY_FAMILY_PATTERNS) {
-    const tagMatches = (series.tag_ids ?? [])
-      .map((id) => tagsById.get(id))
-      .filter((tag): tag is TagNode => Boolean(tag))
-      .filter((tag) => family.tag.test(tagText(tag))).length;
-    const textMatches = family.text.test(text) ? 1 : 0;
-    const score = tagMatches * 1.15 + textMatches * 0.9;
+    let tagMatches = 0;
+    for (const id of series.tag_ids ?? []) {
+      const tag = tagsById.get(id);
+      if (!tag || !family.tag.test(tagText(tag))) continue;
+      const weight = tagWeights.get(id) ?? fallbackTagWeight(tag);
+      tagMatches += weight;
+    }
+    const textMatches = family.text.test(text) ? Math.min(1.5, 0.95 + text.length / 4000) : 0;
+    const score = tagMatches * 1.2 + textMatches * 0.9;
     if (score > 0) addFeature(signals, family.id, score);
   }
   return signals;
@@ -437,10 +495,10 @@ function buildDominantContext(series: SeriesCatalog, tagsById: Map<number, TagNo
 
   const sortedFamilies = Object.entries(familySignals).sort((a, b) => b[1] - a[1]);
   for (const [family, score] of sortedFamilies) {
-    if (score < 1.15) continue;
+    if (score < 0.9) continue;
     groups.add(family);
     if (
-      score >= 1.6 ||
+      score >= 1.35 ||
       family === "business-core" ||
       family === "murim-core" ||
       family === "game-core" ||
@@ -524,6 +582,7 @@ export function buildFallbackRecommendationFeature(series: SeriesCatalog, tagsBy
   const text = `${featureTermText(series)} ${(series.tag_ids ?? []).map((id) => tagsById.get(id)).filter(Boolean).map((tag) => tagText(tag!)).join(" ")}`;
   const profileGroups = new Set<string>();
   const familySignals = familySignalsFor(series, tagsById);
+  const tagWeights = seriesTagWeights(series);
 
   if (hasText(text, /business|economics|merchant|company|corporate|conglomerate|chaebol|ceo|director|office|employee|workplace|career|trading|hostile takeover|sales/)) profileGroups.add("business-career");
   if (hasText(text, /regression|regressed|return|returned|reborn|reincarnation|second chance|time rewind|time travel|age regression|back in time/)) profileGroups.add("regression-return");
@@ -568,17 +627,22 @@ export function buildFallbackRecommendationFeature(series: SeriesCatalog, tagsBy
   if (profileGroups.has("male-lead-core") && profileGroups.has("business-career")) profileGroups.add("male-led-business");
 
   const tagFeatures: Record<string, number> = {};
+  const tagWeightSignal: Record<string, number> = {};
   for (const tagId of series.tag_ids ?? []) {
     const tag = tagsById.get(tagId);
     if (!tag) continue;
-    const weight = fallbackTagWeight(tag);
+    const weight = tagWeights.get(tagId) ?? fallbackTagWeight(tag);
+    const tier = weight >= 0.85 ? "core" : weight >= 0.65 ? "defining" : weight >= 0.4 ? "recurrent" : weight >= 0.2 ? "incidental" : "unweighted";
     addFeature(tagFeatures, `tag:${tagId}`, weight);
+    addFeature(tagWeightSignal, `tag:${tagId}:tier:${tier}`, weight);
+    addFeature(tagWeightSignal, `tag:${tagId}:root:${tagRoot(tag)}`, weight * 0.6);
     if (tag.parent_id != null) addFeature(tagFeatures, `parent:${tag.parent_id}`, weight * 0.22);
     const root = tagRoot(tag);
     if (root) addFeature(tagFeatures, `root:${root}`, Math.min(0.12, weight * 0.08));
   }
   for (const [family, score] of Object.entries(familySignals)) {
     addFeature(tagFeatures, `story:${family}`, 1.6 * score);
+    addFeature(tagWeightSignal, `story:${family}`, score);
   }
 
   const textFeatures: Record<string, number> = {};
@@ -594,7 +658,9 @@ export function buildFallbackRecommendationFeature(series: SeriesCatalog, tagsBy
     profileGroups: [...profileGroups].sort(),
     primaryAnchors: [...profileGroups].filter((group) => PRIMARY_PROFILE_GROUPS.has(group)).sort(),
     tagFeatures,
+    tagWeightSignal,
     textFeatures,
+    storySignals: Object.fromEntries(Object.entries(familySignals).map(([key, value]) => [storySignalKey(key), value])),
     quality: {
       discPct: series.analytics?.fanFavouriteDiscoveryPercentile ?? null,
       fanPct: series.analytics?.fanFavouriteRaw ?? null,
@@ -679,16 +745,11 @@ function storyAffinity(base: RecommendationFeature, candidate: RecommendationFea
   const coreOverlap = weightedOverlap(baseCoreGroups, candidateCoreGroups);
   const anchorOverlap = baseAnchors.size > 0 ? sharedAnchors / baseAnchors.size : 0;
   const supportOverlap = scores.profileScore;
-  const signalOverlap = Math.max(scores.tagScore, scores.textScore);
+  const signalOverlap = Math.max(scores.tagScore, scores.textScore, cosine(featureStorySignals(base), featureStorySignals(candidate)));
   const baseDominant = dominantCoreGroup(baseGroups);
   const candidateDominant = dominantCoreGroup(candidateGroups);
-
-  if (baseDominant && candidateDominant && baseDominant !== candidateDominant) return 0;
-
-  if (baseCoreGroups.length > 0 && candidateCoreGroups.length > 0) {
-    const sharedCoreGroups = baseCoreGroups.filter((group) => candidateCoreGroups.includes(group));
-    if (sharedCoreGroups.length === 0) return 0;
-  }
+  const sharedCoreGroups = baseCoreGroups.filter((group) => candidateCoreGroups.includes(group));
+  const dominantMismatchPenalty = baseDominant && candidateDominant && baseDominant !== candidateDominant ? 0.18 : 1;
 
   const crossDomainPenalty =
     (baseGroups.has("business-core") && hasAny(candidateGroups, ["murim-core", "game-core", "survival-core"]) && !candidateGroups.has("business-core") ? 0.18 : 1) *
@@ -701,12 +762,17 @@ function storyAffinity(base: RecommendationFeature, candidate: RecommendationFea
     (baseGroups.has("male-lead-core") && candidateGroups.has("female-lead-core") && !candidateGroups.has("male-lead-core") ? 0.22 : 1) *
     (baseGroups.has("survival-core") && candidateGroups.has("romance-core") && !candidateGroups.has("survival-core") ? 0.4 : 1);
 
-  const anchorPenalty = baseAnchors.size > 0 && sharedAnchors === 0 ? 0.7 : 1;
+  const anchorPenalty = baseAnchors.size > 0 && sharedAnchors === 0 ? 0.65 : 1;
+  const coreBridgePenalty = baseCoreGroups.length > 0 && candidateCoreGroups.length > 0 && sharedCoreGroups.length === 0 ? 0.3 : 1;
   const affinity = Math.max(
     0.12,
     Math.min(
       1,
-      (0.9 * coreOverlap + 0.04 * supportOverlap + 0.04 * anchorOverlap + 0.02 * signalOverlap) * crossDomainPenalty * anchorPenalty,
+      (0.94 * coreOverlap + 0.03 * supportOverlap + 0.03 * anchorOverlap + 0.02 * signalOverlap) *
+        crossDomainPenalty *
+        anchorPenalty *
+        dominantMismatchPenalty *
+        coreBridgePenalty,
     ),
   );
 
@@ -732,6 +798,7 @@ export function scoreRecommendation(base: RecommendationFeature, candidate: Reco
   const profileScore = weightedOverlap(base.profileGroups, candidate.profileGroups);
   const tagScore = cosine(base.tagFeatures, candidate.tagFeatures);
   const textScore = cosine(base.textFeatures, candidate.textFeatures);
+  const storyScore = cosine(featureStorySignals(base), featureStorySignals(candidate));
   const qScore = qualityScore(candidate);
   const basePrimaryAnchors = anchorSet(base);
   const sharedPrimaryAnchors = sharedCount(basePrimaryAnchors, anchorSet(candidate));
@@ -745,9 +812,16 @@ export function scoreRecommendation(base: RecommendationFeature, candidate: Reco
   const candidateAnchors = anchorSet(candidate);
   const sharedCoreAnchors = sharedCount(baseAnchors, candidateAnchors);
   const extraCoreGroups = candidateCoreGroups.filter((group) => !baseCoreGroups.includes(group));
-  const foreignCorePenalty = Math.max(0.32, 1 - extraCoreGroups.length * 0.22);
+  const foreignCorePenalty = Math.max(0.38, 1 - extraCoreGroups.length * 0.16);
 
-  if (baseCoreGroups.length > 0 && mode === "relaxed" && coreOverlap < 0.28 && sharedCoreAnchors === 0) return null;
+  if (base.profileGroups.length > 0 && candidate.profileGroups.length > 0) {
+    const baseDominant = dominantCoreGroup(new Set(base.profileGroups));
+    const candidateDominant = dominantCoreGroup(new Set(candidate.profileGroups));
+    if (baseDominant && candidateDominant && baseDominant !== candidateDominant && storyScore < 0.5) return null;
+    if (baseCoreGroups.length > 0 && candidateCoreGroups.length > 0 && coreOverlap < 0.15 && storyScore < 0.2) return null;
+  }
+
+  if (baseCoreGroups.length > 0 && mode === "relaxed" && coreOverlap < 0.22 && sharedCoreAnchors === 0 && storyScore < 0.16) return null;
 
   const sharedKoreanBusinessRegression =
     ((base.profileGroups.includes("sci-fi-business-regression") &&
@@ -771,13 +845,14 @@ export function scoreRecommendation(base: RecommendationFeature, candidate: Reco
   const coreConsistencyPenalty =
     (base.profileGroups.includes("female-lead-core") && candidate.profileGroups.includes("male-lead-core") && !candidate.profileGroups.includes("female-lead-core") ? 0.72 : 1) *
     (base.profileGroups.includes("male-lead-core") && candidate.profileGroups.includes("female-lead-core") && !candidate.profileGroups.includes("male-lead-core") ? 0.72 : 1) *
-    Math.max(0.48, 1 - extraCoreGroups.length * 0.14);
+    Math.max(0.5, 1 - extraCoreGroups.length * 0.12);
 
   const finalScore =
     (profileScore * 0.16 +
       coreShape * 0.46 +
       tagScore * 0.06 +
       textScore * 0.14 +
+      storyScore * 0.18 +
       qScore * 0.03 +
       anchorCoverage * 0.1 +
       Math.min(sharedPrimaryAnchors, 3) * 0.03 +

@@ -102,6 +102,7 @@ for (const file of fs.readdirSync(detailDir)) {
     id: detail.id,
     display_title: detail.display_title,
     animeplanet_title,
+    tag_weights: detail.tag_weights ?? base.tag_weights ?? null,
     cover: detail.cover ?? base.cover ?? null,
     year: detail.year ?? base.year ?? null,
     status: detail.status ?? base.status ?? null,

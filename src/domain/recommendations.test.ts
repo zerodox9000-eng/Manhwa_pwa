@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { rankRecommendations } from "./recommendations";
 import type { RecommendationFeature, SeriesCatalog, TagNode } from "./types";
 
-function series(id: number, title: string): SeriesCatalog {
+function series(id: number, title: string, extra: Partial<SeriesCatalog> = {}): SeriesCatalog {
   return {
     id,
     display_title: title,
@@ -15,6 +15,7 @@ function series(id: number, title: string): SeriesCatalog {
     stats: { popularity: 5000, favourites: 200, meanScore: 75 },
     analytics: { fanFavouriteDiscoveryPercentile: 80, fanFavouriteRaw: 4 },
     published: { start_date: "2024-01-01", end_date: null },
+    ...extra,
   };
 }
 
@@ -335,6 +336,42 @@ describe("rankRecommendations", () => {
 
     expect(ranked[0]).toBe(401);
     expect(ranked).not.toContain(402);
+  });
+
+  it("uses weighted tags when they are present on the catalog", () => {
+    const localTags = [
+      tag(1, "Economics", "Themes > Economics"),
+      tag(2, "Company", "Locations > Company"),
+      tag(3, "Murim", "Settings > Murim"),
+      tag(4, "Martial Arts", "Activities > Martial Arts"),
+      tag(5, "Fantasy", "Genres > Fantasy", { is_genre: true }),
+    ];
+    const localTitles = [
+      taggedSeries(500, "GED", [1, 2, 5], 98),
+      taggedSeries(501, "Business Builder", [1, 2], 95),
+      taggedSeries(502, "Murim Returner", [3, 4, 5], 99),
+    ];
+    const localFeatures = [
+      feature(500, ["business-core", "engineering-core"], { economics: 4, kingdom: 2 }, 98),
+      feature(501, ["business-core"], { economics: 3, company: 2 }, 95),
+      feature(502, ["murim-wuxia"], { murim: 3, martial: 3 }, 99),
+    ];
+    localTitles[0].tag_weights = { 1: "core", 2: "defining", 5: "incidental" };
+    localTitles[1].tag_weights = { 1: "defining", 2: "defining" };
+    localTitles[2].tag_weights = { 3: "core", 4: "defining", 5: "incidental" };
+
+    const ranked = rankRecommendations({
+      base: localTitles[0],
+      candidates: localTitles.slice(1),
+      tags: localTags,
+      features: localFeatures,
+      shelf,
+      history: {},
+      latestDate: null,
+    }).map((item) => item.id);
+
+    expect(ranked[0]).toBe(501);
+    expect(ranked).not.toContain(502);
   });
 
 });
