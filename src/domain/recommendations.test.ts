@@ -336,4 +336,5 @@ describe("rankRecommendations", () => {
     expect(ranked[0]).toBe(401);
     expect(ranked).not.toContain(402);
   });
+
 });

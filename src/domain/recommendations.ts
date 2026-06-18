@@ -586,6 +586,17 @@ function weightedOverlap(baseGroups: string[], candidateGroups: string[]) {
   return total > 0 ? matched / total : 0;
 }
 
+function coreShapeSimilarity(baseGroups: string[], candidateGroups: string[]) {
+  const base = new Set(baseGroups);
+  const candidate = new Set(candidateGroups);
+  let shared = 0;
+  for (const group of base) if (candidate.has(group)) shared += 1;
+  if (shared === 0) return 0;
+  const recall = shared / Math.max(1, base.size);
+  const precision = shared / Math.max(1, candidate.size);
+  return (2 * precision * recall) / Math.max(0.0001, precision + recall);
+}
+
 function cosine(left: Record<string, number>, right: Record<string, number>) {
   let dot = 0;
   let leftNorm = 0;
@@ -639,6 +650,7 @@ function storyAffinity(base: RecommendationFeature, candidate: RecommendationFea
     (baseGroups.has("murim-core") && hasAny(candidateGroups, ["business-core", "romance-core", "court-core"]) && !candidateGroups.has("murim-core") ? 0.18 : 1) *
     (baseGroups.has("game-core") && hasAny(candidateGroups, ["business-core", "romance-core"]) && !candidateGroups.has("game-core") ? 0.24 : 1) *
     (baseGroups.has("court-core") && hasAny(candidateGroups, ["business-core", "murim-core", "game-core"]) && !candidateGroups.has("court-core") ? 0.05 : 1) *
+    ((baseGroups.has("court-core") || baseGroups.has("family-politics-core")) && hasAny(candidateGroups, ["murim-core", "game-core", "business-core", "showbiz-core", "sports-core"]) ? 0.38 : 1) *
     (baseGroups.has("romance-core") && hasAny(candidateGroups, ["business-core", "murim-core", "game-core"]) && !candidateGroups.has("romance-core") ? 0.55 : 1) *
     (baseGroups.has("female-lead-core") && candidateGroups.has("male-lead-core") && !candidateGroups.has("female-lead-core") ? 0.22 : 1) *
     (baseGroups.has("male-lead-core") && candidateGroups.has("female-lead-core") && !candidateGroups.has("male-lead-core") ? 0.22 : 1) *
@@ -663,6 +675,14 @@ function qualityScore(feature: RecommendationFeature) {
   return disc * 0.65 + fan * 0.2 + popularity * 0.15;
 }
 
+function specificityPenalty(feature: RecommendationFeature) {
+  const profileBreadth = Math.min(1, feature.profileGroups.length / 14);
+  const anchorBreadth = Math.min(1, feature.primaryAnchors.length / 6);
+  const tagBreadth = Math.min(1, Object.keys(feature.tagFeatures).length / 72);
+  const breadth = Math.max(profileBreadth, anchorBreadth, tagBreadth);
+  return Math.max(0.56, 1 - breadth * 0.42);
+}
+
 export function scoreRecommendation(base: RecommendationFeature, candidate: RecommendationFeature, mode: "strict" | "relaxed" = "strict") {
   const profileScore = weightedOverlap(base.profileGroups, candidate.profileGroups);
   const tagScore = cosine(base.tagFeatures, candidate.tagFeatures);
@@ -675,9 +695,12 @@ export function scoreRecommendation(base: RecommendationFeature, candidate: Reco
   const baseCoreGroups = base.profileGroups.filter((group) => CORE_PROFILE_GROUPS.has(group));
   const candidateCoreGroups = candidate.profileGroups.filter((group) => CORE_PROFILE_GROUPS.has(group));
   const coreOverlap = weightedOverlap(baseCoreGroups, candidateCoreGroups);
+  const coreShape = coreShapeSimilarity(baseCoreGroups, candidateCoreGroups);
   const baseAnchors = anchorSet(base);
   const candidateAnchors = anchorSet(candidate);
   const sharedCoreAnchors = sharedCount(baseAnchors, candidateAnchors);
+  const extraCoreGroups = candidateCoreGroups.filter((group) => !baseCoreGroups.includes(group));
+  const foreignCorePenalty = Math.max(0.32, 1 - extraCoreGroups.length * 0.22);
 
   if (baseCoreGroups.length > 0 && mode === "relaxed" && coreOverlap < 0.28 && sharedCoreAnchors === 0) return null;
 
@@ -691,16 +714,36 @@ export function scoreRecommendation(base: RecommendationFeature, candidate: Reco
     base.profileGroups.includes("korean-business") &&
     candidate.profileGroups.includes("korean-business");
 
+  const femaleLeadAlignment =
+    base.profileGroups.includes("female-lead-core") && candidate.profileGroups.includes("female-lead-core")
+      ? 1.08
+      : base.profileGroups.includes("female-lead-core") && candidate.profileGroups.includes("male-lead-core") && !candidate.profileGroups.includes("female-lead-core")
+        ? 0.78
+        : base.profileGroups.includes("male-lead-core") && candidate.profileGroups.includes("female-lead-core") && !candidate.profileGroups.includes("male-lead-core")
+          ? 0.78
+          : 1;
+
+  const coreConsistencyPenalty =
+    (base.profileGroups.includes("female-lead-core") && candidate.profileGroups.includes("male-lead-core") && !candidate.profileGroups.includes("female-lead-core") ? 0.72 : 1) *
+    (base.profileGroups.includes("male-lead-core") && candidate.profileGroups.includes("female-lead-core") && !candidate.profileGroups.includes("male-lead-core") ? 0.72 : 1) *
+    Math.max(0.48, 1 - extraCoreGroups.length * 0.14);
+
   const finalScore =
-    (profileScore * 0.55 +
+    (profileScore * 0.24 +
+      coreShape * 0.34 +
       tagScore * 0.1 +
       textScore * 0.2 +
       qScore * 0.05 +
       anchorCoverage * 0.08 +
       Math.min(sharedPrimaryAnchors, 3) * 0.02 +
-      (sharedKoreanBusinessRegression ? 0.18 : 0)) * affinity;
+      (sharedKoreanBusinessRegression ? 0.18 : 0)) *
+    affinity *
+    specificityPenalty(candidate) *
+    femaleLeadAlignment *
+    coreConsistencyPenalty *
+    foreignCorePenalty;
 
-  if (finalScore < (mode === "strict" ? 0.08 : 0.12)) return null;
+  if (finalScore < (mode === "strict" ? 0.04 : 0.07)) return null;
   return {
     finalScore,
     profileScore,
