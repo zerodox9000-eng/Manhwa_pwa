@@ -166,6 +166,7 @@ export function runFeedQuery(args: {
   }
 
   const window = resolveRollingWindow(filters.rolling, metaHistoryLast);
+  const growthWindow = window ?? resolveRollingWindow({ mode: "last", amount: 1, unit: "days" }, metaHistoryLast);
   const usesHistorySort = feed.sort.some((rule) => rule.metric.includes("Growth") || rule.metric.includes("Delta"));
   if (window && usesHistorySort) {
     activeNotes.push(`Growth window: ${window.from} to ${window.to}.`);
@@ -201,7 +202,9 @@ export function runFeedQuery(args: {
     if (filters.minMeanScore != null && (item.stats.meanScore == null || item.stats.meanScore < filters.minMeanScore)) return false;
     if (filters.maxMeanScore != null && (item.stats.meanScore == null || item.stats.meanScore > filters.maxMeanScore)) return false;
     for (const range of filters.metricRanges ?? []) {
-      const value = displayComparableMetricValue(item, range.metric, history, metaHistoryLast);
+      const value = (growthWindow && (range.metric.includes("Growth") || range.metric.includes("Delta")))
+        ? historyDeltaForWindow(item.id, range.metric, history, growthWindow.from, growthWindow.to)
+        : displayComparableMetricValue(item, range.metric, history, metaHistoryLast);
       if (typeof value !== "number" || !Number.isFinite(value)) return false;
       if (range.min != null && value < range.min) return false;
       if (range.max != null && value > range.max) return false;
@@ -244,9 +247,9 @@ export function runFeedQuery(args: {
     for (const rule of feed.sort) {
       let av = metricValue(a, rule.metric, history, metaHistoryLast);
       let bv = metricValue(b, rule.metric, history, metaHistoryLast);
-      if (window && rule.metric.includes("Growth")) {
-        av = historyDeltaForWindow(a.id, rule.metric, history, window.from, window.to) ?? av;
-        bv = historyDeltaForWindow(b.id, rule.metric, history, window.from, window.to) ?? bv;
+      if (growthWindow && rule.metric.includes("Growth")) {
+        av = historyDeltaForWindow(a.id, rule.metric, history, growthWindow.from, growthWindow.to) ?? av;
+        bv = historyDeltaForWindow(b.id, rule.metric, history, growthWindow.from, growthWindow.to) ?? bv;
       }
       const aMissing = typeof av !== "string" && (!Number.isFinite(Number(av)) || av == null);
       const bMissing = typeof bv !== "string" && (!Number.isFinite(Number(bv)) || bv == null);

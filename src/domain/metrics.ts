@@ -1,5 +1,5 @@
 import type { HistoryMap, MetricId, SeriesCatalog } from "./types";
-import { isFutureDate, parseDate } from "./dates";
+import { isFutureDate, parseDate, resolveRollingWindow } from "./dates";
 
 export interface MetricDefinition {
   id: MetricId;
@@ -165,6 +165,21 @@ export function displayComparableMetricValue(series: SeriesCatalog, metric: Metr
 }
 
 export function formatMetricValue(series: SeriesCatalog, metric: MetricId, history?: HistoryMap, latestDate?: string | null) {
+  if (metric.includes("Growth") || metric.includes("Delta")) {
+    const window = resolveRollingWindow({ mode: "last", amount: 1, unit: "days" }, latestDate);
+    if (history && window) {
+      const windowValue = historyDeltaForWindow(series.id, metric, history, window.from, window.to);
+      if (windowValue != null && Number.isFinite(windowValue)) {
+        if (metric === "fanFavouriteRaw" || metric === "fanFavouriteDelta") return `${windowValue.toFixed(1)}%`;
+        if (metric.includes("Percentile") || metric.includes("Percent")) return `${windowValue.toFixed(0)}%`;
+        if (metric === "meanScore" || metric === "fanFavouriteDiscoveryScore" || metric === "fanFavouriteDiscoveryPercentile") {
+          return windowValue.toFixed(metric === "meanScore" ? 0 : 1);
+        }
+        return windowValue.toLocaleString();
+      }
+    }
+  }
+
   const value = displayComparableMetricValue(series, metric, history, latestDate);
   if (value == null || !Number.isFinite(Number(value))) return "n/a";
   if (typeof value === "string") return value;
