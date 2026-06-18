@@ -122,7 +122,7 @@ a {
 
 .section-title {
   margin: 0 0 12px;
-  color: #ff4f9f;
+  color: rgba(236, 240, 255, 0.82);
   font-size: 13px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1252,21 +1252,21 @@ select {
 .detail-stat-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin: 10px 0 18px;
+  gap: 8px;
+  margin: 8px 0 16px;
 }
 
 .detail-stat {
   display: grid;
-  gap: 4px;
-  padding: 12px 8px 11px;
+  gap: 2px;
+  padding: 9px 8px 8px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.075);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 12px 28px rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(18px) saturate(1.18);
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 10px 24px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(16px) saturate(1.14);
   text-align: center;
 }
 
@@ -1274,7 +1274,7 @@ select {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
-  margin: 14px 0 16px;
+  margin: 10px 0 10px;
   padding: 0;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1289,9 +1289,9 @@ select {
 .detail-meta-chip {
   display: grid;
   place-items: center;
-  gap: 6px;
-  min-height: 70px;
-  padding: 10px 10px 9px;
+  gap: 1px;
+  min-height: 46px;
+  padding: 6px 7px 5px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -1305,14 +1305,14 @@ select {
 
 .detail-meta-chip span {
   color: rgba(233, 239, 255, 0.72);
-  font-size: 9px;
-  letter-spacing: 0.1em;
+  font-size: 8.5px;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
 .detail-meta-chip strong {
-  font-size: 16px;
-  line-height: 1.04;
+  font-size: 14px;
+  line-height: 1;
   letter-spacing: 0.01em;
 }
 
@@ -1428,7 +1428,7 @@ select {
 }
 
 .detail-block {
-  margin: 16px 0;
+  margin: 14px 0;
   padding: 14px 14px 15px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
@@ -2239,7 +2239,7 @@ textarea,
 
 .detail-bg {
   display: block;
-  position: fixed;
+  position: absolute;
   inset: -28px -28px auto;
   width: calc(100% + 56px);
   height: 342px;
@@ -2253,7 +2253,7 @@ textarea,
 .detail-page::before {
   display: block;
   content: "";
-  position: fixed;
+  position: absolute;
   inset: 0;
   background:
     linear-gradient(180deg, rgba(8, 9, 13, 0.08), #08090d 350px),

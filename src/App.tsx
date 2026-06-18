@@ -2297,12 +2297,17 @@ function DetailStats({
     }))
     .filter((item) => item.value !== "n/a");
   if (!values.length) return null;
+  const detailLabel = (metric: MetricId) => {
+    if (metric === "popularity") return "Popularity";
+    if (metric === "favourites") return "Favourites";
+    return metricDefinition(metric).shortLabel;
+  };
   return (
     <section className={`detail-stat-grid detail-stat-count-${Math.min(values.length, 3)}`}>
       {values.map(({ metric, value }) => (
         <div className="detail-stat" key={metric}>
           <strong>{value}</strong>
-          <span>{metricDefinition(metric).shortLabel}</span>
+          <span>{detailLabel(metric)}</span>
         </div>
       ))}
     </section>
