@@ -49,6 +49,16 @@ function feature(
     profileGroups,
     primaryAnchors: profileGroups.filter((group) =>
       [
+        "business-core",
+        "murim-core",
+        "game-core",
+        "court-core",
+        "family-politics-core",
+        "school-core",
+        "survival-core",
+        "romance-core",
+        "psychological-core",
+        "engineering-core",
         "business-career-regression",
         "corporate-workplace",
         "korean-business",
@@ -257,5 +267,38 @@ describe("rankRecommendations", () => {
     expect(ranked).not.toContain(204);
     expect(ranked).not.toContain(205);
     expect(ranked).not.toContain(206);
+  });
+
+  it("treats swordsmanship inside court fantasy as different from murim", () => {
+    const localTags = [
+      tag(1, "Swordsmanship", "Settings > European Ambience > Swordsmanship"),
+      tag(2, "Court", "Settings > Palace > Court"),
+      tag(3, "Murim", "Settings > Murim"),
+      tag(4, "Family", "Themes > Family"),
+      tag(5, "Inheritance", "Themes > Inheritance"),
+      tag(6, "Princess", "Character Types > Princess"),
+    ];
+    const localTitles = [
+      taggedSeries(300, "Queen's Blade", [1, 2, 4, 5, 6], 93),
+      taggedSeries(301, "Murim Sword Saint", [1, 3], 99),
+      taggedSeries(302, "Noble House Strategy", [2, 4, 5], 96),
+    ];
+    const localFeatures = [
+      feature(300, ["court-core", "family-politics-core"], { palace: 3, court: 3, royal: 2, family: 2, inheritance: 2, sword: 1 }, 93),
+      feature(301, ["murim-core"], { murim: 3, martial: 3, sect: 2, sword: 2 }, 99),
+      feature(302, ["court-core", "family-politics-core"], { court: 3, family: 3, inheritance: 3, politics: 2 }, 96),
+    ];
+    const ranked = rankRecommendations({
+      base: localTitles[0],
+      candidates: localTitles.slice(1),
+      tags: localTags,
+      features: localFeatures,
+      shelf,
+      history: {},
+      latestDate: null,
+    }).map((item) => item.id);
+
+    expect(ranked[0]).toBe(302);
+    expect(ranked.indexOf(301)).toBeGreaterThan(ranked.indexOf(302));
   });
 });
