@@ -23,9 +23,10 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import Fuse from "fuse.js";
 import { useRegisterSW } from "virtual:pwa-register/react";
+import ReactMarkdown from "react-markdown";
 import {
   HashRouter,
   Link,
@@ -37,6 +38,8 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
+import remarkGfm from "remark-gfm";
+import rehypeSanitize from "rehype-sanitize";
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT } from "./domain/defaults";
 import { resolveRollingWindow } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
@@ -1495,7 +1498,6 @@ function SearchPage() {
         keys: [
           { name: "display_title", weight: 0.55 },
           { name: "animeplanet_title", weight: 0.5 },
-          { name: "mangaupdates_title", weight: 0.35 },
           { name: "mangabaka_title", weight: 0.2 },
           { name: "native_title", weight: 0.18 },
           { name: "romanized_title", weight: 0.18 },
@@ -2292,17 +2294,30 @@ function uniqueNames(...groups: (string[] | undefined)[]) {
 }
 
 function RichDescription({ text }: { text: string }) {
-  const paragraphs = text
-    .replace(/\r\n/g, "\n")
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
-
+  const source = text.replace(/\\([\\[\]*_`])/g, "$1").replace(/\r\n/g, "\n");
   return (
     <div className="rich-description">
-      {paragraphs.map((paragraph, index) => (
-        <p key={`${index}-${paragraph.slice(0, 16)}`}>{renderInlineMarkdown(paragraph)}</p>
-      ))}
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeSanitize]}
+        components={{
+          p: ({ children }) => <p>{children}</p>,
+          strong: ({ children }) => <strong>{children}</strong>,
+          em: ({ children }) => <em>{children}</em>,
+          a: ({ href, children }) => (
+            <a href={href ?? "#"} target="_blank" rel="noreferrer">
+              {children}
+            </a>
+          ),
+          ul: ({ children }) => <ul>{children}</ul>,
+          ol: ({ children }) => <ol>{children}</ol>,
+          li: ({ children }) => <li>{children}</li>,
+          blockquote: ({ children }) => <blockquote>{children}</blockquote>,
+          code: ({ children }) => <code>{children}</code>,
+        }}
+      >
+        {source}
+      </ReactMarkdown>
     </div>
   );
 }
@@ -2355,44 +2370,6 @@ function DetailStats({
       ))}
     </section>
   );
-}
-
-function renderInlineMarkdown(text: string): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  const pattern = /(\[[^\]]+\]\s*\(\s*https?:\/\/[^)\s]+\s*\)|\*\*[^*]+\*\*|\*[^*\n]+\*|https?:\/\/[^\s)]+)/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
-    const token = match[0];
-
-    if (token.startsWith("**") && token.endsWith("**")) {
-      nodes.push(<strong key={nodes.length}>{token.slice(2, -2)}</strong>);
-    } else if (token.startsWith("*") && token.endsWith("*")) {
-      nodes.push(<em key={nodes.length}>{token.slice(1, -1)}</em>);
-    } else if (token.startsWith("[")) {
-      const labelEnd = token.indexOf("]");
-      const label = token.slice(1, labelEnd);
-      const hrefMatch = token.match(/https?:\/\/[^)\s]+/);
-      const href = hrefMatch?.[0] ?? "";
-      nodes.push(
-        <a key={nodes.length} href={href} target="_blank" rel="noreferrer">
-          {label}
-        </a>,
-      );
-    } else {
-      nodes.push(
-        <a key={nodes.length} href={token} target="_blank" rel="noreferrer">
-          {token}
-        </a>,
-      );
-    }
-    lastIndex = pattern.lastIndex;
-  }
-
-  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
-  return nodes;
 }
 
 function DetailLinks({ series }: { series: SeriesCatalog }) {
