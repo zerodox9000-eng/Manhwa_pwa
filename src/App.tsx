@@ -7,7 +7,6 @@ import {
   Database,
   Download,
   EllipsisVertical,
-  ExternalLink,
   Filter,
   GripVertical,
   Home,
@@ -77,6 +76,25 @@ const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 
 function visibleTitle(series: SeriesCatalog, titleOverrides: Record<number, string> = {}, fallback?: SeriesCatalog) {
   return resolveVisibleTitle(series, titleOverrides, fallback);
+}
+
+function formatStatusLabel(value: string | null | undefined) {
+  if (!value) return "";
+  return value
+    .replace(/[_-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function faviconForUrl(href: string) {
+  try {
+    const url = new URL(href);
+    return `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=32`;
+  } catch {
+    return "";
+  }
 }
 
 function App() {
@@ -484,11 +502,13 @@ function TitleCollection({
   feed,
   history,
   latestDate,
+  loading = false,
 }: {
   items: SeriesCatalog[];
   feed: Feed;
   history: HistoryMap;
   latestDate?: string | null;
+  loading?: boolean;
 }) {
   const pageSize = feed.view.gridColumns >= 5 ? 60 : feed.view.gridColumns === 4 ? 72 : 120;
   const countKey = `manhwa-visible-count:${feed.id}:${feed.view.gridColumns}`;
@@ -502,6 +522,10 @@ function TitleCollection({
   }, [countKey, visibleCount]);
   const visibleItems = items.slice(0, visibleCount);
   const metricWindow = useMemo(() => resolveRollingWindow(feed.filters.rolling, latestDate), [feed.filters.rolling, latestDate]);
+
+  if (loading) {
+    return <TitleCollectionSkeleton columns={feed.view.gridColumns} />;
+  }
 
   if (items.length === 0) {
     return (
@@ -632,6 +656,32 @@ function TitleCard({
   );
 }
 
+function TitleCollectionSkeleton({ columns }: { columns: 1 | 2 | 3 | 4 | 5 }) {
+  const count = columns >= 5 ? 10 : columns === 4 ? 12 : 9;
+  return (
+    <div className={`title-grid columns-${columns} density-standard`} style={{ "--grid-columns": columns } as React.CSSProperties} aria-hidden="true">
+      {Array.from({ length: count }).map((_, index) => (
+        <div className="title-card-wrap" key={index}>
+          <div className="title-card skeleton-title-card">
+            <div className="poster-shell">
+              <div className="cover-wrap skeleton-box" />
+              <div className="rank skeleton-chip" />
+              <div className="poster-metrics">
+                <div className="metrics compact-metrics">
+                  <span className="skeleton-line skeleton-line-body short" />
+                </div>
+              </div>
+            </div>
+            <div className="title-meta">
+              <span className="skeleton-line skeleton-line-title" />
+            </div>
+          </div>
+      </div>
+      ))}
+    </div>
+  );
+}
+
 function isGrowthMetric(metric: MetricId) {
   return metric.includes("Growth") || metric.includes("Delta");
 }
@@ -646,6 +696,10 @@ function formatRawMetricValue(metric: MetricId, value: number) {
   return value.toLocaleString();
 }
 
+function defaultGrowthWindow(latestDate?: string | null) {
+  return resolveRollingWindow({ mode: "last", amount: 1, unit: "days" }, latestDate);
+}
+
 function formatFeedMetricValue(
   series: SeriesCatalog,
   metric: MetricId,
@@ -653,8 +707,9 @@ function formatFeedMetricValue(
   latestDate?: string | null,
   metricWindow?: { from: string; to: string } | null,
 ) {
-  if (metricWindow && isGrowthMetric(metric)) {
-    const value = historyDeltaForWindow(series.id, metric, history, metricWindow.from, metricWindow.to);
+  if (isGrowthMetric(metric)) {
+    const window = metricWindow ?? defaultGrowthWindow(latestDate);
+    const value = window ? historyDeltaForWindow(series.id, metric, history, window.from, window.to) : null;
     if (value != null) return formatRawMetricValue(metric, value);
   }
   return formatMetricValue(series, metric, history, latestDate);
@@ -868,6 +923,10 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
     () => [...new Set(store.catalog.map((item) => item.status).filter(Boolean) as string[])].sort(),
     [store.catalog],
   );
+  const statusLabels = useMemo(
+    () => statusOptions.map((status) => [status, formatStatusLabel(status)] as const),
+    [statusOptions],
+  );
   const filteredTags = useMemo(() => {
     const q = tagSearch.trim().toLowerCase();
     return q
@@ -977,14 +1036,14 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
       <div className="field">
         <span className="small-label">Statuses</span>
         <div className="chips">
-          {statusOptions.map((status) => (
+          {statusLabels.map(([status, label]) => (
             <button
               className={`chip chipbutton ${draft.filters.statuses.includes(status) ? "active" : ""}`}
               type="button"
               key={status}
               onClick={() => updateFilters({ statuses: toggleArrayValue(draft.filters.statuses, status) })}
             >
-              {status}
+              {label}
             </button>
           ))}
         </div>
@@ -1677,7 +1736,7 @@ function RecommendationResults({
   ]);
 
   if (items == null) {
-    return <div className="inline-loading muted tiny">Finding close matches...</div>;
+    return <TitleCollectionSkeleton columns={feed.view.gridColumns} />;
   }
 
   return <TitleCollection items={items} feed={feed} history={store.history} latestDate={store.syncMeta?.historyLastDate} />;
@@ -2011,21 +2070,12 @@ function TitleDetailPage() {
           <ArrowLeft size={22} />
         </button>
         <span className="spacer" />
-        {!loadingDetail ? (
-          <Link className="icon-button" to={`/recommendations/${series!.id}`} aria-label="Recommendations">
-            <Sparkles size={20} />
-          </Link>
-        ) : (
-          <button className="icon-button" type="button" aria-label="Recommendations" disabled>
-            <Sparkles size={20} />
-          </button>
-        )}
         <button className="icon-button" type="button" onClick={() => setSettingsOpen(true)} aria-label="Detail settings">
           <EllipsisVertical size={20} />
         </button>
       </div>
       {loadingDetail ? (
-        <DetailSkeleton />
+        <DetailSkeleton series={catalogItem ?? null} />
       ) : series ? (
         <>
           <section className="detail-identity">
@@ -2051,7 +2101,7 @@ function TitleDetailPage() {
             {visible.status && series.status ? (
               <div className="detail-meta-chip">
                 <span>Status</span>
-                <strong>{series.status}</strong>
+                <strong>{formatStatusLabel(series.status)}</strong>
               </div>
             ) : null}
             {visible.chapters && series.total_chapters ? (
@@ -2119,7 +2169,7 @@ function TitleDetailPage() {
           <p className="muted">{status}</p>
         </div>
       ) : (
-        <DetailSkeleton />
+        <DetailSkeleton series={null} />
       )}
       <BottomDrawer title="Detail Settings" open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DetailSettingsDrawer series={series} visible={visible} onChange={setVisible} />
@@ -2128,7 +2178,14 @@ function TitleDetailPage() {
   );
 }
 
-function DetailSkeleton() {
+function DetailSkeleton({ series }: { series: SeriesCatalog | null }) {
+  const hiddenStats = series
+    ? [
+        formatMetricValue(series, "popularity", undefined, undefined),
+        formatMetricValue(series, "favourites", undefined, undefined),
+        formatMetricValue(series, "meanScore", undefined, undefined),
+      ]
+    : [];
   return (
     <>
       <section className="detail-identity detail-skeleton-identity" aria-hidden="true">
@@ -2145,10 +2202,11 @@ function DetailSkeleton() {
         <div className="detail-meta-chip skeleton-chip" />
         <div className="detail-meta-chip skeleton-chip" />
       </section>
-      <section className="detail-stat-grid detail-skeleton-stats" aria-hidden="true">
+      <section className="detail-stat-grid detail-skeleton-grid detail-skeleton-stats" aria-hidden="true">
         <div className="detail-stat skeleton-stat" />
         <div className="detail-stat skeleton-stat" />
         <div className="detail-stat skeleton-stat" />
+        {hiddenStats.length > 0 && <span className="visually-hidden">{hiddenStats.join(" ")}</span>}
       </section>
       <section className="detail-block" aria-hidden="true">
         <h2 className="section-title">Description</h2>
@@ -2225,8 +2283,18 @@ function DetailStats({
     ...(visible.fanFavouriteRatio ? (["fanFavouriteRaw"] as MetricId[]) : []),
     ...(visible.growthNumbers ? (["popularityGrowth", "favouritesGrowth"] as MetricId[]) : []),
   ].slice(0, 6);
+  const detailGrowthWindow = defaultGrowthWindow(latestDate);
   const values = metrics
-    .map((metric) => ({ metric, value: formatMetricValue(series, metric, history, latestDate) }))
+    .map((metric) => ({
+      metric,
+      value:
+        isGrowthMetric(metric) && detailGrowthWindow
+          ? formatRawMetricValue(
+              metric,
+              historyDeltaForWindow(series.id, metric, history, detailGrowthWindow.from, detailGrowthWindow.to) ?? Number.NaN,
+            )
+          : formatMetricValue(series, metric, history, latestDate),
+    }))
     .filter((item) => item.value !== "n/a");
   if (!values.length) return null;
   return (
@@ -2292,7 +2360,8 @@ function DetailLinks({ series }: { series: SeriesCatalog }) {
     <div className="chips link-chips">
       {links.map(([label, href]) => (
         <a className="chip link-chip" href={href} target="_blank" rel="noreferrer" key={label}>
-          {label} <ExternalLink size={13} />
+          <img className="link-favicon" src={faviconForUrl(href)} alt="" aria-hidden="true" loading="lazy" decoding="async" />
+          <span>{label}</span>
         </a>
       ))}
     </div>
