@@ -39,7 +39,7 @@ import {
 } from "react-router-dom";
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT } from "./domain/defaults";
 import { resolveRollingWindow } from "./domain/dates";
-import { feedUsesAniListOnlyParameters, isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
+import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
@@ -80,6 +80,15 @@ const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 
 function visibleTitle(series: SeriesCatalog, fallback?: SeriesCatalog) {
   return resolveVisibleTitle(series, fallback);
+}
+
+function isSearchVisible(series: SeriesCatalog, settings: AppSettings, sensitiveTagIds: { relationship: Set<number>; adult: Set<number> }) {
+  const rating = series.content_rating as AppSettings["contentRatings"][number] | null;
+  if (rating && !settings.contentRatings.includes(rating)) return false;
+  const tagIds = new Set(series.tag_ids ?? []);
+  if (!settings.searchRelationshipTags && [...sensitiveTagIds.relationship].some((id) => tagIds.has(id))) return false;
+  if (!settings.searchAdultTags && [...sensitiveTagIds.adult].some((id) => tagIds.has(id))) return false;
+  return true;
 }
 
 function formatStatusLabel(value: string | null | undefined) {
@@ -1463,14 +1472,15 @@ function SearchPage() {
       return [];
     }
   });
+  const sensitiveTagIds = useMemo(() => buildSensitiveTagGroups(store.tags), [store.tags]);
   const searchFeed = useMemo(() => {
     const feed = createFeed("Search results");
     feed.filters.sourceMode = "mixed";
     feed.filters.sourceModes = ["anilist", "non-anilist"];
-    feed.filters.contentRatings = ["safe", "suggestive"];
+    feed.filters.contentRatings = [...store.settings.contentRatings];
     feed.view = { ...feed.view, gridColumns: 3 };
     return feed;
-  }, []);
+  }, [store.settings.contentRatings]);
   const getTitle = useCallback((item: SeriesCatalog) => visibleTitle(item), []);
   const inputQuery = query;
   const deferredQuery = useDeferredValue(inputQuery);
@@ -1484,6 +1494,7 @@ function SearchPage() {
         threshold: 0.28,
         keys: [
           { name: "display_title", weight: 0.55 },
+          { name: "animeplanet_title", weight: 0.5 },
           { name: "mangabaka_title", weight: 0.2 },
           { name: "native_title", weight: 0.18 },
           { name: "romanized_title", weight: 0.18 },
@@ -1499,8 +1510,9 @@ function SearchPage() {
     return searchIndex
       .search(term, { limit: 60 })
       .map((result) => result.item)
+      .filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds))
       .sort((a, b) => getTitle(a).localeCompare(getTitle(b)));
-  }, [deferredQuery, getTitle, searchIndex]);
+  }, [deferredQuery, getTitle, searchIndex, sensitiveTagIds, store.settings]);
   useEffect(() => {
     sessionStorage.setItem("manhwa-search-query", inputQuery);
   }, [inputQuery]);
