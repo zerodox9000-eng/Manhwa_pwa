@@ -2,7 +2,8 @@ import { inflate } from "pako";
 import { db, saveSyncMeta } from "../db/appDb";
 import { DATA_SOURCE_CANDIDATES } from "../domain/defaults";
 import { normalizeCatalog, resolveDisplayTitle } from "../domain/catalog";
-import type { HistoryMap, RecommendationFeature, SeriesCatalog, SeriesDetail, SyncMeta, TagNode } from "../domain/types";
+import type { RecommendationFeature, SeriesCatalog, SeriesDetail, SyncMeta } from "../domain/types";
+import { parseCatalogList, parseDetail, parseHistory, parseRecommendationFeatures, parseTags } from "../domain/validation";
 
 function bytesToText(bytes: Uint8Array) {
   return new TextDecoder("utf-8").decode(bytes);
@@ -40,6 +41,11 @@ async function fetchJson<T>(base: string, path: string, preferGzip = true): Prom
   }
 
   throw lastError;
+}
+
+async function fetchJsonValidated<T>(base: string, path: string, parser: (value: unknown) => T, preferGzip = true): Promise<T> {
+  const raw = await fetchJson<unknown>(base, path, preferGzip);
+  return parser(raw);
 }
 
 async function fetchLocalJson<T>(path: string): Promise<T | null> {
@@ -137,49 +143,27 @@ export async function syncFrontendData(
 
   onProgress?.("Loading current backend catalog");
 
-  const liveCatalog = await fetchJson<SeriesCatalog[]>(
-    source,
-    "series/all.json",
-    true
-  );
+  const liveCatalog = await fetchJsonValidated(source, "series/all.json", parseCatalogList, true);
 
   onProgress?.("Merging query-ready fields");
 
-  const localCatalog = await fetchLocalJson<SeriesCatalog[]>(
-    "data/query-index.json.gz"
-  );
+  const localCatalog = parseCatalogList(await fetchLocalJson<unknown>("data/query-index.json.gz"));
 
   const mergedCatalog = mergeLiveCatalog(liveCatalog, localCatalog);
 
   onProgress?.("Downloading tags");
 
-  const rawTags = await fetchJson<Record<string, TagNode> | TagNode[]>(
-    source,
-    "meta/tags.json",
-    true
-  );
-
-  const tags = Array.isArray(rawTags)
-    ? rawTags
-    : Object.values(rawTags);
+  const tags = parseTags(await fetchJson<unknown>(source, "meta/tags.json", true));
 
   onProgress?.("Downloading history");
 
-  const rawHistory = await fetchJson<HistoryMap>(
-    source,
-    "stats/history.json",
-    true
-  );
+  const rawHistory = parseHistory(await fetchJson<unknown>(source, "stats/history.json", true));
 
   onProgress?.("Downloading recommendation features");
 
   let recommendationFeatures: RecommendationFeature[] = [];
   try {
-    recommendationFeatures = await fetchJson<RecommendationFeature[]>(
-      source,
-      "recommendations/features.json",
-      true
-    );
+    recommendationFeatures = parseRecommendationFeatures(await fetchJson<unknown>(source, "recommendations/features.json", true));
   } catch {
     recommendationFeatures = [];
   }
@@ -245,17 +229,18 @@ export async function loadCachedData() {
     db.recommendationFeatures.toArray(),
   ]);
 
-  const history = Object.fromEntries(
-    historyRows.map((row) => [row.id, row.entries])
-  ) as HistoryMap;
+  const history = parseHistory(Object.fromEntries(historyRows.map((row) => [row.id, row.entries])));
 
-  return { catalog, tags, history, recommendationFeatures };
+  return {
+    catalog: parseCatalogList(catalog),
+    tags: parseTags(tags),
+    history,
+    recommendationFeatures: parseRecommendationFeatures(recommendationFeatures),
+  };
 }
 
 export async function loadBundledCatalog() {
-  const catalog = await fetchLocalJson<SeriesCatalog[]>(
-    "data/query-index.json.gz"
-  );
+  const catalog = parseCatalogList(await fetchLocalJson<unknown>("data/query-index.json.gz"));
   if (!catalog?.length) return [];
   return normalizeCatalog(catalog, {}).catalog;
 }
@@ -263,21 +248,20 @@ export async function loadBundledCatalog() {
 export async function fetchSeriesDetail(source: string, id: number) {
   const cached = await db.details.get(id);
   if (cached) {
-    void fetchJson<SeriesDetail>(source, `details/${id}.json`, false)
-      .then((detail) => db.details.put(fixMangaBakaLink(detail)))
+    void fetchJson<unknown>(source, `details/${id}.json`, false)
+      .then((detail) => {
+        const parsed = parseDetail(detail);
+        if (parsed) return db.details.put(fixMangaBakaLink(parsed));
+        return undefined;
+      })
       .catch(() => {
         // Cached detail keeps route changes instant; refresh failures can wait for the next sync.
       });
     return cached;
   }
   try {
-    const detail = fixMangaBakaLink(
-      await fetchJson<SeriesDetail>(
-        source,
-        `details/${id}.json`,
-        false
-      )
-    );
+    const rawDetail = await fetchJson<unknown>(source, `details/${id}.json`, false);
+    const detail = fixMangaBakaLink(parseDetail(rawDetail) ?? (rawDetail as SeriesDetail));
     await db.details.put(detail);
     return detail;
   } catch (error) {

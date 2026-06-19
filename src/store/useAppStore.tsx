@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS } from "../domain/defaults";
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import { feedUsesAniListOnlyParameters } from "../domain/query";
+import { parseAppStateSnapshot, parseSettings } from "../domain/validation";
 import type {
   AppSettings,
   AppStateSnapshot,
@@ -47,7 +48,7 @@ interface StoreState {
 
 function loadLocalSnapshot(): Partial<AppStateSnapshot> {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}") as Partial<AppStateSnapshot>;
+    return parseAppStateSnapshot(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}")) ?? {};
   } catch {
     return {};
   }
@@ -180,7 +181,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   );
   const [folders, setFolders] = useState<Folder[]>(local.folders ?? []);
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
-  const [settings, setSettings] = useState<AppSettings>(mergeSettings(local.settings));
+  const [settings, setSettings] = useState<AppSettings>(mergeSettings(parseSettings(local.settings) ?? local.settings));
   const [activeFeedId, setActiveFeedId] = useState<string | null>(local.activeFeedId ?? null);
   const [syncStatus, setSyncStatus] = useState("");
 
@@ -332,21 +333,24 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const importSnapshot = useCallback((snapshot: Partial<AppStateSnapshot>, mode: "merge" | "replace") => {
+    const safeSnapshot = parseAppStateSnapshot(snapshot) ?? snapshot;
     if (mode === "replace") {
-      setFeeds((snapshot.feeds ?? []).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true })));
-      setFolders(snapshot.folders ?? []);
-      setLabels(snapshot.labels ?? []);
-      setSettings(mergeSettings(snapshot.settings));
-      setActiveFeedId(snapshot.activeFeedId ?? null);
+      setFeeds((safeSnapshot.feeds ?? []).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true })));
+      setFolders(safeSnapshot.folders ?? []);
+      setLabels(safeSnapshot.labels ?? []);
+      setSettings(mergeSettings(safeSnapshot.settings ? parseSettings(safeSnapshot.settings) ?? safeSnapshot.settings : undefined));
+      setActiveFeedId(safeSnapshot.activeFeedId ?? null);
       return;
     }
     setFeeds((current) => [
       ...current,
-      ...(snapshot.feeds ?? []).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true })),
+      ...(safeSnapshot.feeds ?? []).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true })),
     ]);
-    setFolders((current) => [...current, ...(snapshot.folders ?? [])]);
-    setLabels((current) => [...current, ...(snapshot.labels ?? [])]);
-    if (snapshot.settings) setSettings((current) => mergeSettings({ ...current, ...snapshot.settings }));
+    setFolders((current) => [...current, ...(safeSnapshot.folders ?? [])]);
+    setLabels((current) => [...current, ...(safeSnapshot.labels ?? [])]);
+    if (safeSnapshot.settings) {
+      setSettings((current) => mergeSettings({ ...current, ...(parseSettings(safeSnapshot.settings) ?? safeSnapshot.settings) }));
+    }
   }, []);
 
   const value = useMemo<StoreState>(
