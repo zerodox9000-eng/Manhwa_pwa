@@ -95,6 +95,23 @@ describe("catalog normalization", () => {
     expect(normalized.catalog[0].year).toBe(2024);
   });
 
+  it("preserves a new AniList first-seen timestamp when a title gains AniList linkage later", () => {
+    const previous = {
+      ...base,
+      id: 77,
+      source: { anilist: null },
+      anilist_first_seen_at: null,
+    };
+    const current = {
+      ...base,
+      id: 77,
+      source: { anilist: { id: 123, rating: null, url: "https://anilist.co/manga/123" } },
+      anilist_first_seen_at: null,
+    };
+    const normalized = normalizeCatalog([current], {}, new Map([[77, previous]]), "2026-06-19T00:00:00.000Z");
+    expect(normalized.catalog[0].anilist_first_seen_at).toBe("2026-06-19");
+  });
+
   it("derives a usable title from source slugs when the backend title is a placeholder", () => {
     const normalized = normalizeCatalog([
       {

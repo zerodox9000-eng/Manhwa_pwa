@@ -303,6 +303,41 @@ describe("runFeedQuery", () => {
     expect(result.items.map((item) => item.id)).toEqual([90, 91, 92]);
   });
 
+  it("uses AniList first-seen ordering for Add in AniList-only feeds", () => {
+    const feed = createFeed("ani add");
+    feed.filters.sourceMode = "anilist";
+    feed.filters.sourceModes = ["anilist"];
+    feed.sort = [{ id: "mb", metric: "mangabakaLatestRank", direction: "asc" }];
+    const result = runFeedQuery({
+      feed,
+      series: [
+        {
+          ...baseSeries[0],
+          id: 120,
+          display_title: "Older AniList title",
+          source: { anilist: { id: 120, rating: null, url: "https://anilist.co/manga/120" } },
+          anilist_first_seen_at: "2026-06-01T00:00:00.000Z",
+          first_seen_at: "2026-05-01T00:00:00.000Z",
+        },
+        {
+          ...baseSeries[0],
+          id: 121,
+          display_title: "Later AniList title",
+          source: { anilist: { id: 121, rating: null, url: "https://anilist.co/manga/121" } },
+          anilist_first_seen_at: "2026-06-10T00:00:00.000Z",
+          first_seen_at: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: { ...DEFAULT_SETTINGS, nonAniListPlacement: "mixed" },
+      metaHistoryFirst: null,
+      metaHistoryLast: null,
+    });
+    expect(result.items.map((item) => item.id)).toEqual([120, 121]);
+  });
+
   it("matches MangaBaka safe latest by applying local safety and exact tag filters after rank order", () => {
     const feed = createFeed("MangaBaka safe latest");
     feed.filters.sourceMode = "mixed";

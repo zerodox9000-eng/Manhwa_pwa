@@ -114,6 +114,7 @@ for (const file of fs.readdirSync(detailDir)) {
     published: detail.published ?? null,
     first_seen_at: detail.first_seen_at ?? base.first_seen_at ?? null,
     first_seen_at_is_trusted: detail.first_seen_at_is_trusted ?? base.first_seen_at_is_trusted ?? false,
+    anilist_first_seen_at: detail.anilist_first_seen_at ?? base.anilist_first_seen_at ?? null,
     last_updated_at: detail.last_updated_at ?? base.last_updated_at ?? null,
     mangabaka_latest_rank: detail.mangabaka_latest_rank ?? base.mangabaka_latest_rank ?? null,
     mangabaka_latest_snapshot_at: detail.mangabaka_latest_snapshot_at ?? base.mangabaka_latest_snapshot_at ?? null,

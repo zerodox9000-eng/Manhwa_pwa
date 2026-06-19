@@ -49,6 +49,7 @@ export interface SeriesCatalog {
   romanized_title?: string | null;
   titles?: SeriesTitle[];
   tag_weights?: Record<number, number | string> | null;
+  anilist_first_seen_at?: string | null;
   cover: string | null;
   year: number | null;
   status: string | null;

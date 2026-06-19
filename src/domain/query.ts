@@ -69,6 +69,10 @@ function dateTimeValue(value?: string | null) {
   return Number.isFinite(parsed) ? parsed : -Infinity;
 }
 
+function anilistFirstAddedValue(series: SeriesCatalog) {
+  return dateTimeValue(series.anilist_first_seen_at ?? series.first_seen_at ?? series.created_at ?? series.added_at ?? series.last_updated_at);
+}
+
 function sourceModesFromFilters(feed: Feed) {
   const filters = feed.filters;
   return (
@@ -260,6 +264,8 @@ export function runFeedQuery(args: {
   });
 
   const usesLatestAddedSort = feed.sort.some((rule) => rule.metric === "mangabakaLatestRank");
+  const effectiveSourceModes = effectiveSourceModesForFeed(feed);
+  const usesAniListAddedSort = usesLatestAddedSort && effectiveSourceModes.length === 1 && effectiveSourceModes[0] === "anilist";
   const sorted = [...result].sort((a, b) => {
     const aAni = hasAniList(a);
     const bAni = hasAniList(b);
@@ -267,7 +273,14 @@ export function runFeedQuery(args: {
       return settings.nonAniListPlacement === "top" ? (aAni ? 1 : -1) : aAni ? -1 : 1;
     }
 
+    if (usesAniListAddedSort) {
+      const av = anilistFirstAddedValue(a);
+      const bv = anilistFirstAddedValue(b);
+      if (av !== bv) return av - bv;
+    }
+
     for (const rule of feed.sort) {
+      if (usesAniListAddedSort && rule.metric === "mangabakaLatestRank") continue;
       let av = metricValue(a, rule.metric, history, metaHistoryLast);
       let bv = metricValue(b, rule.metric, history, metaHistoryLast);
       if (growthWindow && (rule.metric.includes("Growth") || rule.metric.includes("Delta"))) {

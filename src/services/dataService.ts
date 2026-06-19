@@ -75,12 +75,27 @@ function fixMangaBakaLink<T extends SeriesCatalog>(item: T): T {
   return { ...item, links: { ...(item.links ?? {}), mangabaka: `https://mangabaka.org/${item.id}` } };
 }
 
-function mergeLiveCatalog(liveCatalog: SeriesCatalog[], enrichedCatalog: SeriesCatalog[] | null) {
+function indexCatalog(catalog: SeriesCatalog[] | null | undefined) {
+  const index = new Map<number, SeriesCatalog>();
+  for (const item of catalog ?? []) {
+    index.set(item.id, item);
+    for (const mergedId of item.merged_ids ?? []) index.set(mergedId, item);
+  }
+  return index;
+}
+
+function mergeLiveCatalog(
+  liveCatalog: SeriesCatalog[],
+  enrichedCatalog: SeriesCatalog[] | null,
+  previousCatalog: SeriesCatalog[] | null,
+) {
   const enrichedById = new Map((enrichedCatalog ?? []).map((item) => [item.id, fixMangaBakaLink(item)]));
+  const previousById = indexCatalog(previousCatalog);
   const liveIds = new Set<number>();
   const merged = liveCatalog.map((live) => {
     liveIds.add(live.id);
     const enriched = enrichedById.get(live.id);
+    const previous = previousById.get(live.id);
     const fixedLive = fixMangaBakaLink(live);
     if (!enriched) return fixedLive;
     const livePublished = fixedLive.published;
@@ -92,6 +107,7 @@ function mergeLiveCatalog(liveCatalog: SeriesCatalog[], enrichedCatalog: SeriesC
       source: fixedLive.source ?? enriched.source,
       published: livePublished?.start_date || livePublished?.end_date ? livePublished : enriched.published,
       last_updated_at: fixedLive.last_updated_at ?? enriched.last_updated_at,
+      anilist_first_seen_at: fixedLive.anilist_first_seen_at ?? enriched.anilist_first_seen_at ?? previous?.anilist_first_seen_at ?? null,
       display_title: resolveDisplayTitle(enriched, fixedLive),
       animeplanet_title: fixedLive.animeplanet_title ?? enriched.animeplanet_title,
       mangabaka_title: fixedLive.mangabaka_title ?? enriched.mangabaka_title,
@@ -140,6 +156,7 @@ export async function syncFrontendData(
   onProgress?: (message: string) => void
 ) {
   const source = await resolveDataSource(preferredSource);
+  const syncTimestamp = new Date().toISOString();
 
   onProgress?.("Loading current backend catalog");
 
@@ -148,8 +165,10 @@ export async function syncFrontendData(
   onProgress?.("Merging query-ready fields");
 
   const localCatalog = parseCatalogList(await fetchLocalJson<unknown>("data/query-index.json.gz"));
+  const cachedCatalog = parseCatalogList(await db.catalog.toArray());
+  const cachedIndex = indexCatalog(cachedCatalog);
 
-  const mergedCatalog = mergeLiveCatalog(liveCatalog, localCatalog);
+  const mergedCatalog = mergeLiveCatalog(liveCatalog, localCatalog, cachedCatalog);
 
   onProgress?.("Downloading tags");
 
@@ -170,7 +189,7 @@ export async function syncFrontendData(
 
   onProgress?.("Saving offline data");
 
-  const normalized = normalizeCatalog(mergedCatalog, rawHistory);
+  const normalized = normalizeCatalog(mergedCatalog, rawHistory, cachedIndex, syncTimestamp);
   const catalog = normalized.catalog;
   const history = normalized.history;
 

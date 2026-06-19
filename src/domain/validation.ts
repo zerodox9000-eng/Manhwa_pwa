@@ -93,6 +93,7 @@ const seriesCatalogSchema = z
     romanized_title: stringNull.default(null),
     titles: z.array(seriesTitleSchema).optional(),
     tag_weights: z.record(z.string(), z.union([z.number(), z.string()])).optional(),
+    anilist_first_seen_at: stringNull.default(null),
     cover: stringNull.default(null),
     year: numberNull.default(null),
     status: stringNull.default(null),

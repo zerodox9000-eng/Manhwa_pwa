@@ -247,6 +247,7 @@ function mergeRecord(left: SeriesCatalog, right: SeriesCatalog) {
     mangabaka_title: preferred.mangabaka_title ?? secondary.mangabaka_title ?? null,
     native_title: preferred.native_title ?? secondary.native_title ?? null,
     romanized_title: preferred.romanized_title ?? secondary.romanized_title ?? null,
+    anilist_first_seen_at: preferred.anilist_first_seen_at ?? secondary.anilist_first_seen_at ?? null,
     display_title: resolveDisplayTitle(secondary, preferred),
     stats: {
       popularity: newestNumber(left.stats?.popularity, right.stats?.popularity, rightIsNewer),
@@ -287,9 +288,20 @@ function datePart(value?: string | null) {
   return value?.slice(0, 10) ?? null;
 }
 
+function previousRecordForIds(records: number[], previousCatalog?: Map<number, SeriesCatalog>) {
+  if (!previousCatalog) return null;
+  for (const id of records) {
+    const item = previousCatalog.get(id);
+    if (item) return item;
+  }
+  return null;
+}
+
 export function normalizeCatalog(
   catalog: SeriesCatalog[],
   history: HistoryMap,
+  previousCatalog?: Map<number, SeriesCatalog>,
+  syncTimestamp?: string | null,
 ): { catalog: SeriesCatalog[]; history: HistoryMap } {
   const globalHistoryFirstDate =
     Object.values(history)
@@ -335,6 +347,7 @@ export function normalizeCatalog(
     const merged = records.reduce(mergeRecord);
     const ids = unique(records.flatMap((record) => [record.id, ...(record.merged_ids ?? [])]));
     const entries = mergeHistoryEntries(ids.map((id) => history[String(id)] ?? []));
+    const previous = previousRecordForIds(ids, previousCatalog);
     const explicitFirstSeen =
       datePart(merged.first_seen_at) ??
       datePart(merged.created_at) ??
@@ -343,6 +356,15 @@ export function normalizeCatalog(
     const historyFirstSeen = entries[0]?.d && entries[0].d !== globalHistoryFirstDate ? entries[0].d : null;
     const lastUpdatedDate = datePart(merged.last_updated_at);
     const firstSeen = explicitFirstSeen ?? historyFirstSeen ?? lastUpdatedDate;
+    const currentAniListSeen = datePart(merged.anilist_first_seen_at);
+    const previousAniListSeen = datePart(previous?.anilist_first_seen_at);
+    const hadAniListBefore = Boolean(previous?.source?.anilist);
+    const hasAniListNow = Boolean(merged.source?.anilist);
+    const anilistFirstSeen =
+      currentAniListSeen ??
+      previousAniListSeen ??
+      (hasAniListNow && !hadAniListBefore ? datePart(syncTimestamp) : null) ??
+      (hasAniListNow ? firstSeen : null);
     const published = { ...(merged.published ?? {}) };
     const hasActualStartDate = Boolean(published.start_date && !published.start_date_is_estimated);
     if (!hasActualStartDate) {
@@ -359,6 +381,7 @@ export function normalizeCatalog(
       display_title: resolveDisplayTitle(merged),
       animeplanet_title: merged.animeplanet_title ?? null,
       first_seen_at: firstSeen,
+      anilist_first_seen_at: anilistFirstSeen,
       published,
       year: hasActualStartDate ? Number(published.start_date!.slice(0, 4)) : merged.year,
     };
