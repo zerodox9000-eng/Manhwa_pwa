@@ -45,6 +45,31 @@ describe("metrics", () => {
     expect(formatMetricValue(fallbackSeries, "endDate")).toBe("n/a");
   });
 
+
+  it("computes underrated score only above the rounded popularity cutoff", () => {
+    const eligible: SeriesCatalog = {
+      ...series,
+      id: 4,
+      analytics: {
+        popularityPercentile: 70.5,
+        fanFavouriteDiscoveryPercentile: 88.2,
+      },
+    };
+    const filteredOut: SeriesCatalog = {
+      ...series,
+      id: 5,
+      analytics: {
+        popularityPercentile: 70.4,
+        fanFavouriteDiscoveryPercentile: 88.2,
+      },
+    };
+
+    expect(metricValue(eligible, "underratedScore")).toBeCloseTo(17.7);
+    expect(formatMetricValue(eligible, "underratedScore")).toBe("17.7%");
+    expect(metricValue(filteredOut, "underratedScore")).toBe(-Infinity);
+    expect(formatMetricValue(filteredOut, "underratedScore")).toBe("n/a");
+  });
+
   it("does not use untrusted first-seen or last-updated as release fallback when no start date exists", () => {
     const untrusted: SeriesCatalog = {
       ...series,

@@ -17,6 +17,7 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
   { id: "meanScore", label: "Mean score", shortLabel: "Score", help: "AniList mean score from users. Hidden by default because coverage varies.", filterable: true, anilistOnly: true },
   { id: "fanRatioPercentile", label: "Fan percent percentile", shortLabel: "FanPct", help: "How high the fan favourite percent ranks against other titles.", filterable: true, anilistOnly: true },
   { id: "popularityPercentile", label: "Popularity percentile", shortLabel: "PopPct", help: "How high popularity ranks against other titles.", filterable: true, anilistOnly: true },
+  { id: "underratedScore", label: "Underrated score", shortLabel: "Und", help: "Fan rank minus popularity percentile for titles that stay above the popularity cutoff.", filterable: true, anilistOnly: true },
   { id: "fanFavouriteDiscoveryScore", label: "Discovery score", shortLabel: "Disc", help: "Balanced score for loved titles with enough popularity confidence.", filterable: true, anilistOnly: true },
   { id: "fanFavouriteDiscoveryPercentile", label: "Fan Rank", shortLabel: "Fan Rank", help: "Percentile rank of the balanced fan discovery score.", filterable: true, anilistOnly: true },
   { id: "year", label: "Year", shortLabel: "Year", help: "Release year from the catalog.", filterable: true, anilistOnly: false },
@@ -108,6 +109,14 @@ export function metricValue(series: SeriesCatalog, metric: MetricId, history: Hi
   if (metric === "fanFavouriteRaw") return analytics.fanFavouriteRaw ?? -Infinity;
   if (metric === "fanRatioPercentile") return analytics.fanRatioPercentile ?? -Infinity;
   if (metric === "popularityPercentile") return analytics.popularityPercentile ?? -Infinity;
+  if (metric === "underratedScore") {
+    const fanRank = analytics.fanFavouriteDiscoveryPercentile;
+    const popularityPercentile = analytics.popularityPercentile;
+    const displayedPopPct = displayedPopularityPercentile(series);
+    if (fanRank == null || popularityPercentile == null || displayedPopPct == null) return -Infinity;
+    if (displayedPopPct <= 70) return -Infinity;
+    return fanRank - popularityPercentile;
+  }
   if (metric === "fanFavouriteDiscoveryScore") return analytics.fanFavouriteDiscoveryScore ?? -Infinity;
   if (metric === "fanFavouriteDiscoveryPercentile") return analytics.fanFavouriteDiscoveryPercentile ?? -Infinity;
   if (metric === "mangabakaLatestRank") return series.mangabaka_latest_rank ?? Infinity;
@@ -154,10 +163,17 @@ function roundToDisplayPrecision(value: number, precision: number) {
   return Math.round((value + Number.EPSILON) * factor) / factor;
 }
 
+function displayedPopularityPercentile(series: SeriesCatalog) {
+  const value = series.analytics?.popularityPercentile;
+  if (value == null || !Number.isFinite(value)) return null;
+  return roundToDisplayPrecision(value, 0);
+}
+
 export function displayComparableMetricValue(series: SeriesCatalog, metric: MetricId, history?: HistoryMap, latestDate?: string | null) {
   const value = metricValue(series, metric, history, latestDate);
   if (typeof value !== "number" || value == null || !Number.isFinite(value)) return value;
   if (metric === "fanFavouriteRaw" || metric === "fanFavouriteDelta") return roundToDisplayPrecision(value, 1);
+  if (metric === "underratedScore") return roundToDisplayPrecision(value, 1);
   if (metric.includes("Percentile") || metric.includes("Percent")) return roundToDisplayPrecision(value, 0);
   if (metric === "meanScore") return roundToDisplayPrecision(value, 0);
   if (metric === "fanFavouriteDiscoveryScore") return roundToDisplayPrecision(value, 1);
@@ -169,6 +185,7 @@ export function formatMetricValue(series: SeriesCatalog, metric: MetricId, histo
   if (value == null || !Number.isFinite(Number(value))) return "n/a";
   if (typeof value === "string") return value;
   if (metric === "fanFavouriteRaw" || metric === "fanFavouriteDelta") return `${Number(value).toFixed(1)}%`;
+  if (metric === "underratedScore") return `${Number(value).toFixed(1)}%`;
   if (metric.includes("Percentile") || metric.includes("Percent") || metric.includes("Percentile")) return `${Number(value).toFixed(0)}%`;
   if (metric === "meanScore" || metric === "fanFavouriteDiscoveryScore" || metric === "fanFavouriteDiscoveryPercentile") {
     return Number(value).toFixed(metric === "meanScore" ? 0 : 1);

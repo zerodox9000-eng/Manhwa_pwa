@@ -137,6 +137,7 @@ export type MetricId =
   | "fanFavouriteRaw"
   | "fanRatioPercentile"
   | "popularityPercentile"
+  | "underratedScore"
   | "fanFavouriteDiscoveryScore"
   | "fanFavouriteDiscoveryPercentile"
   | "releaseDate"
