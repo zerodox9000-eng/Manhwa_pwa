@@ -114,7 +114,7 @@ export function metricValue(series: SeriesCatalog, metric: MetricId, history: Hi
     const popularityPercentile = analytics.popularityPercentile;
     const displayedPopPct = displayedPopularityPercentile(series);
     if (fanRank == null || popularityPercentile == null || displayedPopPct == null) return -Infinity;
-    if (displayedPopPct <= 70) return -Infinity;
+    if (displayedPopPct < 70) return -Infinity;
     return fanRank - popularityPercentile;
   }
   if (metric === "fanFavouriteDiscoveryScore") return analytics.fanFavouriteDiscoveryScore ?? -Infinity;
@@ -173,7 +173,7 @@ export function displayComparableMetricValue(series: SeriesCatalog, metric: Metr
   const value = metricValue(series, metric, history, latestDate);
   if (typeof value !== "number" || value == null || !Number.isFinite(value)) return value;
   if (metric === "fanFavouriteRaw" || metric === "fanFavouriteDelta") return roundToDisplayPrecision(value, 1);
-  if (metric === "underratedScore") return roundToDisplayPrecision(value, 1);
+  if (metric === "underratedScore") return roundToDisplayPrecision(value, 0);
   if (metric.includes("Percentile") || metric.includes("Percent")) return roundToDisplayPrecision(value, 0);
   if (metric === "meanScore") return roundToDisplayPrecision(value, 0);
   if (metric === "fanFavouriteDiscoveryScore") return roundToDisplayPrecision(value, 1);
@@ -185,7 +185,7 @@ export function formatMetricValue(series: SeriesCatalog, metric: MetricId, histo
   if (value == null || !Number.isFinite(Number(value))) return "n/a";
   if (typeof value === "string") return value;
   if (metric === "fanFavouriteRaw" || metric === "fanFavouriteDelta") return `${Number(value).toFixed(1)}%`;
-  if (metric === "underratedScore") return `${Number(value).toFixed(1)}%`;
+  if (metric === "underratedScore") return `${Number(value).toFixed(0)}%`;
   if (metric.includes("Percentile") || metric.includes("Percent") || metric.includes("Percentile")) return `${Number(value).toFixed(0)}%`;
   if (metric === "meanScore" || metric === "fanFavouriteDiscoveryScore" || metric === "fanFavouriteDiscoveryPercentile") {
     return Number(value).toFixed(metric === "meanScore" ? 0 : 1);

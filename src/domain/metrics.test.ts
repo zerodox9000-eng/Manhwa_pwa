@@ -51,7 +51,7 @@ describe("metrics", () => {
       ...series,
       id: 4,
       analytics: {
-        popularityPercentile: 70.5,
+        popularityPercentile: 70.4,
         fanFavouriteDiscoveryPercentile: 88.2,
       },
     };
@@ -59,13 +59,13 @@ describe("metrics", () => {
       ...series,
       id: 5,
       analytics: {
-        popularityPercentile: 70.4,
+        popularityPercentile: 69.4,
         fanFavouriteDiscoveryPercentile: 88.2,
       },
     };
 
-    expect(metricValue(eligible, "underratedScore")).toBeCloseTo(17.7);
-    expect(formatMetricValue(eligible, "underratedScore")).toBe("17.7%");
+    expect(metricValue(eligible, "underratedScore")).toBeCloseTo(17.8);
+    expect(formatMetricValue(eligible, "underratedScore")).toBe("18%");
     expect(metricValue(filteredOut, "underratedScore")).toBe(-Infinity);
     expect(formatMetricValue(filteredOut, "underratedScore")).toBe("n/a");
   });
