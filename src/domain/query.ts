@@ -52,7 +52,8 @@ function buildDescendantTagSet(tags: TagNode[], roots: Set<number>) {
 export function buildSensitiveTagGroups(tags: TagNode[]) {
   const relationshipRoots = buildExactTagSet(tags, RELATIONSHIP_SENSITIVE_NAMES);
   const relationship = buildDescendantTagSet(tags, relationshipRoots);
-  const adult = buildExactTagSet(tags, ADULT_SENSITIVE_NAMES);
+  const adultRoots = buildExactTagSet(tags, ADULT_SENSITIVE_NAMES);
+  const adult = buildDescendantTagSet(tags, adultRoots);
   return {
     relationship,
     adult,

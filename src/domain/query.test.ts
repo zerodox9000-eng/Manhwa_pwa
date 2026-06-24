@@ -142,6 +142,12 @@ describe("runFeedQuery", () => {
     expect(groups.relationship.has(5)).toBe(false);
   });
 
+  it("includes Hentai descendants in the global adult sensitive group", () => {
+    const groups = buildSensitiveTagGroups(tags);
+    expect(groups.adult.has(2)).toBe(true);
+    expect(groups.adult.has(6)).toBe(true);
+  });
+
   it("segments non-AniList titles by source mode", () => {
     const feed = createFeed("non anilist");
     feed.filters.sourceMode = "non-anilist";

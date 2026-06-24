@@ -23,7 +23,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Fuse from "fuse.js";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import ReactMarkdown from "react-markdown";
@@ -80,9 +80,24 @@ const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
 
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
+const HOME_SCROLL_PREFIX = "manhwa-home-scroll";
 
 function visibleTitle(series: SeriesCatalog, fallback?: SeriesCatalog) {
   return resolveVisibleTitle(series, fallback);
+}
+
+function homeScrollKey(feed: Feed | null) {
+  if (!feed) return `${HOME_SCROLL_PREFIX}:none`;
+  return `${HOME_SCROLL_PREFIX}:${feed.id}:${feed.view.gridColumns}:${feed.view.gridDensity}`;
+}
+
+function saveHomeScroll(feed: Feed | null) {
+  if (!feed) return;
+  try {
+    localStorage.setItem(homeScrollKey(feed), String(window.scrollY));
+  } catch {
+    // Best effort only.
+  }
 }
 
 function isSearchVisible(series: SeriesCatalog, settings: AppSettings, sensitiveTagIds: { relationship: Set<number>; adult: Set<number> }) {
@@ -178,6 +193,10 @@ function SessionRestorer() {
   const location = useLocation();
   const navigate = useNavigate();
   const restored = useRef(false);
+  const activeFeed = useMemo(
+    () => store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null,
+    [store.activeFeedId, store.feeds],
+  );
 
   useEffect(() => {
     if (restored.current || !store.ready) return;
@@ -195,22 +214,27 @@ function SessionRestorer() {
   useEffect(() => {
     if (!store.settings.restoreLastSession) return;
     const path = `${location.pathname}${location.search}`;
+    const key = location.pathname === "/" ? homeScrollKey(activeFeed) : path;
     if (location.pathname.startsWith("/title/")) {
       window.scrollTo({ top: 0, behavior: "instant" });
       return;
     }
     try {
       const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as { scroll?: Record<string, number> };
-      const y = saved.scroll?.[path] ?? 0;
-      if (y > 0) requestAnimationFrame(() => window.scrollTo({ top: y }));
+      const candidates = [saved.scroll?.[key], Number(localStorage.getItem(key)), saved.scroll?.[path]];
+      const y = candidates.find((value) => Number.isFinite(value)) ?? 0;
+      if (y > 0) {
+        requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: y })));
+      }
     } catch {
       // Ignore stale restore payloads.
     }
-  }, [location.pathname, location.search, store.settings.restoreLastSession]);
+  }, [activeFeed, location.pathname, location.search, store.settings.restoreLastSession]);
 
   useEffect(() => {
     if (!store.settings.restoreLastSession) return;
     const path = `${location.pathname}${location.search}`;
+    const key = location.pathname === "/" ? homeScrollKey(activeFeed) : path;
     if (location.pathname.startsWith("/title/")) return;
     const save = () => {
       try {
@@ -220,8 +244,9 @@ function SessionRestorer() {
         };
         localStorage.setItem(
           SESSION_RESTORE_KEY,
-          JSON.stringify({ ...saved, path, scroll: { ...(saved.scroll ?? {}), [path]: window.scrollY } }),
+          JSON.stringify({ ...saved, path, scroll: { ...(saved.scroll ?? {}), [path]: window.scrollY, [key]: window.scrollY } }),
         );
+        if (location.pathname === "/") localStorage.setItem(key, String(window.scrollY));
       } catch {
         // localStorage can be unavailable in private contexts.
       }
@@ -229,7 +254,7 @@ function SessionRestorer() {
     save();
     window.addEventListener("scroll", save, { passive: true });
     return () => window.removeEventListener("scroll", save);
-  }, [location.pathname, location.search, store.settings.restoreLastSession]);
+  }, [activeFeed, location.pathname, location.search, store.settings.restoreLastSession]);
 
   return null;
 }
@@ -269,38 +294,11 @@ function BottomDrawer({
 function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
-  const pagerRef = useRef<HTMLDivElement | null>(null);
-  const pointerRef = useRef<{ id: number; x: number; y: number; mode: "pending" | "horizontal" | "vertical" } | null>(null);
-  const [pagerOffset, setPagerOffset] = useState(0);
-  const [pagerAnimating, setPagerAnimating] = useState(false);
-  const [pagerSettling, setPagerSettling] = useState(false);
   const activeFeed = store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null;
-  const activeIndex = activeFeed ? store.feeds.findIndex((item) => item.id === activeFeed.id) : -1;
-  const previousFeed = activeIndex > 0 ? store.feeds[activeIndex - 1] : null;
-  const nextFeed = activeIndex >= 0 && activeIndex < store.feeds.length - 1 ? store.feeds[activeIndex + 1] : null;
 
   useEffect(() => {
     if (!store.activeFeedId && store.feeds[0]) store.setActiveFeedId(store.feeds[0].id);
   }, [store]);
-
-  const settlePager = () => {
-    setPagerAnimating(true);
-    setPagerOffset(0);
-    window.setTimeout(() => setPagerAnimating(false), 220);
-  };
-
-  const finishPager = (targetIndex: number, finalOffset: number) => {
-    setPagerAnimating(true);
-    setPagerSettling(true);
-    setPagerOffset(finalOffset);
-    window.setTimeout(() => {
-      resetPageScroll();
-      store.setActiveFeedId(store.feeds[targetIndex].id);
-      setPagerAnimating(false);
-      setPagerOffset(0);
-      window.setTimeout(() => setPagerSettling(false), 90);
-    }, 210);
-  };
 
   return (
     <div className="page">
@@ -322,58 +320,8 @@ function HomePage() {
           </button>
         </div>
       ) : (
-        <div
-          ref={pagerRef}
-          className={`feed-pager ${pagerAnimating ? "animating" : ""} ${pagerSettling ? "settling" : ""}`}
-          style={{ "--pager-offset": `${pagerOffset}px` } as React.CSSProperties}
-          onPointerDown={(event) => {
-            if (!event.isPrimary || event.pointerType === "mouse") return;
-            pointerRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY, mode: "pending" };
-          }}
-          onPointerMove={(event) => {
-            const start = pointerRef.current;
-            if (!start || start.id !== event.pointerId || !event.isPrimary) return;
-            const dx = event.clientX - start.x;
-            const dy = event.clientY - start.y;
-            if (start.mode === "pending") {
-              if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
-              start.mode = Math.abs(dx) > Math.abs(dy) * 1.35 ? "horizontal" : "vertical";
-              if (start.mode === "horizontal") event.currentTarget.setPointerCapture(event.pointerId);
-            }
-            if (start.mode !== "horizontal") return;
-            event.preventDefault();
-            const canMove = dx < 0 ? Boolean(nextFeed) : Boolean(previousFeed);
-            const resisted = canMove ? dx : dx * 0.28;
-            const width = pagerRef.current?.clientWidth || window.innerWidth || 360;
-            setPagerAnimating(false);
-            setPagerOffset(Math.max(-width, Math.min(width, resisted)));
-          }}
-          onPointerUp={(event) => {
-            const start = pointerRef.current;
-            pointerRef.current = null;
-            if (!start || start.id !== event.pointerId) return;
-            if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-            const dx = event.clientX - start.x;
-            const dy = event.clientY - start.y;
-            const width = pagerRef.current?.clientWidth || window.innerWidth || 360;
-            if (start.mode !== "horizontal" || Math.abs(dx) < Math.min(96, width * 0.24) || Math.abs(dx) < Math.abs(dy) * 1.35) {
-              settlePager();
-              return;
-            }
-            const targetIndex = dx < 0 ? activeIndex + 1 : activeIndex - 1;
-            if (targetIndex < 0 || targetIndex >= store.feeds.length) {
-              settlePager();
-              return;
-            }
-            finishPager(targetIndex, dx < 0 ? -width : width);
-          }}
-          onPointerCancel={settlePager}
-        >
-          <div className="feed-pager-track">
-            <div className="feed-pager-panel">{previousFeed ? <BlankFeedPanel /> : null}</div>
-            <div className="feed-pager-panel">{activeFeed ? <FeedView feed={activeFeed} /> : null}</div>
-            <div className="feed-pager-panel">{nextFeed ? <BlankFeedPanel /> : null}</div>
-          </div>
+        <div className="feed-shell">
+          <FeedView feed={activeFeed} />
         </div>
       )}
       <BottomDrawer title="Create Feed" open={editorOpen} onOpenChange={setEditorOpen}>
@@ -415,10 +363,6 @@ function FeedTabs() {
       ))}
     </div>
   );
-}
-
-function BlankFeedPanel() {
-  return <section className="blank-feed-panel" aria-hidden="true" />;
 }
 
 function FeedView({ feed }: { feed: Feed }) {
@@ -568,11 +512,12 @@ function TitleCollection({
         style={{ "--grid-columns": feed.view.gridColumns } as React.CSSProperties}
       >
         {visibleItems.map((series, index) => (
-          <TitleCard
+          <MemoTitleCard
             key={series.id}
             series={series}
             rank={index + 1}
             view={feed.view}
+            feed={feed}
             history={history}
             latestDate={latestDate}
             metricWindow={metricWindow}
@@ -649,6 +594,7 @@ function TitleCard({
   series,
   rank,
   view,
+  feed,
   history,
   latestDate,
   metricWindow,
@@ -656,6 +602,7 @@ function TitleCard({
   series: SeriesCatalog;
   rank: number;
   view: FeedViewSettings;
+  feed: Feed;
   history: HistoryMap;
   latestDate?: string | null;
   metricWindow?: { from: string; to: string } | null;
@@ -663,7 +610,7 @@ function TitleCard({
   const title = visibleTitle(series);
   return (
     <div className="title-card-wrap">
-      <Link to={`/title/${series.id}`} className="title-card" data-testid="title-card">
+      <Link to={`/title/${series.id}`} className="title-card" data-testid="title-card" onClickCapture={() => saveHomeScroll(feed)}>
         <div className="poster-shell">
           <Cover series={series} priority={rank <= 18} />
           {view.visible.rank && <span className="rank">{rank}</span>}
@@ -678,6 +625,19 @@ function TitleCard({
     </div>
   );
 }
+
+const MemoTitleCard = memo(TitleCard, (prev, next) =>
+  prev.series.id === next.series.id &&
+  prev.rank === next.rank &&
+  prev.view === next.view &&
+  prev.feed.id === next.feed.id &&
+  prev.feed.view.gridColumns === next.feed.view.gridColumns &&
+  prev.feed.view.gridDensity === next.feed.view.gridDensity &&
+  prev.history === next.history &&
+  prev.latestDate === next.latestDate &&
+  prev.metricWindow?.from === next.metricWindow?.from &&
+  prev.metricWindow?.to === next.metricWindow?.to
+);
 
 function TitleCollectionSkeleton({ columns }: { columns: 1 | 2 | 3 | 4 | 5 }) {
   const count = columns >= 5 ? 10 : columns === 4 ? 12 : 9;
@@ -753,10 +713,17 @@ function TitleMetrics({
   latestDate?: string | null;
   metricWindow?: { from: string; to: string } | null;
 }) {
-  const metricSlots: MetricId[] = (view.metricSlots?.length ? view.metricSlots : (["fanFavouriteDiscoveryPercentile"] as MetricId[])).slice(0, 3);
-  const values = metricSlots
-    .map((metric) => ({ metric, value: formatFeedMetricValue(series, metric, history, latestDate, metricWindow) }))
-    .filter((item) => item.value !== "n/a");
+  const metricSlots: MetricId[] = useMemo(
+    () => (view.metricSlots?.length ? view.metricSlots : (["fanFavouriteDiscoveryPercentile"] as MetricId[])).slice(0, 3),
+    [view.metricSlots],
+  );
+  const values = useMemo(
+    () =>
+      metricSlots
+        .map((metric) => ({ metric, value: formatFeedMetricValue(series, metric, history, latestDate, metricWindow) }))
+        .filter((item) => item.value !== "n/a"),
+    [history, latestDate, metricSlots, metricWindow, series],
+  );
   return (
     <div className={`metrics ${compact ? "compact-metrics" : ""}`}>
       {values.map(({ metric, value }) => (
@@ -2027,6 +1994,7 @@ function TitleDetailPage() {
   const [status, setStatus] = useState("Loading detail");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showAllRecommendations, setShowAllRecommendations] = useState(false);
+  const [showRecommendations, setShowRecommendations] = useState(false);
   const detailLayoutKey = `manhwa-detail-layout:${store.activeFeedId ?? "default"}`;
   const [visible, setVisible] = useState(() => {
     try {
@@ -2043,7 +2011,7 @@ function TitleDetailPage() {
   });
   const tagsById = useMemo(() => new Map(store.tags.map((tag) => [tag.id, tag])), [store.tags]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [id]);
 
@@ -2056,12 +2024,14 @@ function TitleDetailPage() {
     setDetail(null);
     setLoading(true);
     setStatus("Loading detail");
+    setShowRecommendations(false);
     if (invalidRoute) {
       setStatus("Invalid title route");
       setLoading(false);
       return;
     }
-    void fetchSeriesDetail(store.settings.dataSourceUrl, id)
+    const handle = window.setTimeout(() => {
+      void fetchSeriesDetail(store.settings.dataSourceUrl, id)
       .then((value) => {
         if (!cancelled) {
           setDetail(value);
@@ -2075,8 +2045,10 @@ function TitleDetailPage() {
           setLoading(false);
         }
       });
+    }, 0);
     return () => {
       cancelled = true;
+      window.clearTimeout(handle);
     };
   }, [id, invalidRoute, store.settings.dataSourceUrl]);
 
@@ -2101,6 +2073,12 @@ function TitleDetailPage() {
 
   const loadingDetail = !invalidRoute && (loading || Boolean(detail && detail.id !== id));
   const showError = invalidRoute || (!loading && !detail && status && status !== "Loading detail");
+
+  useEffect(() => {
+    if (loadingDetail || showError || !series) return;
+    const handle = window.setTimeout(() => setShowRecommendations(true), 32);
+    return () => window.clearTimeout(handle);
+  }, [loadingDetail, series, showError]);
 
   return (
     <div className="detail-page">
@@ -2183,31 +2161,33 @@ function TitleDetailPage() {
               </div>
             </section>
           )}
-          <section className="detail-block detail-recommendations">
-            <div className="row">
-              <h2 className="section-title">Recommendations</h2>
-              <span className="spacer" />
-              <button className="button ghost" type="button" onClick={() => setShowAllRecommendations((value) => !value)}>
-                {showAllRecommendations ? "Show less" : "Show more"}
-              </button>
-            </div>
-            {store.settings.recommendationShelves.slice(0, showAllRecommendations ? undefined : 1).map((shelf) => {
-              const recFeed = createFeed(shelf.name);
-              recFeed.id = `detail-rec-${series!.id}-${shelf.id}`;
-              recFeed.view.gridColumns = 3;
-              return (
-                <div className="detail-rec-section" key={shelf.id}>
-                  <h3>{shelf.name}</h3>
-                  <RecommendationResults
-                    base={series}
-                    shelf={shelf}
-                    feed={recFeed}
-                    limit={showAllRecommendations ? RECOMMENDATION_MAX_RESULTS : RECOMMENDATION_DEFAULT_RESULTS}
-                  />
-                </div>
-              );
-            })}
-          </section>
+          {showRecommendations && (
+            <section className="detail-block detail-recommendations">
+              <div className="row">
+                <h2 className="section-title">Recommendations</h2>
+                <span className="spacer" />
+                <button className="button ghost" type="button" onClick={() => setShowAllRecommendations((value) => !value)}>
+                  {showAllRecommendations ? "Show less" : "Show more"}
+                </button>
+              </div>
+              {store.settings.recommendationShelves.slice(0, showAllRecommendations ? undefined : 1).map((shelf) => {
+                const recFeed = createFeed(shelf.name);
+                recFeed.id = `detail-rec-${series!.id}-${shelf.id}`;
+                recFeed.view.gridColumns = 3;
+                return (
+                  <div className="detail-rec-section" key={shelf.id}>
+                    <h3>{shelf.name}</h3>
+                    <RecommendationResults
+                      base={series}
+                      shelf={shelf}
+                      feed={recFeed}
+                      limit={showAllRecommendations ? RECOMMENDATION_MAX_RESULTS : RECOMMENDATION_DEFAULT_RESULTS}
+                    />
+                  </div>
+                );
+              })}
+            </section>
+          )}
         </>
       ) : showError ? (
         <div className="detail-error">
