@@ -713,17 +713,17 @@ function TitleMetrics({
   latestDate?: string | null;
   metricWindow?: { from: string; to: string } | null;
 }) {
-  const metricSlots: MetricId[] = useMemo(
-    () => (view.metricSlots?.length ? view.metricSlots : (["fanFavouriteDiscoveryPercentile"] as MetricId[])).slice(0, 3),
-    [view.metricSlots],
-  );
+  const metricSlots: MetricId[] = useMemo(() => (view.metricSlots ?? []).slice(0, 3), [view.metricSlots]);
   const values = useMemo(
-    () =>
-      metricSlots
+    () => {
+      if (metricSlots.length === 0) return [];
+      return metricSlots
         .map((metric) => ({ metric, value: formatFeedMetricValue(series, metric, history, latestDate, metricWindow) }))
-        .filter((item) => item.value !== "n/a"),
+        .filter((item) => item.value !== "n/a");
+    },
     [history, latestDate, metricSlots, metricWindow, series],
   );
+  if (metricSlots.length === 0) return null;
   return (
     <div className={`metrics ${compact ? "compact-metrics" : ""}`}>
       {values.map(({ metric, value }) => (
@@ -1330,7 +1330,7 @@ function MetricRangeEditor({ ranges, onChange }: { ranges: MetricRange[]; onChan
 }
 
 function MetricSlotPicker({ slots, onChange }: { slots: MetricId[]; onChange: (slots: MetricId[]) => void }) {
-  const current = slots.length ? slots.slice(0, 3) : ["fanFavouriteRaw", "popularity", "favourites"] as MetricId[];
+  const current = slots.slice(0, 3);
   const toggle = (metric: MetricId) => {
     if (current.includes(metric)) {
       onChange(current.filter((item) => item !== metric));
@@ -1340,7 +1340,13 @@ function MetricSlotPicker({ slots, onChange }: { slots: MetricId[]; onChange: (s
   };
   return (
     <div className="field">
-      <span className="small-label">Cover stats - max 3</span>
+      <div className="row">
+        <span className="small-label">Cover stats - max 3</span>
+        <span className="spacer" />
+        <button className="button ghost tiny-button" type="button" onClick={() => onChange([])}>
+          None
+        </button>
+      </div>
       <div className="metric-choice">
         {COVER_STAT_METRICS.map((metric) => (
           <button

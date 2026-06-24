@@ -144,7 +144,7 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
       ...DEFAULT_SETTINGS.defaultFeedView,
       ...feed.view,
       mode: "grid",
-      metricSlots: metricSlots.length ? metricSlots : ["year"],
+      metricSlots,
       visible: {
         ...DEFAULT_SETTINGS.defaultFeedView.visible,
         ...feed.view?.visible,

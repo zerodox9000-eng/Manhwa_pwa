@@ -127,6 +127,8 @@ export function buildFuse(items: SeriesCatalog[], tagsById: Map<number, TagNode>
     minMatchCharLength: 2,
     keys: [
       { name: "display_title", weight: 0.82 },
+      { name: "animeplanet_title", weight: 0.44 },
+      { name: "description", weight: 0.18 },
       { name: "authors", weight: 0.22 },
       { name: "artists", weight: 0.22 },
       {

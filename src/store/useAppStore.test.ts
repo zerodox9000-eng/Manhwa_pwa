@@ -14,7 +14,7 @@ describe("normalizeFeed", () => {
 
     expect(normalized.filters.sourceModes).toEqual(["anilist", "non-anilist"]);
     expect(normalized.sort[0].metric).toBe("mangabakaLatestRank");
-    expect(normalized.view.metricSlots).toEqual(["year"]);
+    expect(normalized.view.metricSlots).toEqual([]);
   });
 
   it("preserves shared cover stats when requested", () => {
