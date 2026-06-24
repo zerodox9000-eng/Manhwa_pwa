@@ -79,7 +79,7 @@ const resetPageScroll = () => window.scrollTo({ top: 0, left: 0, behavior: "auto
 const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
 
-const SESSION_RESTORE_KEY = "manhwa-library-route-v2";
+const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 const HOME_SCROLL_PREFIX = "manhwa-home-scroll";
 
 function visibleTitle(series: SeriesCatalog, fallback?: SeriesCatalog) {
@@ -295,51 +295,14 @@ function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
   const activeFeed = store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null;
-  const activeFeedIndex = Math.max(0, store.feeds.findIndex((feed) => feed.id === activeFeed?.id));
-  const pagerRef = useRef<HTMLDivElement | null>(null);
-  const paneRefs = useRef(new Map<string, HTMLDivElement>());
-  const activeIndexRef = useRef(activeFeedIndex);
 
   useEffect(() => {
     if (!store.activeFeedId && store.feeds[0]) store.setActiveFeedId(store.feeds[0].id);
   }, [store]);
 
-  useEffect(() => {
-    activeIndexRef.current = activeFeedIndex;
-  }, [activeFeedIndex]);
-
-  useEffect(() => {
-    const pane = activeFeed ? paneRefs.current.get(activeFeed.id) : null;
-    if (!pane) return;
-    pane.scrollTop = 0;
-    const pager = pagerRef.current;
-    if (pager) pager.scrollTo({ left: pane.offsetLeft, behavior: "auto" });
-  }, [activeFeed]);
-
-  const handleSelectFeed = useCallback(
-    (feed: Feed) => {
-      store.setActiveFeedId(feed.id);
-      const pane = paneRefs.current.get(feed.id);
-      const pager = pagerRef.current;
-      if (pane && pager) pager.scrollTo({ left: pane.offsetLeft, behavior: "smooth" });
-    },
-    [store],
-  );
-
-  const handlePagerScroll = useCallback(() => {
-    const pager = pagerRef.current;
-    if (!pager || store.feeds.length === 0) return;
-    const width = pager.clientWidth || 1;
-    const nextIndex = Math.min(store.feeds.length - 1, Math.max(0, Math.round(pager.scrollLeft / width)));
-    if (nextIndex === activeIndexRef.current) return;
-    activeIndexRef.current = nextIndex;
-    const nextFeed = store.feeds[nextIndex];
-    if (nextFeed) store.setActiveFeedId(nextFeed.id);
-  }, [store]);
-
   return (
-    <div className="page home-page">
-      <FeedTabs onSelectFeed={handleSelectFeed} />
+    <div className="page">
+      <FeedTabs />
       {!store.ready ? (
         <div className="empty-state">
           <strong>Loading local library</strong>
@@ -357,23 +320,8 @@ function HomePage() {
           </button>
         </div>
       ) : (
-        <div className="feed-pager" ref={pagerRef} onScroll={handlePagerScroll}>
-          {store.feeds.map((feed, index) => {
-            const shouldRender = Math.abs(index - activeFeedIndex) <= 1;
-            return (
-              <div className="feed-pager-panel" key={feed.id} data-feed-id={feed.id}>
-                <div
-                  className="page feed-pane-scroll"
-                  ref={(node) => {
-                    if (node) paneRefs.current.set(feed.id, node);
-                    else paneRefs.current.delete(feed.id);
-                  }}
-                >
-                  {shouldRender ? <FeedView feed={feed} /> : <HomeFeedPaneSkeleton feed={feed} />}
-                </div>
-              </div>
-            );
-          })}
+        <div className="feed-shell">
+          <FeedView feed={activeFeed} />
         </div>
       )}
       <BottomDrawer title="Create Feed" open={editorOpen} onOpenChange={setEditorOpen}>
@@ -390,7 +338,7 @@ function HomePage() {
   );
 }
 
-function FeedTabs({ onSelectFeed }: { onSelectFeed?: (feed: Feed) => void }) {
+function FeedTabs() {
   const store = useAppStore();
   const activeRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
@@ -407,27 +355,13 @@ function FeedTabs({ onSelectFeed }: { onSelectFeed?: (feed: Feed) => void }) {
           className={`feed-tab ${store.activeFeedId === feed.id ? "active" : ""}`}
           onClick={() => {
             store.setActiveFeedId(feed.id);
-            onSelectFeed?.(feed);
+            resetPageScroll();
           }}
         >
           <span className="feed-tab-title">{feed.name}</span>
         </button>
       ))}
     </div>
-  );
-}
-
-function HomeFeedPaneSkeleton({ feed }: { feed: Feed }) {
-  return (
-    <section className="section">
-      <div className="feed-view-header">
-        <div className="feed-view-title">
-          <div className="skeleton-line skeleton-line-title" style={{ width: "58%" }} />
-          {feed.showDescription && <div className="skeleton-line skeleton-line-body" style={{ width: "42%", marginTop: "8px" }} />}
-        </div>
-      </div>
-      <TitleCollectionSkeleton columns={feed.view.gridColumns} />
-    </section>
   );
 }
 

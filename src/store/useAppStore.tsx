@@ -18,7 +18,7 @@ import type {
 import { db, loadSyncMeta } from "../db/appDb";
 import { loadBundledCatalog, loadCachedData, syncFrontendData } from "../services/dataService";
 
-const STORAGE_KEY = "manhwa-library-state-v2";
+const STORAGE_KEY = "manhwa-library-state-v1";
 
 interface StoreState {
   ready: boolean;
