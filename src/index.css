@@ -825,9 +825,16 @@ select {
 }
 
 .app-shell {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   overflow-x: clip;
   background: #0a0b0f;
+}
+
+main {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .page {
@@ -3046,4 +3053,85 @@ textarea,
 .setting-row,
 .drawer-content {
   backdrop-filter: blur(14px) saturate(1.12);
+}
+
+/* Ponytail: native pager + lighter card painting. */
+.home-page.page {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.home-page .feed-tabs {
+  flex: 0 0 auto;
+}
+
+.feed-pager {
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  touch-action: pan-y;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.feed-pager::-webkit-scrollbar {
+  display: none;
+}
+
+.feed-pager-panel {
+  flex: 0 0 100%;
+  min-width: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.feed-pane-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.title-card-wrap {
+  content-visibility: auto;
+  contain-intrinsic-size: 220px 320px;
+}
+
+.compact-metrics {
+  justify-content: center;
+}
+
+.compact-metrics span {
+  min-height: 17px;
+  padding: 2px 6px;
+}
+
+.title-grid.columns-1 .compact-metrics span,
+.title-grid.columns-2 .compact-metrics span {
+  min-height: 20px;
+  padding: 2px 7px;
+}
+
+.title-grid.columns-3 .compact-metrics span {
+  min-height: 19px;
+  padding: 2px 6px;
+}
+
+.title-grid.columns-4 .compact-metrics span {
+  min-height: 17px;
+  padding: 1px 5px;
+}
+
+.title-grid.columns-5 .compact-metrics span {
+  min-height: 15px;
+  padding: 1px 4px;
 }
