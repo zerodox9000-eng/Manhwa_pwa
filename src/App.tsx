@@ -535,8 +535,14 @@ function FeedView({ feed }: { feed: Feed }) {
         </div>
         <div className="feed-view-header">
           <div className="feed-view-title">
-            <h1 className="single-line-title">{feed.name}</h1>
-            {feed.showDescription && feed.description && <p className="feed-description">{feed.description}</p>}
+            <FitSingleLineTitle text={feed.name} />
+            <div className="feed-description-shell">
+              {feed.showDescription && feed.description ? (
+                <p className="feed-description">{feed.description}</p>
+              ) : (
+                <div className="feed-description feed-description-empty" aria-hidden="true" />
+              )}
+            </div>
           </div>
         </div>
         {searchOpen && (
@@ -586,13 +592,71 @@ function FeedView({ feed }: { feed: Feed }) {
   );
 }
 
+function FitSingleLineTitle({ text }: { text: string }) {
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const [fontSize, setFontSize] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    const parent = el.parentElement;
+    if (!parent) return;
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    const styles = getComputedStyle(el);
+    const max = Number.parseFloat(styles.fontSize) || 32;
+    const min = max * 0.5;
+    const weight = styles.fontWeight;
+    const family = styles.fontFamily;
+    const fit = () => {
+      const available = parent.clientWidth;
+      if (!available) return;
+      let low = min;
+      let high = max;
+      let best = min;
+      for (let i = 0; i < 10; i += 1) {
+        const mid = (low + high) / 2;
+        context.font = `${weight} ${mid}px ${family}`;
+        if (context.measureText(text).width <= available) {
+          best = mid;
+          low = mid;
+        } else {
+          high = mid;
+        }
+      }
+      setFontSize(Math.max(min, Math.min(max, best)));
+    };
+    fit();
+    const observer = new ResizeObserver(() => fit());
+    observer.observe(parent);
+    return () => observer.disconnect();
+  }, [text]);
+
+  return (
+    <h1
+      ref={titleRef}
+      className="single-line-title"
+      style={fontSize ? { fontSize: `${fontSize}px` } : undefined}
+    >
+      {text}
+    </h1>
+  );
+}
+
 function HomeFeedPaneSkeleton({ feed }: { feed: Feed }) {
   return (
     <section className="section">
       <div className="feed-view-header">
         <div className="feed-view-title">
           <h1 className="single-line-title skeleton-line skeleton-line-title" />
-          {feed.showDescription && <p className="feed-description"><span className="skeleton-line skeleton-line-body" /></p>}
+          <div className="feed-description-shell">
+            {feed.showDescription ? (
+              <p className="feed-description"><span className="skeleton-line skeleton-line-body" /></p>
+            ) : (
+              <div className="feed-description feed-description-empty" aria-hidden="true" />
+            )}
+          </div>
         </div>
       </div>
       <TitleCollectionSkeleton columns={feed.view.gridColumns} />

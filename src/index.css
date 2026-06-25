@@ -565,7 +565,7 @@ a {
 }
 
 .feed-view-title h1 {
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
 }
 
 .bottom-nav {
@@ -2980,21 +2980,50 @@ textarea,
 }
 
 .feed-view-title {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   min-width: 0;
+  width: 100%;
 }
 
 .single-line-title {
+  display: block;
+  width: 100%;
+  max-width: 100%;
   font-size: clamp(21px, 8vw, 34px) !important;
   line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feed-description-shell {
+  min-height: calc(2 * 1.35em + 12px);
 }
 
 .feed-description {
   display: -webkit-box;
   margin-top: 4px;
-  padding-right: 4px;
+  padding: 10px 12px;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(18, 20, 28, 0.55);
+  backdrop-filter: blur(14px) saturate(1.12);
+  color: rgba(232, 235, 242, 0.88);
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.feed-description-empty {
+  background: transparent;
+  border-color: transparent;
+  backdrop-filter: none;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .feed-menu {
@@ -3029,6 +3058,7 @@ textarea,
   flex-direction: column;
   height: calc(100dvh - 58px);
   min-height: 0;
+  padding-top: calc(12px + env(safe-area-inset-top));
   padding-bottom: 0;
   overflow: hidden;
 }
@@ -3069,6 +3099,10 @@ textarea,
   height: 100%;
   scroll-snap-align: start;
   scroll-snap-stop: always;
+}
+
+.feed-pager-panel:not(:last-child) {
+  margin-right: 14px;
 }
 
 .feed-pane-scroll {
