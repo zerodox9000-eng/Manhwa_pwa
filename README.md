@@ -1,26 +1,57 @@
 # Manhwa Lib
 
-Mobile-first local PWA for building custom manhwa discovery grids from the `zerodox9000-eng/manhwa_db` frontend exports.
+Mobile-first local PWA for building custom manhwa discovery grids from the `zerodox9000-eng/manhwa_db` frontend export.
 
 ## Live App
 
 [Open Manhwa Lib on GitHub Pages](https://zerodox9000-eng.github.io/Manhwa_pwa/)
 
-## What Is Implemented
+## What This Frontend Does
 
-- GitHub Pages-ready Vite + React + TypeScript PWA with install metadata, rounded app icons, and offline shell caching.
-- Live-first data sync from the backend export, then local enriched query-index data is merged in for dates, links, authors, and extra search fields.
-- Smart offline sync into IndexedDB for catalog, tags, history, settings, feeds, recommendations, and opened details.
-- Grid-only UI across home, feeds, search, recommendation shelves, and details.
-- Seeded first-run feeds decoded from shared feed links, including `New` with high-first release sorting.
-- Feed builder with AniList/non-AniList source toggles, content ratings, chapter/year/all-metric min/max ranges, hierarchical tag include/exclude, rolling windows, per-feed descriptions, three cover-stat slots, and rank-in-stat-strip control.
-- Catalog normalization deduplicates same-cover/title/source records, keeps current backend stats, and uses first history date as release date when backend dates are estimated.
-- Default cover stats are Fan%, Pop, and Fav, capped at three visible metrics and scaled for dense grids without blurred overlay jitter.
-- Full-page title detail route with current catalog stats, external links, local per-feed detail layout toggles, back/scroll restoration, and embedded recommendations.
-- Title-only search with local recent-search history.
-- Recommendation page with editable vertical top-20 shelves, tag-match scoring, metric ranges, and source toggles.
-- Same-domain compressed share links for feeds, settings, recommendation config, and full backups.
-- Visual and E2E coverage checks mobile/desktop overflow, navigation, search focus/history, feed mosaics, detail layout, and recommendation flow.
+- Vite + React + TypeScript PWA with install metadata, maskable icons, service worker registration, and offline shell caching.
+- Uses the backend export as a catalog source, then merges in the local query index so the frontend keeps the richer search and display fields current.
+- Stores catalog, tags, history, details, recommendation features, feeds, folders, labels, and settings in IndexedDB for offline use.
+- Home is feed-driven and mobile-first, with horizontal feed paging, scroll restore, and per-feed grid settings.
+- Feeds support AniList and non-AniList filtering, content ratings, status, chapter/year/popularity/favourites/score bounds, tag include/exclude, rolling date windows, labels, and custom sort rules.
+- Title detail pages include external links, creator metadata, markdown description rendering, configurable stat blocks, and embedded recommendations.
+- Search is title-only with local recent-search history and sensitive-tag filtering controls.
+- Recommendations use editable shelves, source-mode toggles, tag-match scoring, and metric ranges.
+- Share links are compressed and same-domain, and import links open a preview before anything is applied.
+- Exports currently cover feeds as CSV, plus share payloads for feeds, folders, settings, labels, and full snapshots.
+
+## Routes
+
+- `/` Home
+- `/feeds` Feed manager
+- `/search` Search
+- `/recommendations` Recommendations
+- `/recommendations/:id` Single shelf view
+- `/settings` App settings and exports
+- `/learn` Help and data notes
+- `/title/:id` Title detail
+- `/import` Share import preview
+
+## Current Data Flow
+
+1. The app tries the configured frontend data source URL first.
+2. If that fails, it falls back to the bundled raw and GitHub Pages export candidates.
+3. It loads `series/all.json`, `meta/tags.json`, `stats/history.json`, and optional recommendation features.
+4. It merges live catalog data with the local `query-index.json.gz` enrichment file and cached IndexedDB state.
+5. It writes the normalized catalog, tags, history, details, and recommendation features back to IndexedDB.
+
+## Data Sources
+
+Default frontend source:
+
+```text
+https://raw.githubusercontent.com/zerodox9000-eng/manhwa_db/main/db/exports/frontend
+```
+
+Fallback frontend source:
+
+```text
+https://zerodox9000-eng.github.io/manhwa_db/db/exports/frontend
+```
 
 ## Commands
 
@@ -33,24 +64,9 @@ npm test
 npm run build
 ```
 
-## Data Source
+## Notes For Agents
 
-The app defaults to the raw backend export because it works reliably with CORS:
-
-```text
-https://raw.githubusercontent.com/zerodox9000-eng/manhwa_db/main/db/exports/frontend
-```
-
-It can also use the backend GitHub Pages export URL when available:
-
-```text
-https://zerodox9000-eng.github.io/manhwa_db/db/exports/frontend
-```
-
-## Deploy
-
-The included GitHub Actions workflow builds and deploys `dist/` to GitHub Pages for this repo at:
-
-```text
-https://zerodox9000-eng.github.io/Manhwa_pwa/
-```
+- Keep frontend docs focused on this repo only; the backend export format is a dependency, not the place to make changes here.
+- `src/domain/defaults.ts` is the quickest source of truth for shipped defaults.
+- `src/App.tsx` is the best place to verify current routes and UI behavior.
+- `src/services/dataService.ts` shows the current data sync and merge path.
