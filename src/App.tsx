@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Fuse from "fuse.js";
+import useEmblaCarousel from "embla-carousel-react";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import ReactMarkdown from "react-markdown";
 import {
@@ -342,27 +343,58 @@ function BottomDrawer({
 function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
-  const pagerRef = useRef<HTMLDivElement | null>(null);
+  const [emblaViewportRef, emblaApi] = useEmblaCarousel({
+    axis: "x",
+    align: "start",
+    loop: false,
+    dragFree: false,
+    skipSnaps: false,
+    containScroll: "trimSnaps",
+  });
   const paneRefs = useRef(new Map<string, HTMLDivElement>());
-  const rafRef = useRef<number | null>(null);
   const { feeds, activeFeedId, setActiveFeedId } = store;
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
   const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
+  const feedKey = useMemo(() => feeds.map((feed) => feed.id).join("|"), [feeds]);
 
   useEffect(() => {
     if (!activeFeedId && feeds[0]) setActiveFeedId(feeds[0].id);
   }, [activeFeedId, feeds, setActiveFeedId]);
 
   useEffect(() => {
-    const feed = feeds.find((item) => item.id === activeFeedId) ?? feeds[0] ?? null;
-    if (!feed) return;
-    const pager = pagerRef.current;
-    const pane = paneRefs.current.get(feed.id);
-    if (pager && pane) {
-      pager.scrollTo({ left: pane.offsetLeft, behavior: "auto" });
+    if (!emblaApi || feeds.length === 0) return;
+    const index = Math.max(0, feeds.findIndex((feed) => feed.id === activeFeedId));
+    if (index >= 0 && emblaApi.selectedScrollSnap() !== index) {
+      emblaApi.scrollTo(index, true);
     }
-    restoreHomeScroll(feed);
-  }, [activeFeedId, feeds]);
+  }, [activeFeedId, emblaApi, feeds]);
+
+  useEffect(() => {
+    if (!emblaApi) return;
+    const onSelect = () => {
+      const index = emblaApi.selectedScrollSnap();
+      const next = feeds[index];
+      if (next && next.id !== activeFeedId) setActiveFeedId(next.id);
+    };
+    const onSettle = () => {
+      const feed = feeds.find((item) => item.id === activeFeedId) ?? feeds[0] ?? null;
+      restoreHomeScroll(feed);
+    };
+    emblaApi.on("select", onSelect);
+    emblaApi.on("reInit", onSelect);
+    emblaApi.on("settle", onSettle);
+    onSelect();
+    return () => {
+      emblaApi.off("select", onSelect);
+      emblaApi.off("reInit", onSelect);
+      emblaApi.off("settle", onSettle);
+    };
+  }, [activeFeedId, emblaApi, feeds, setActiveFeedId]);
+
+  useEffect(() => {
+    if (!emblaApi || feeds.length === 0) return;
+    emblaApi.reInit();
+  }, [emblaApi, feedKey, feeds.length]);
 
   useEffect(() => {
     const feed = feeds.find((item) => item.id === activeFeedId) ?? feeds[0] ?? null;
@@ -374,26 +406,13 @@ function HomePage() {
     return () => pane.removeEventListener("scroll", save);
   }, [activeFeedId, feeds]);
 
-  const handlePagerScroll = useCallback(() => {
-    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      const pager = pagerRef.current;
-      if (!pager || feeds.length === 0) return;
-      const width = pager.clientWidth || 1;
-      const index = Math.max(0, Math.min(feeds.length - 1, Math.round(pager.scrollLeft / width)));
-      const next = feeds[index];
-      if (next && next.id !== activeFeedId) setActiveFeedId(next.id);
-    });
-  }, [activeFeedId, feeds, setActiveFeedId]);
-
   const handleSelectFeed = useCallback(
     (feed: Feed) => {
       setActiveFeedId(feed.id);
-      const pager = pagerRef.current;
-      const pane = paneRefs.current.get(feed.id);
-      if (pager && pane) pager.scrollTo({ left: pane.offsetLeft, behavior: "smooth" });
+      const index = feeds.findIndex((item) => item.id === feed.id);
+      if (emblaApi && index >= 0) emblaApi.scrollTo(index);
     },
-    [setActiveFeedId],
+    [emblaApi, feeds, setActiveFeedId],
   );
 
   return (
@@ -416,25 +435,27 @@ function HomePage() {
           </button>
         </div>
       ) : (
-        <div className="feed-pager" ref={pagerRef} onScroll={handlePagerScroll} aria-label="Home feeds">
-          {store.feeds.map((feed, index) => {
-            const isActive = index === activeFeedIndex;
-            const isNearby = activeFeedIndex >= 0 && Math.abs(index - activeFeedIndex) <= 1;
-            return (
-              <div
-                key={feed.id}
-                className="feed-pager-panel"
-                ref={(node) => {
-                  if (node) paneRefs.current.set(feed.id, node);
-                  else paneRefs.current.delete(feed.id);
-                }}
-              >
-                <div className="feed-pane-scroll" data-home-scroll-key={homeScrollKey(feed)}>
-                  {isActive || isNearby ? <FeedView feed={feed} /> : <HomeFeedPaneSkeleton feed={feed} />}
+        <div className="feed-pager" ref={emblaViewportRef} aria-label="Home feeds">
+          <div className="feed-pager-track">
+            {store.feeds.map((feed, index) => {
+              const isActive = index === activeFeedIndex;
+              const isNearby = activeFeedIndex >= 0 && Math.abs(index - activeFeedIndex) <= 1;
+              return (
+                <div
+                  key={feed.id}
+                  className="feed-pager-panel"
+                  ref={(node) => {
+                    if (node) paneRefs.current.set(feed.id, node);
+                    else paneRefs.current.delete(feed.id);
+                  }}
+                >
+                  <div className="feed-pane-scroll" data-home-scroll-key={homeScrollKey(feed)}>
+                    {isActive || isNearby ? <FeedView feed={feed} /> : <HomeFeedPaneSkeleton feed={feed} />}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
       <BottomDrawer title="Create Feed" open={editorOpen} onOpenChange={setEditorOpen}>
@@ -467,8 +488,8 @@ function FeedTabs({ onSelectFeed }: { onSelectFeed?: (feed: Feed) => void }) {
           ref={store.activeFeedId === feed.id ? activeRef : null}
           className={`feed-tab ${store.activeFeedId === feed.id ? "active" : ""}`}
           onClick={() => {
-            store.setActiveFeedId(feed.id);
             onSelectFeed?.(feed);
+            if (!onSelectFeed) store.setActiveFeedId(feed.id);
           }}
         >
           <span className="feed-tab-title">{feed.name}</span>

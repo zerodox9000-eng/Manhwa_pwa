@@ -31,6 +31,8 @@ This repo is the PWA frontend for `zerodox9000-eng/manhwa_db`. Keep changes here
 - Import links always open a preview before applying anything.
 - Search is title-only; filtering still honors content ratings and sensitive-tag toggles.
 - The home screen is feed-first and remembers scroll position per feed and layout.
+- Home paging uses Embla now: the pager handles horizontal feed-to-feed motion, while the feed tab row stays visual-only and auto-centers independently.
+- Restore keys for Home should stay scoped to feed id plus grid columns and density, otherwise 4/5-grid back navigation will drift.
 - `tag_weights` are read from the catalog items inside `query-index.json.gz` or the live export, not from the standalone scrape file directly.
 - `recommendations/features.json` is optional. If present, the frontend uses it; if absent, it falls back to local feature building from catalog data and tag weights.
 

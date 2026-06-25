@@ -2733,45 +2733,6 @@ textarea,
 }
 
 /* Speed/UI pass overrides. Keep this block last. */
-.feed-pager {
-  width: 100%;
-  overflow: hidden;
-  touch-action: pan-y;
-  overscroll-behavior-x: contain;
-}
-
-.feed-pager-track {
-  display: grid;
-  grid-template-columns: repeat(3, 100%);
-  transform: translate3d(calc(-100% + var(--pager-offset, 0px)), 0, 0);
-  opacity: 1;
-  transition: opacity 120ms ease;
-  will-change: transform;
-}
-
-.feed-pager.animating .feed-pager-track {
-  transition:
-    transform 210ms cubic-bezier(0.2, 0.84, 0.24, 1),
-    opacity 120ms ease;
-}
-
-.feed-pager.settling .feed-pager-track {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.feed-pager-panel {
-  min-width: 0;
-}
-
-.blank-feed-panel {
-  min-height: calc(100vh - 150px);
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 50% 0, rgba(255, 0, 110, 0.045), transparent 38%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0));
-}
-
 .title-card-wrap {
   contain: layout paint style;
 }
@@ -3054,11 +3015,11 @@ textarea,
   backdrop-filter: blur(14px) saturate(1.12);
 }
 
-/* Home pager: native swipe, no transform math. Keep this last. */
+/* Home pager: Embla swipe shell. Keep this last. */
 .home-page {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  min-height: calc(100vh - 58px);
 }
 
 .home-page .feed-tabs {
@@ -3066,33 +3027,37 @@ textarea,
 }
 
 .feed-pager {
-  display: flex;
+  overflow: hidden;
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-  overscroll-behavior-x: contain;
-  touch-action: pan-y;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y pinch-zoom;
+  overscroll-behavior: contain;
 }
 
 .feed-pager::-webkit-scrollbar {
   display: none;
 }
 
+.feed-pager-track {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  will-change: transform;
+}
+
 .feed-pager-panel {
   flex: 0 0 100%;
   min-width: 100%;
+  min-height: 0;
   height: 100%;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
 }
 
 .feed-pane-scroll {
+  display: flex;
+  flex-direction: column;
   height: 100%;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior-y: contain;
   scrollbar-gutter: stable;
