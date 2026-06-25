@@ -964,7 +964,7 @@ select {
 }
 
 .cover-wrap img {
-  content-visibility: auto;
+  content-visibility: visible;
 }
 
 .poster-metrics {
