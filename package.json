@@ -22,7 +22,6 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tanstack/react-virtual": "^3.13.25",
     "dexie": "^4.4.2",
-    "embla-carousel-react": "^8.6.0",
     "fuse.js": "^7.3.0",
     "lucide-react": "^1.16.0",
     "pako": "^2.1.0",

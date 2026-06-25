@@ -57,9 +57,16 @@ a {
 }
 
 .app-shell {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 260px), var(--bg);
   color: var(--text);
+}
+
+.app-shell > main {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .top-app-bar {
@@ -105,6 +112,7 @@ a {
 
 .page {
   width: min(1160px, 100%);
+  min-height: 0;
   margin: 0 auto;
   padding: 14px 14px calc(90px + env(safe-area-inset-bottom));
 }
@@ -3015,11 +3023,14 @@ textarea,
   backdrop-filter: blur(14px) saturate(1.12);
 }
 
-/* Home pager: Embla swipe shell. Keep this last. */
+/* Home pager: native scroll-snap shell. Keep this last. */
 .home-page {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 58px);
+  height: calc(100dvh - 58px);
+  min-height: 0;
+  padding-bottom: 0;
+  overflow: hidden;
 }
 
 .home-page .feed-tabs {
@@ -3031,8 +3042,14 @@ textarea,
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-  touch-action: pan-y pinch-zoom;
-  overscroll-behavior: contain;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  touch-action: auto;
 }
 
 .feed-pager::-webkit-scrollbar {
@@ -3043,7 +3060,6 @@ textarea,
   display: flex;
   height: 100%;
   min-height: 0;
-  will-change: transform;
 }
 
 .feed-pager-panel {
@@ -3051,6 +3067,8 @@ textarea,
   min-width: 100%;
   min-height: 0;
   height: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 .feed-pane-scroll {
@@ -3060,7 +3078,7 @@ textarea,
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  scrollbar-gutter: stable;
+  padding-bottom: calc(60px + env(safe-area-inset-bottom));
   scrollbar-width: thin;
 }
 
@@ -3071,3 +3089,6 @@ textarea,
 .feed-pager-panel .empty-state {
   margin-top: 12px;
 }
+
+
+

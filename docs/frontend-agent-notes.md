@@ -31,7 +31,7 @@ This repo is the PWA frontend for `zerodox9000-eng/manhwa_db`. Keep changes here
 - Import links always open a preview before applying anything.
 - Search is title-only; filtering still honors content ratings and sensitive-tag toggles.
 - The home screen is feed-first and remembers scroll position per feed and layout.
-- Home paging uses Embla now: the pager handles horizontal feed-to-feed motion, while the feed tab row stays visual-only and auto-centers independently.
+- Home paging now uses native scroll-snap: the pager handles horizontal feed-to-feed motion, while the feed tab row stays visual-only and auto-centers independently.
 - Restore keys for Home should stay scoped to feed id plus grid columns and density, otherwise 4/5-grid back navigation will drift.
 - `tag_weights` are read from the catalog items inside `query-index.json.gz` or the live export, not from the standalone scrape file directly.
 - `recommendations/features.json` is optional. If present, the frontend uses it; if absent, it falls back to local feature building from catalog data and tag weights.
@@ -50,8 +50,18 @@ This repo is the PWA frontend for `zerodox9000-eng/manhwa_db`. Keep changes here
 - The backend is the right place to store and publish raw scraped weights and any precomputed recommendation features.
 - The frontend should remain the consumer and scorer, not the scraper.
 
+
+## Debugging Notes
+
+- The app now has an opt-in debug logger in `src/lib/debug.ts`.
+- Enable it with `localStorage.manhwa-debug-logs = "1"` when you need breadcrumb output for pager selection, restore timing, or scroll state.
+- Use logs to verify behavior before changing layout constants.
+- Keep feed card spacing frozen unless the user explicitly asks for it; most Home bugs live in the shell, not inside the cards.
 ## Editing Guidance
 
 - Update README first when user-facing behavior changes.
 - Add or revise a markdown note here if the change affects app flow, routes, or agent onboarding.
 - Do not document backend implementation details in this repo unless they directly affect the frontend contract.
+
+
+

@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Fuse from "fuse.js";
-import useEmblaCarousel from "embla-carousel-react";
+import { appDebugLog } from "./lib/debug";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import ReactMarkdown from "react-markdown";
 import {
@@ -110,6 +110,7 @@ function restoreHomeScroll(feed: Feed | null) {
   if (!feed) return;
   const key = homeScrollKey(feed);
   const target = Number(localStorage.getItem(key));
+  appDebugLog("home-scroll", "restore lookup", { feedId: feed?.id ?? null, key, target });
   if (!Number.isFinite(target) || target <= 0) return;
   const container = getHomeScrollContainer(feed);
   if (!container) {
@@ -343,64 +344,45 @@ function BottomDrawer({
 function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
-  const [emblaViewportRef, emblaApi] = useEmblaCarousel({
-    axis: "x",
-    align: "start",
-    loop: false,
-    dragFree: false,
-    skipSnaps: false,
-    containScroll: "trimSnaps",
-  });
+  const pagerRef = useRef<HTMLDivElement | null>(null);
   const paneRefs = useRef(new Map<string, HTMLDivElement>());
   const { feeds, activeFeedId, setActiveFeedId } = store;
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
   const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
-  const feedKey = useMemo(() => feeds.map((feed) => feed.id).join("|"), [feeds]);
 
   useEffect(() => {
     if (!activeFeedId && feeds[0]) setActiveFeedId(feeds[0].id);
   }, [activeFeedId, feeds, setActiveFeedId]);
 
   useEffect(() => {
-    if (!emblaApi || feeds.length === 0) return;
-    const index = Math.max(0, feeds.findIndex((feed) => feed.id === activeFeedId));
-    if (index >= 0 && emblaApi.selectedScrollSnap() !== index) {
-      emblaApi.scrollTo(index, true);
-    }
-  }, [activeFeedId, emblaApi, feeds]);
-
-  useEffect(() => {
-    if (!emblaApi) return;
-    const onSelect = () => {
-      const index = emblaApi.selectedScrollSnap();
-      const next = feeds[index];
-      if (next && next.id !== activeFeedId) setActiveFeedId(next.id);
-    };
-    const onSettle = () => {
-      const feed = feeds.find((item) => item.id === activeFeedId) ?? feeds[0] ?? null;
-      restoreHomeScroll(feed);
-    };
-    emblaApi.on("select", onSelect);
-    emblaApi.on("reInit", onSelect);
-    emblaApi.on("settle", onSettle);
-    onSelect();
-    return () => {
-      emblaApi.off("select", onSelect);
-      emblaApi.off("reInit", onSelect);
-      emblaApi.off("settle", onSettle);
-    };
-  }, [activeFeedId, emblaApi, feeds, setActiveFeedId]);
-
-  useEffect(() => {
-    if (!emblaApi || feeds.length === 0) return;
-    emblaApi.reInit();
-  }, [emblaApi, feedKey, feeds.length]);
+    const pager = pagerRef.current;
+    if (!pager || feeds.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        const nextId = visible?.target instanceof HTMLElement ? visible.target.dataset.feedId : undefined;
+        if (nextId && nextId !== activeFeedId) {
+          appDebugLog("home-pager", "observer select", { nextId, activeFeedId });
+          setActiveFeedId(nextId);
+        }
+      },
+      { root: pager, threshold: [0.55, 0.75, 0.9] },
+    );
+    paneRefs.current.forEach((node, feedId) => {
+      node.dataset.feedId = feedId;
+      observer.observe(node);
+    });
+    return () => observer.disconnect();
+  }, [activeFeedId, feeds, setActiveFeedId]);
 
   useEffect(() => {
     const feed = feeds.find((item) => item.id === activeFeedId) ?? feeds[0] ?? null;
     const pane = feed ? paneRefs.current.get(feed.id) : null;
     if (!pane || !feed) return;
     const save = () => saveHomeScroll(feed);
+    appDebugLog("home-scroll", "attach scroll listener", { feedId: feed.id });
     save();
     pane.addEventListener("scroll", save, { passive: true });
     return () => pane.removeEventListener("scroll", save);
@@ -408,11 +390,14 @@ function HomePage() {
 
   const handleSelectFeed = useCallback(
     (feed: Feed) => {
+      appDebugLog("home-tabs", "select feed", { feedId: feed.id, feedName: feed.name });
       setActiveFeedId(feed.id);
-      const index = feeds.findIndex((item) => item.id === feed.id);
-      if (emblaApi && index >= 0) emblaApi.scrollTo(index);
+      const pane = paneRefs.current.get(feed.id);
+      if (pane) {
+        pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
+      }
     },
-    [emblaApi, feeds, setActiveFeedId],
+    [setActiveFeedId],
   );
 
   return (
@@ -435,7 +420,7 @@ function HomePage() {
           </button>
         </div>
       ) : (
-        <div className="feed-pager" ref={emblaViewportRef} aria-label="Home feeds">
+        <div className="feed-pager" ref={pagerRef} aria-label="Home feeds">
           <div className="feed-pager-track">
             {store.feeds.map((feed, index) => {
               const isActive = index === activeFeedIndex;
@@ -444,6 +429,7 @@ function HomePage() {
                 <div
                   key={feed.id}
                   className="feed-pager-panel"
+                  data-feed-id={feed.id}
                   ref={(node) => {
                     if (node) paneRefs.current.set(feed.id, node);
                     else paneRefs.current.delete(feed.id);
@@ -2754,3 +2740,8 @@ function downloadText(filename: string, text: string) {
 }
 
 export default App;
+
+
+
+
+

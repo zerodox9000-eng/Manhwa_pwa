@@ -11,7 +11,7 @@ Mobile-first local PWA for building custom manhwa discovery grids from the `zero
 - Vite + React + TypeScript PWA with install metadata, maskable icons, service worker registration, and offline shell caching.
 - Uses the backend export as a catalog source, then merges in the local query index so the frontend keeps the richer search and display fields current.
 - Stores catalog, tags, history, details, recommendation features, feeds, folders, labels, and settings in IndexedDB for offline use.
-- Home is feed-driven and mobile-first, with an Embla-based horizontal pager, per-feed scroll restore, and per-feed grid settings.
+- Home is feed-driven and mobile-first, with a native scroll-snap horizontal pager, per-feed scroll restore, and per-feed grid settings.
 - Feeds support AniList and non-AniList filtering, content ratings, status, chapter/year/popularity/favourites/score bounds, tag include/exclude, rolling date windows, labels, and custom sort rules.
 - Title detail pages include external links, creator metadata, markdown description rendering, configurable stat blocks, and embedded recommendations.
 - Search is title-only with local recent-search history and sensitive-tag filtering controls.
@@ -21,7 +21,7 @@ Mobile-first local PWA for building custom manhwa discovery grids from the `zero
 
 ## Home Shell Notes
 
-- The Home pager now uses Embla for feed-to-feed horizontal movement.
+- The Home pager now uses a native horizontal scroll-snap container for feed-to-feed movement.
 - Feed tabs are visual navigation only and auto-center independently of the pager.
 - Vertical scroll inside a feed stays in the feed pane; restore state is keyed by feed id plus grid settings.
 - Dense grids still use skeleton placeholders for offscreen panes so the pager stays cheap to render.
@@ -60,6 +60,17 @@ Fallback frontend source:
 https://zerodox9000-eng.github.io/manhwa_db/db/exports/frontend
 ```
 
+
+## Debug Logs
+
+If you need shell/restore breadcrumbs while testing the Home pager, set `localStorage.manhwa-debug-logs = "1"` in the browser console.
+Logs currently cover:
+- Home feed tab selection
+- pager sync events
+- scroll save / restore lookups
+- observer-driven feed changes
+
+Keep this off for normal use unless you are actively debugging layout or restore behavior.
 ## Commands
 
 ```bash
@@ -78,3 +89,6 @@ npm run build
 - `src/App.tsx` is the best place to verify current routes and UI behavior.
 - `src/services/dataService.ts` shows the current data sync and merge path.
 - See [docs/frontend-agent-notes.md](./docs/frontend-agent-notes.md) for a tighter agent handoff.
+
+
+
