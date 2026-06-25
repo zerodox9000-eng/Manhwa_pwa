@@ -2776,6 +2776,8 @@ textarea,
   align-items: center;
   font-size: 10.4px;
   line-height: 1.08;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
 }
 
 .title-grid.columns-1 .compact-metrics span,
@@ -2801,6 +2803,10 @@ textarea,
   min-height: 15px;
   padding: 1px 4px;
   font-size: 9.8px;
+}
+
+.poster-metrics {
+  contain: layout paint style;
 }
 
 .bottom-nav {

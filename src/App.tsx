@@ -813,7 +813,7 @@ function TitleCard({
           <Cover series={series} priority={rank <= 18} />
           {view.visible.rank && <span className="rank">{rank}</span>}
           <div className="poster-metrics">
-            <TitleMetrics series={series} view={view} compact history={history} latestDate={latestDate} metricWindow={metricWindow} />
+            <MemoTitleMetrics series={series} view={view} compact history={history} latestDate={latestDate} metricWindow={metricWindow} />
           </div>
         </div>
         <div className="title-meta">
@@ -932,6 +932,16 @@ function TitleMetrics({
     </div>
   );
 }
+
+const MemoTitleMetrics = memo(TitleMetrics, (prev, next) =>
+  prev.series.id === next.series.id &&
+  prev.view === next.view &&
+  prev.compact === next.compact &&
+  prev.history === next.history &&
+  prev.latestDate === next.latestDate &&
+  prev.metricWindow?.from === next.metricWindow?.from &&
+  prev.metricWindow?.to === next.metricWindow?.to
+);
 
 function FeedsPage() {
   const store = useAppStore();
