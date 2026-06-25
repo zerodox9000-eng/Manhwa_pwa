@@ -112,7 +112,7 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
   const excludeTagIds = feed.filters.excludeTagIds?.length
     ? feed.filters.excludeTagIds
     : DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS;
-  const rawMetricSlots = feed.view?.metricSlots?.length ? feed.view.metricSlots : DEFAULT_SETTINGS.defaultFeedView.metricSlots;
+  const rawMetricSlots = feed.view?.metricSlots ?? DEFAULT_SETTINGS.defaultFeedView.metricSlots;
   const metricSlots = (options.preserveMetricSlots
     ? rawMetricSlots
     : rawMetricSlots.filter((metric) => metric !== "mangabakaLatestRank")
