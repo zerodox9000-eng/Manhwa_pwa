@@ -2799,33 +2799,39 @@ textarea,
 }
 
 .compact-metrics span {
-  min-height: 15px;
-  padding: 1px 5px;
+  min-height: 17px;
+  padding: 2px 6px;
   background: rgba(18, 20, 27, 0.5);
   text-align: center;
   justify-content: center;
   align-items: center;
+  font-size: 10.4px;
+  line-height: 1.08;
 }
 
 .title-grid.columns-1 .compact-metrics span,
 .title-grid.columns-2 .compact-metrics span {
-  min-height: 19px;
-  padding: 1px 6px;
+  min-height: 21px;
+  padding: 2px 7px;
+  font-size: 10.7px;
 }
 
 .title-grid.columns-3 .compact-metrics span {
-  min-height: 18px;
-  padding: 1px 5px;
+  min-height: 20px;
+  padding: 2px 6px;
+  font-size: 10.5px;
 }
 
 .title-grid.columns-4 .compact-metrics span {
-  min-height: 15px;
-  padding: 1px 4px;
+  min-height: 17px;
+  padding: 2px 5px;
+  font-size: 10.2px;
 }
 
 .title-grid.columns-5 .compact-metrics span {
-  min-height: 13px;
-  padding: 0 3px;
+  min-height: 15px;
+  padding: 1px 4px;
+  font-size: 9.8px;
 }
 
 .bottom-nav {
