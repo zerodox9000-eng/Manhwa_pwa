@@ -70,3 +70,4 @@ npm run build
 - `src/domain/defaults.ts` is the quickest source of truth for shipped defaults.
 - `src/App.tsx` is the best place to verify current routes and UI behavior.
 - `src/services/dataService.ts` shows the current data sync and merge path.
+- See [docs/frontend-agent-notes.md](./docs/frontend-agent-notes.md) for a tighter agent handoff.
