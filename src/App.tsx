@@ -91,13 +91,31 @@ function homeScrollKey(feed: Feed | null) {
   return `${HOME_SCROLL_PREFIX}:${feed.id}:${feed.view.gridColumns}:${feed.view.gridDensity}`;
 }
 
+function getHomeScrollContainer(feed: Feed | null) {
+  if (!feed) return null;
+  return document.querySelector<HTMLElement>(`[data-home-scroll-key="${homeScrollKey(feed)}"]`);
+}
+
 function saveHomeScroll(feed: Feed | null) {
   if (!feed) return;
   try {
-    localStorage.setItem(homeScrollKey(feed), String(window.scrollY));
+    localStorage.setItem(homeScrollKey(feed), String(getHomeScrollContainer(feed)?.scrollTop ?? 0));
   } catch {
     // Best effort only.
   }
+}
+
+function restoreHomeScroll(feed: Feed | null) {
+  if (!feed) return;
+  const key = homeScrollKey(feed);
+  const target = Number(localStorage.getItem(key));
+  if (!Number.isFinite(target) || target <= 0) return;
+  const container = getHomeScrollContainer(feed);
+  if (!container) {
+    requestAnimationFrame(() => restoreHomeScroll(feed));
+    return;
+  }
+  container.scrollTo({ top: target, behavior: "auto" });
 }
 
 function isSearchVisible(series: SeriesCatalog, settings: AppSettings, sensitiveTagIds: { relationship: Set<number>; adult: Set<number> }) {
@@ -219,6 +237,10 @@ function SessionRestorer() {
       window.scrollTo({ top: 0, behavior: "instant" });
       return;
     }
+    if (location.pathname === "/") {
+      requestAnimationFrame(() => requestAnimationFrame(() => restoreHomeScroll(activeFeed)));
+      return;
+    }
     try {
       const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as { scroll?: Record<string, number> };
       const candidates = [saved.scroll?.[key], Number(localStorage.getItem(key)), saved.scroll?.[path]];
@@ -236,6 +258,32 @@ function SessionRestorer() {
     const path = `${location.pathname}${location.search}`;
     const key = location.pathname === "/" ? homeScrollKey(activeFeed) : path;
     if (location.pathname.startsWith("/title/")) return;
+    if (location.pathname === "/") {
+      const container = getHomeScrollContainer(activeFeed);
+      if (!container) return;
+      const save = () => {
+        try {
+          const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
+            path?: string;
+            scroll?: Record<string, number>;
+          };
+          localStorage.setItem(
+            SESSION_RESTORE_KEY,
+            JSON.stringify({
+              ...saved,
+              path,
+              scroll: { ...(saved.scroll ?? {}), [path]: container.scrollTop, [key]: container.scrollTop },
+            }),
+          );
+          localStorage.setItem(key, String(container.scrollTop));
+        } catch {
+          // localStorage can be unavailable in private contexts.
+        }
+      };
+      save();
+      container.addEventListener("scroll", save, { passive: true });
+      return () => container.removeEventListener("scroll", save);
+    }
     const save = () => {
       try {
         const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
@@ -294,15 +342,63 @@ function BottomDrawer({
 function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
-  const activeFeed = store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null;
+  const pagerRef = useRef<HTMLDivElement | null>(null);
+  const paneRefs = useRef(new Map<string, HTMLDivElement>());
+  const rafRef = useRef<number | null>(null);
+  const { feeds, activeFeedId, setActiveFeedId } = store;
+  const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
+  const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
 
   useEffect(() => {
-    if (!store.activeFeedId && store.feeds[0]) store.setActiveFeedId(store.feeds[0].id);
-  }, [store]);
+    if (!activeFeedId && feeds[0]) setActiveFeedId(feeds[0].id);
+  }, [activeFeedId, feeds, setActiveFeedId]);
+
+  useEffect(() => {
+    const feed = feeds.find((item) => item.id === activeFeedId) ?? feeds[0] ?? null;
+    if (!feed) return;
+    const pager = pagerRef.current;
+    const pane = paneRefs.current.get(feed.id);
+    if (pager && pane) {
+      pager.scrollTo({ left: pane.offsetLeft, behavior: "auto" });
+    }
+    restoreHomeScroll(feed);
+  }, [activeFeedId, feeds]);
+
+  useEffect(() => {
+    const feed = feeds.find((item) => item.id === activeFeedId) ?? feeds[0] ?? null;
+    const pane = feed ? paneRefs.current.get(feed.id) : null;
+    if (!pane || !feed) return;
+    const save = () => saveHomeScroll(feed);
+    save();
+    pane.addEventListener("scroll", save, { passive: true });
+    return () => pane.removeEventListener("scroll", save);
+  }, [activeFeedId, feeds]);
+
+  const handlePagerScroll = useCallback(() => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      const pager = pagerRef.current;
+      if (!pager || feeds.length === 0) return;
+      const width = pager.clientWidth || 1;
+      const index = Math.max(0, Math.min(feeds.length - 1, Math.round(pager.scrollLeft / width)));
+      const next = feeds[index];
+      if (next && next.id !== activeFeedId) setActiveFeedId(next.id);
+    });
+  }, [activeFeedId, feeds, setActiveFeedId]);
+
+  const handleSelectFeed = useCallback(
+    (feed: Feed) => {
+      setActiveFeedId(feed.id);
+      const pager = pagerRef.current;
+      const pane = paneRefs.current.get(feed.id);
+      if (pager && pane) pager.scrollTo({ left: pane.offsetLeft, behavior: "smooth" });
+    },
+    [setActiveFeedId],
+  );
 
   return (
-    <div className="page">
-      <FeedTabs />
+    <div className="page home-page">
+      <FeedTabs onSelectFeed={handleSelectFeed} />
       {!store.ready ? (
         <div className="empty-state">
           <strong>Loading local library</strong>
@@ -320,8 +416,25 @@ function HomePage() {
           </button>
         </div>
       ) : (
-        <div className="feed-shell">
-          <FeedView feed={activeFeed} />
+        <div className="feed-pager" ref={pagerRef} onScroll={handlePagerScroll} aria-label="Home feeds">
+          {store.feeds.map((feed, index) => {
+            const isActive = index === activeFeedIndex;
+            const isNearby = activeFeedIndex >= 0 && Math.abs(index - activeFeedIndex) <= 1;
+            return (
+              <div
+                key={feed.id}
+                className="feed-pager-panel"
+                ref={(node) => {
+                  if (node) paneRefs.current.set(feed.id, node);
+                  else paneRefs.current.delete(feed.id);
+                }}
+              >
+                <div className="feed-pane-scroll" data-home-scroll-key={homeScrollKey(feed)}>
+                  {isActive || isNearby ? <FeedView feed={feed} /> : <HomeFeedPaneSkeleton feed={feed} />}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
       <BottomDrawer title="Create Feed" open={editorOpen} onOpenChange={setEditorOpen}>
@@ -338,7 +451,7 @@ function HomePage() {
   );
 }
 
-function FeedTabs() {
+function FeedTabs({ onSelectFeed }: { onSelectFeed?: (feed: Feed) => void }) {
   const store = useAppStore();
   const activeRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
@@ -355,7 +468,7 @@ function FeedTabs() {
           className={`feed-tab ${store.activeFeedId === feed.id ? "active" : ""}`}
           onClick={() => {
             store.setActiveFeedId(feed.id);
-            resetPageScroll();
+            onSelectFeed?.(feed);
           }}
         >
           <span className="feed-tab-title">{feed.name}</span>
@@ -463,6 +576,20 @@ function FeedView({ feed }: { feed: Feed }) {
         </div>
       </BottomDrawer>
     </>
+  );
+}
+
+function HomeFeedPaneSkeleton({ feed }: { feed: Feed }) {
+  return (
+    <section className="section">
+      <div className="feed-view-header">
+        <div className="feed-view-title">
+          <h1 className="single-line-title skeleton-line skeleton-line-title" />
+          {feed.showDescription && <p className="feed-description"><span className="skeleton-line skeleton-line-body" /></p>}
+        </div>
+      </div>
+      <TitleCollectionSkeleton columns={feed.view.gridColumns} />
+    </section>
   );
 }
 

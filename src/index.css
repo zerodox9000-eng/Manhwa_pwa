@@ -3053,3 +3053,56 @@ textarea,
 .drawer-content {
   backdrop-filter: blur(14px) saturate(1.12);
 }
+
+/* Home pager: native swipe, no transform math. Keep this last. */
+.home-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.home-page .feed-tabs {
+  flex: 0 0 auto;
+}
+
+.feed-pager {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  touch-action: pan-y;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.feed-pager::-webkit-scrollbar {
+  display: none;
+}
+
+.feed-pager-panel {
+  flex: 0 0 100%;
+  min-width: 100%;
+  height: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.feed-pane-scroll {
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.feed-pager-panel .section:first-child {
+  margin-top: 12px;
+}
+
+.feed-pager-panel .empty-state {
+  margin-top: 12px;
+}
