@@ -3113,7 +3113,12 @@ textarea,
   overflow-y: auto;
   overscroll-behavior-y: contain;
   padding-bottom: calc(60px + env(safe-area-inset-bottom));
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+
+.feed-pane-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .feed-pager-panel .section:first-child {
