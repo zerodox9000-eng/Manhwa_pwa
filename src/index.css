@@ -2484,11 +2484,26 @@ textarea,
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.34);
 }
 
+.poster-metrics {
+  right: 0;
+  left: 0;
+  bottom: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  padding: 0 8px;
+}
+
 .compact-metrics span {
   min-height: 18px;
   padding: 2px 6px;
   font-size: 10.5px;
   line-height: 1.1;
+  text-align: center;
+  justify-content: center;
+  align-items: center;
 }
 
 .title-grid.columns-1 .poster-shell .rank {
@@ -2806,6 +2821,15 @@ textarea,
 }
 
 .poster-metrics {
+  right: 0;
+  left: 0;
+  bottom: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  max-width: 100%;
+  padding: 0 8px;
   contain: layout paint style;
 }
 
