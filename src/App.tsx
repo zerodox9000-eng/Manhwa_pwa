@@ -83,6 +83,7 @@ const HOME_FEED_INITIAL_RENDER_RADIUS = 4;
 const HOME_FEED_RENDER_RADIUS = 4;
 const FEED_TITLE_EXPANDED_MAX = 140;
 const FEED_DESCRIPTION_EXPANDED_MAX = 260;
+const PWA_CHROME_THEME_COLOR = "#11131a";
 
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 const HOME_SCROLL_PREFIX = "manhwa-home-scroll";
@@ -205,6 +206,16 @@ function AppFrame() {
     document.documentElement.style.setProperty("--accent", store.settings.accentColor);
     document.title = store.settings.appName || "Manhwa Lib";
   }, [store.settings.accentColor, store.settings.appName]);
+
+  useEffect(() => {
+    let themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (!themeMeta) {
+      themeMeta = document.createElement("meta");
+      themeMeta.name = "theme-color";
+      document.head.appendChild(themeMeta);
+    }
+    themeMeta.content = PWA_CHROME_THEME_COLOR;
+  }, [location.pathname]);
 
   useEffect(() => {
     if (needRefresh) void updateServiceWorker(true);
