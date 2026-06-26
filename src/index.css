@@ -2815,9 +2815,11 @@ textarea,
 }
 
 .title-grid.columns-5 .compact-metrics span {
-  min-height: 15px;
-  padding: 1px 4px;
-  font-size: 9.8px;
+  min-height: 16px;
+  max-width: 100%;
+  padding: 1px 5px;
+  font-size: 8.2px;
+  white-space: nowrap;
 }
 
 .poster-metrics {
@@ -2831,6 +2833,10 @@ textarea,
   max-width: 100%;
   padding: 0 8px;
   contain: layout paint style;
+}
+
+.title-grid.columns-5 .poster-metrics {
+  padding: 0 5px;
 }
 
 .bottom-nav {
@@ -3086,15 +3092,16 @@ textarea,
 .home-page {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - 58px);
+  height: 100dvh;
   min-height: 0;
-  padding-top: calc(12px + env(safe-area-inset-top));
+  padding-top: 0;
   padding-bottom: 0;
   overflow: hidden;
 }
 
 .home-page .feed-tabs {
   flex: 0 0 auto;
+  padding-top: calc(10px + env(safe-area-inset-top));
 }
 
 .feed-pager {
@@ -3132,7 +3139,7 @@ textarea,
 }
 
 .feed-pager-panel:not(:last-child) {
-  margin-right: 14px;
+  margin-right: 12px;
 }
 
 .feed-pane-scroll {
@@ -3152,11 +3159,60 @@ textarea,
 }
 
 .feed-pager-panel .section:first-child {
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .feed-pager-panel .empty-state {
   margin-top: 12px;
+}
+
+.home-page .feed-tabs {
+  margin-bottom: 0;
+}
+
+.home-page .feed-tab,
+.home-page .feed-tab.active {
+  transition: none;
+  transform: none;
+}
+
+.bottom-nav {
+  background: rgba(24, 26, 35, 0.58);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.36);
+  backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.nav-item.active {
+  background: rgba(255, 0, 110, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(255, 0, 110, 0.24);
+}
+
+.route-cache-hidden {
+  position: fixed;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.feed-pager .title-grid .title-card-wrap {
+  content-visibility: visible !important;
+  contain-intrinsic-size: auto;
+}
+
+/* Dense cover-stat performance: 4/5-column grids scroll better without per-badge blur/shadows. */
+.title-grid.columns-4 .compact-metrics span,
+.title-grid.columns-5 .compact-metrics span,
+.title-grid.columns-4 .poster-shell .rank,
+.title-grid.columns-5 .poster-shell .rank {
+  border: 0;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.05)),
+    rgba(52, 57, 74, 0.82);
+  box-shadow: none;
+  backdrop-filter: none;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.72);
 }
 
 

@@ -23,7 +23,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Fuse from "fuse.js";
 import { appDebugLog } from "./lib/debug";
 import { useRegisterSW } from "virtual:pwa-register/react";
@@ -79,9 +79,13 @@ const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.
 const resetPageScroll = () => window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
+const HOME_FEED_INITIAL_RENDER_RADIUS = 4;
+const HOME_FEED_RENDER_RADIUS = 4;
 
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 const HOME_SCROLL_PREFIX = "manhwa-home-scroll";
+const HOME_RETURNING_FROM_TITLE_KEY = "manhwa-home-returning-from-title";
+const scrollAnimationFrames = new WeakMap<HTMLElement, number>();
 
 function visibleTitle(series: SeriesCatalog, fallback?: SeriesCatalog) {
   return resolveVisibleTitle(series, fallback);
@@ -100,7 +104,27 @@ function getHomeScrollContainer(feed: Feed | null) {
 function saveHomeScroll(feed: Feed | null) {
   if (!feed) return;
   try {
-    localStorage.setItem(homeScrollKey(feed), String(getHomeScrollContainer(feed)?.scrollTop ?? 0));
+    const key = homeScrollKey(feed);
+    const scrollTop = getHomeScrollContainer(feed)?.scrollTop ?? 0;
+    localStorage.setItem(key, String(scrollTop));
+    const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
+      path?: string;
+      scroll?: Record<string, number>;
+    };
+    localStorage.setItem(
+      SESSION_RESTORE_KEY,
+      JSON.stringify({ ...saved, path: "/", scroll: { ...(saved.scroll ?? {}), "/": scrollTop, [key]: scrollTop } }),
+    );
+  } catch {
+    // Best effort only.
+  }
+}
+
+function prepareHomeTitleNavigation(feed: Feed | null) {
+  if (!getHomeScrollContainer(feed)) return;
+  saveHomeScroll(feed);
+  try {
+    sessionStorage.setItem(HOME_RETURNING_FROM_TITLE_KEY, "1");
   } catch {
     // Best effort only.
   }
@@ -118,6 +142,63 @@ function restoreHomeScroll(feed: Feed | null) {
     return;
   }
   container.scrollTo({ top: target, behavior: "auto" });
+}
+
+function easeOutCubic(progress: number) {
+  return 1 - (1 - progress) ** 3;
+}
+
+function animateScroll(
+  element: HTMLElement,
+  axis: "left" | "top",
+  target: number,
+  duration: number,
+) {
+  const start = axis === "left" ? element.scrollLeft : element.scrollTop;
+  const distance = target - start;
+  if (Math.abs(distance) < 1) return;
+  const previousFrame = scrollAnimationFrames.get(element);
+  if (previousFrame) cancelAnimationFrame(previousFrame);
+  const startedAt = performance.now();
+  const step = (now: number) => {
+    const progress = Math.min(1, (now - startedAt) / duration);
+    const value = Math.round(start + distance * easeOutCubic(progress));
+    if (axis === "left") element.scrollLeft = value;
+    else element.scrollTop = value;
+    if (progress < 1) {
+      scrollAnimationFrames.set(element, requestAnimationFrame(step));
+      return;
+    }
+    scrollAnimationFrames.delete(element);
+  };
+  scrollAnimationFrames.set(element, requestAnimationFrame(step));
+}
+
+function centerFeedTab(container: HTMLDivElement | null, tab: HTMLButtonElement | undefined, duration = 160) {
+  if (!container) return;
+  if (!tab) return;
+  const target = tab.offsetLeft - (container.clientWidth - tab.offsetWidth) / 2;
+  if (duration <= 0) {
+    const previousFrame = scrollAnimationFrames.get(container);
+    if (previousFrame) cancelAnimationFrame(previousFrame);
+    scrollAnimationFrames.delete(container);
+    container.scrollLeft = Math.max(0, target);
+    return;
+  }
+  animateScroll(container, "left", Math.max(0, target), duration);
+}
+
+function markActiveFeedTab(container: HTMLDivElement | null, feedId: string | undefined) {
+  if (!container || !feedId) return;
+  container.querySelectorAll(".feed-tab.active").forEach((node) => node.classList.remove("active"));
+  container.querySelector<HTMLButtonElement>(`[data-feed-id="${CSS.escape(feedId)}"]`)?.classList.add("active");
+}
+
+function fastScrollToTop(container: HTMLElement) {
+  const start = container.scrollTop;
+  if (start <= 0) return;
+  const duration = Math.max(900, Math.min(2800, start / 8));
+  animateScroll(container, "top", 0, duration);
 }
 
 function isSearchVisible(series: SeriesCatalog, settings: AppSettings, sensitiveTagIds: { relationship: Set<number>; adult: Set<number> }) {
@@ -160,7 +241,11 @@ function App() {
 
 function AppFrame() {
   const store = useAppStore();
+  const location = useLocation();
   const nav = NAV_ITEMS.filter((item) => store.settings.bottomNavItems.includes(item.id));
+  const showingHome = location.pathname === "/";
+  const showingTitle = location.pathname.startsWith("/title/");
+  const keepHomeMounted = showingHome || showingTitle;
   const { needRefresh, updateServiceWorker } = useRegisterSW({
     onRegisteredSW() {
       void 0;
@@ -180,17 +265,28 @@ function AppFrame() {
     <div className="app-shell">
       <SessionRestorer />
       <main>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/feeds" element={<FeedsPage />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/recommendations" element={<RecommendationsPage />} />
-          <Route path="/recommendations/:id" element={<RecommendationsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/learn" element={<LearnPage />} />
-          <Route path="/title/:id" element={<TitleDetailPage />} />
-          <Route path="/import" element={<ImportPage />} />
-        </Routes>
+        {keepHomeMounted && (
+          <div className={showingTitle ? "route-cache-hidden" : undefined} aria-hidden={showingTitle || undefined}>
+            <HomePage />
+          </div>
+        )}
+        {showingTitle ? (
+          <Routes>
+            <Route path="/title/:id" element={<TitleDetailPage />} />
+          </Routes>
+        ) : (
+          !showingHome && (
+            <Routes>
+              <Route path="/feeds" element={<FeedsPage />} />
+              <Route path="/search" element={<SearchPage />} />
+              <Route path="/recommendations" element={<RecommendationsPage />} />
+              <Route path="/recommendations/:id" element={<RecommendationsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/learn" element={<LearnPage />} />
+              <Route path="/import" element={<ImportPage />} />
+            </Routes>
+          )
+        )}
       </main>
 
       <nav className="bottom-nav" aria-label="Main navigation">
@@ -344,8 +440,19 @@ function BottomDrawer({
 function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
+  const [preloadReady, setPreloadReady] = useState(false);
+  const [renderCenterIndex, setRenderCenterIndex] = useState(-1);
+  const [warmFeedIds, setWarmFeedIds] = useState<Set<string>>(() => new Set());
+  const [returningFromTitle, setReturningFromTitle] = useState(() => sessionStorage.getItem(HOME_RETURNING_FROM_TITLE_KEY) === "1");
   const pagerRef = useRef<HTMLDivElement | null>(null);
+  const tabsRef = useRef<HTMLDivElement | null>(null);
   const paneRefs = useRef(new Map<string, HTMLDivElement>());
+  const tabRefs = useRef(new Map<string, HTMLButtonElement>());
+  const renderCenterIndexRef = useRef(-1);
+  const warmFeedIdsRef = useRef(new Set<string>());
+  const didInitialPagerAlignRef = useRef(false);
+  const centeredTabIndexRef = useRef(-1);
+  const tabCenterTimerRef = useRef(0);
   const { feeds, activeFeedId, setActiveFeedId } = store;
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
   const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
@@ -354,28 +461,113 @@ function HomePage() {
     if (!activeFeedId && feeds[0]) setActiveFeedId(feeds[0].id);
   }, [activeFeedId, feeds, setActiveFeedId]);
 
+  useEffect(() => () => {
+    window.clearTimeout(tabCenterTimerRef.current);
+  }, []);
+
   useEffect(() => {
+    if (activeFeedIndex < 0 || renderCenterIndexRef.current >= 0) return;
+    renderCenterIndexRef.current = activeFeedIndex;
+    setRenderCenterIndex(activeFeedIndex);
+  }, [activeFeedIndex]);
+
+  useEffect(() => {
+    const feedIds = new Set(feeds.map((feed) => feed.id));
+    let changed = false;
+    const nextWarmFeedIds = new Set<string>();
+    warmFeedIdsRef.current.forEach((feedId) => {
+      if (feedIds.has(feedId)) nextWarmFeedIds.add(feedId);
+      else changed = true;
+    });
+    if (!changed) return;
+    warmFeedIdsRef.current = nextWarmFeedIds;
+    setWarmFeedIds(nextWarmFeedIds);
+  }, [feeds]);
+
+  const warmFeedAt = useCallback(
+    (index: number) => {
+      const feed = feeds[Math.max(0, Math.min(feeds.length - 1, index))];
+      if (!feed || warmFeedIdsRef.current.has(feed.id)) return;
+      const nextWarmFeedIds = new Set(warmFeedIdsRef.current);
+      nextWarmFeedIds.add(feed.id);
+      warmFeedIdsRef.current = nextWarmFeedIds;
+      startTransition(() => setWarmFeedIds(nextWarmFeedIds));
+    },
+    [feeds],
+  );
+
+  useLayoutEffect(() => {
+    if (!store.ready || !activeFeed) return;
+    const pane = paneRefs.current.get(activeFeed.id);
+    if (!pane) return;
+    if (returningFromTitle) {
+      pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
+      restoreHomeScroll(activeFeed);
+      setReturningFromTitle(false);
+      try {
+        sessionStorage.removeItem(HOME_RETURNING_FROM_TITLE_KEY);
+      } catch {
+        // Best effort only.
+      }
+      window.setTimeout(() => {
+        setPreloadReady(true);
+        for (let offset = -HOME_FEED_RENDER_RADIUS; offset <= HOME_FEED_RENDER_RADIUS; offset += 1) {
+          warmFeedAt(activeFeedIndex + offset);
+        }
+      }, 120);
+      return;
+    }
+    if (!didInitialPagerAlignRef.current) {
+      didInitialPagerAlignRef.current = true;
+      pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
+      restoreHomeScroll(activeFeed);
+    }
+  }, [activeFeed, activeFeedIndex, returningFromTitle, store.ready, warmFeedAt]);
+
+  useEffect(() => {
+    if (!store.ready || activeFeedIndex < 0) return;
+    const warmOrder = [5, -1, -2, -3, -4, -5];
+    const timers = warmOrder.map((offset, step) =>
+      window.setTimeout(() => warmFeedAt(activeFeedIndex + offset), 450 + step * 220),
+    );
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [activeFeedIndex, store.ready, warmFeedAt]);
+
+  const warmFeedsAroundScrollPosition = useCallback(() => {
+    setPreloadReady(true);
     const pager = pagerRef.current;
     if (!pager || feeds.length === 0) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-        const nextId = visible?.target instanceof HTMLElement ? visible.target.dataset.feedId : undefined;
-        if (nextId && nextId !== activeFeedId) {
-          appDebugLog("home-pager", "observer select", { nextId, activeFeedId });
-          setActiveFeedId(nextId);
-        }
-      },
-      { root: pager, threshold: [0.55, 0.75, 0.9] },
-    );
-    paneRefs.current.forEach((node, feedId) => {
-      node.dataset.feedId = feedId;
-      observer.observe(node);
-    });
-    return () => observer.disconnect();
-  }, [activeFeedId, feeds, setActiveFeedId]);
+    const handleScroll = () => {
+      const firstPane = paneRefs.current.get(feeds[0]?.id);
+      const secondPane = paneRefs.current.get(feeds[1]?.id);
+      const paneStep = secondPane && firstPane ? secondPane.offsetLeft - firstPane.offsetLeft : firstPane?.offsetWidth;
+      if (!paneStep) return;
+      const scrollIndex = pager.scrollLeft / paneStep;
+      const nearestIndex = Math.round(scrollIndex);
+      if (nearestIndex !== centeredTabIndexRef.current) {
+        centeredTabIndexRef.current = nearestIndex;
+        const nearestCenteredFeedId = feeds[nearestIndex]?.id;
+        markActiveFeedTab(tabsRef.current, nearestCenteredFeedId);
+      }
+      window.clearTimeout(tabCenterTimerRef.current);
+      tabCenterTimerRef.current = window.setTimeout(() => {
+        const settledFeedId = feeds[centeredTabIndexRef.current]?.id;
+        centerFeedTab(tabsRef.current, tabRefs.current.get(settledFeedId), 140);
+      }, 80);
+      const nearestFeedId = feeds[nearestIndex]?.id;
+      if (nearestFeedId && nearestFeedId !== activeFeedId) {
+        setActiveFeedId(nearestFeedId);
+      }
+      if (nearestIndex !== renderCenterIndexRef.current) {
+        renderCenterIndexRef.current = nearestIndex;
+        startTransition(() => setRenderCenterIndex(nearestIndex));
+      }
+      for (let offset = -HOME_FEED_RENDER_RADIUS; offset <= HOME_FEED_RENDER_RADIUS; offset += 1) {
+        warmFeedAt(nearestIndex + offset);
+      }
+    };
+    handleScroll();
+  }, [activeFeedId, feeds, setActiveFeedId, warmFeedAt]);
 
   useEffect(() => {
     const feed = feeds.find((item) => item.id === activeFeedId) ?? feeds[0] ?? null;
@@ -400,9 +592,16 @@ function HomePage() {
     [setActiveFeedId],
   );
 
+  const handleFeedTabsDoubleTap = useCallback(() => {
+    const feed = feeds.find((item) => item.id === activeFeedId) ?? feeds[0] ?? null;
+    const pane = feed ? paneRefs.current.get(feed.id) : null;
+    const scroller = pane?.querySelector<HTMLElement>(".feed-pane-scroll");
+    if (scroller) fastScrollToTop(scroller);
+  }, [activeFeedId, feeds]);
+
   return (
     <div className="page home-page">
-      <FeedTabs onSelectFeed={handleSelectFeed} />
+      <FeedTabs onSelectFeed={handleSelectFeed} onDoubleTap={handleFeedTabsDoubleTap} tabsRef={tabsRef} tabRefs={tabRefs} />
       {!store.ready ? (
         <div className="empty-state">
           <strong>Loading local library</strong>
@@ -420,11 +619,18 @@ function HomePage() {
           </button>
         </div>
       ) : (
-        <div className="feed-pager" ref={pagerRef} aria-label="Home feeds">
+        <div className="feed-pager" ref={pagerRef} aria-label="Home feeds" onScroll={warmFeedsAroundScrollPosition}>
           <div className="feed-pager-track">
             {store.feeds.map((feed, index) => {
               const isActive = index === activeFeedIndex;
-              const isNearby = activeFeedIndex >= 0 && Math.abs(index - activeFeedIndex) <= 1;
+              const renderOriginIndex = renderCenterIndex >= 0 ? renderCenterIndex : activeFeedIndex;
+              const renderRadius = returningFromTitle
+                ? 0
+                : preloadReady
+                  ? HOME_FEED_RENDER_RADIUS
+                  : HOME_FEED_INITIAL_RENDER_RADIUS;
+              const isNearby = renderOriginIndex >= 0 && Math.abs(index - renderOriginIndex) <= renderRadius;
+              const shouldRenderFeed = isActive || isNearby || warmFeedIds.has(feed.id);
               return (
                 <div
                   key={feed.id}
@@ -436,7 +642,7 @@ function HomePage() {
                   }}
                 >
                   <div className="feed-pane-scroll" data-home-scroll-key={homeScrollKey(feed)}>
-                    {isActive || isNearby ? <FeedView feed={feed} /> : <HomeFeedPaneSkeleton feed={feed} />}
+                    {shouldRenderFeed ? <FeedView feed={feed} /> : <HomeFeedPaneSkeleton feed={feed} />}
                   </div>
                 </div>
               );
@@ -458,22 +664,55 @@ function HomePage() {
   );
 }
 
-function FeedTabs({ onSelectFeed }: { onSelectFeed?: (feed: Feed) => void }) {
+function FeedTabs({
+  onSelectFeed,
+  onDoubleTap,
+  tabsRef,
+  tabRefs,
+}: {
+  onSelectFeed?: (feed: Feed) => void;
+  onDoubleTap?: () => void;
+  tabsRef: React.RefObject<HTMLDivElement | null>;
+  tabRefs: React.MutableRefObject<Map<string, HTMLButtonElement>>;
+}) {
   const store = useAppStore();
-  const activeRef = useRef<HTMLButtonElement | null>(null);
+  const lastTapAtRef = useRef(0);
+  const suppressClickUntilRef = useRef(0);
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-  }, [store.activeFeedId, store.feeds.length]);
+    const container = tabsRef.current;
+    const active = store.activeFeedId ? tabRefs.current.get(store.activeFeedId) : null;
+    centerFeedTab(container, active ?? undefined, 0);
+  }, [store.activeFeedId, store.feeds.length, tabRefs, tabsRef]);
   if (store.feeds.length === 0) return null;
   return (
-    <div className="feed-tabs" aria-label="Feed tabs">
+    <div
+      className="feed-tabs"
+      aria-label="Feed tabs"
+      ref={tabsRef}
+      onPointerUp={(event) => {
+        const now = performance.now();
+        if (now - lastTapAtRef.current < 320) {
+          event.preventDefault();
+          lastTapAtRef.current = 0;
+          suppressClickUntilRef.current = now + 420;
+          onDoubleTap?.();
+          return;
+        }
+        lastTapAtRef.current = now;
+      }}
+    >
       {store.feeds.map((feed) => (
         <button
           type="button"
           key={feed.id}
-          ref={store.activeFeedId === feed.id ? activeRef : null}
+          data-feed-id={feed.id}
+          ref={(node) => {
+            if (node) tabRefs.current.set(feed.id, node);
+            else tabRefs.current.delete(feed.id);
+          }}
           className={`feed-tab ${store.activeFeedId === feed.id ? "active" : ""}`}
           onClick={() => {
+            if (performance.now() < suppressClickUntilRef.current) return;
             onSelectFeed?.(feed);
             if (!onSelectFeed) store.setActiveFeedId(feed.id);
           }}
@@ -808,7 +1047,7 @@ function TitleCard({
   const title = visibleTitle(series);
   return (
     <div className="title-card-wrap">
-      <Link to={`/title/${series.id}`} className="title-card" data-testid="title-card" onClickCapture={() => saveHomeScroll(feed)}>
+      <Link to={`/title/${series.id}`} className="title-card" data-testid="title-card" onClickCapture={() => prepareHomeTitleNavigation(feed)}>
         <div className="poster-shell">
           <Cover series={series} priority={rank <= 18} />
           {view.visible.rank && <span className="rank">{rank}</span>}

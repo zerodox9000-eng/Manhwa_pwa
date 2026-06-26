@@ -48,6 +48,19 @@ interface StoreState {
 
 function loadLocalSnapshot(): Partial<AppStateSnapshot> {
   try {
+    if (new URLSearchParams(window.location.search).has("resetLocal")) {
+      const resetKey = `manhwa-reset-consumed:${window.location.pathname}${window.location.hash || "#/"}`;
+      const shouldReset = sessionStorage.getItem(resetKey) !== "1";
+      if (shouldReset) {
+        sessionStorage.setItem(resetKey, "1");
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem("manhwa-library-route-v1");
+        if ("caches" in window) void caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key))));
+        if ("serviceWorker" in navigator) void navigator.serviceWorker.getRegistrations().then((registrations) => registrations.forEach((registration) => void registration.unregister()));
+      }
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash || "#/"}`);
+      if (shouldReset) return {};
+    }
     return parseAppStateSnapshot(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}")) ?? {};
   } catch {
     return {};
@@ -240,7 +253,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const hasQueryDates = cachedCatalog.some((item) => item.published?.start_date || item.published?.end_date);
       const online = typeof navigator === "undefined" || navigator.onLine;
       if (cachedCatalog.length === 0 || !hasQueryDates || !hasLiveMergedCatalog || online) {
-        await refreshData();
+        window.setTimeout(() => void refreshData(), 1800);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
