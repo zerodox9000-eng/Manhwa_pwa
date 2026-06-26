@@ -81,14 +81,20 @@ const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
 const HOME_FEED_INITIAL_RENDER_RADIUS = 4;
 const HOME_FEED_RENDER_RADIUS = 4;
+const FEED_TITLE_EXPANDED_MAX = 140;
+const FEED_DESCRIPTION_EXPANDED_MAX = 260;
 
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 const HOME_SCROLL_PREFIX = "manhwa-home-scroll";
 const HOME_RETURNING_FROM_TITLE_KEY = "manhwa-home-returning-from-title";
-const scrollAnimationFrames = new WeakMap<HTMLElement, number>();
-
 function visibleTitle(series: SeriesCatalog, fallback?: SeriesCatalog) {
   return resolveVisibleTitle(series, fallback);
+}
+
+function cappedText(text: string, max: number) {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, Math.max(0, max - 1)).trimEnd()}...`;
 }
 
 function homeScrollKey(feed: Feed | null) {
@@ -142,63 +148,6 @@ function restoreHomeScroll(feed: Feed | null) {
     return;
   }
   container.scrollTo({ top: target, behavior: "auto" });
-}
-
-function easeOutCubic(progress: number) {
-  return 1 - (1 - progress) ** 3;
-}
-
-function animateScroll(
-  element: HTMLElement,
-  axis: "left" | "top",
-  target: number,
-  duration: number,
-) {
-  const start = axis === "left" ? element.scrollLeft : element.scrollTop;
-  const distance = target - start;
-  if (Math.abs(distance) < 1) return;
-  const previousFrame = scrollAnimationFrames.get(element);
-  if (previousFrame) cancelAnimationFrame(previousFrame);
-  const startedAt = performance.now();
-  const step = (now: number) => {
-    const progress = Math.min(1, (now - startedAt) / duration);
-    const value = Math.round(start + distance * easeOutCubic(progress));
-    if (axis === "left") element.scrollLeft = value;
-    else element.scrollTop = value;
-    if (progress < 1) {
-      scrollAnimationFrames.set(element, requestAnimationFrame(step));
-      return;
-    }
-    scrollAnimationFrames.delete(element);
-  };
-  scrollAnimationFrames.set(element, requestAnimationFrame(step));
-}
-
-function centerFeedTab(container: HTMLDivElement | null, tab: HTMLButtonElement | undefined, duration = 160) {
-  if (!container) return;
-  if (!tab) return;
-  const target = tab.offsetLeft - (container.clientWidth - tab.offsetWidth) / 2;
-  if (duration <= 0) {
-    const previousFrame = scrollAnimationFrames.get(container);
-    if (previousFrame) cancelAnimationFrame(previousFrame);
-    scrollAnimationFrames.delete(container);
-    container.scrollLeft = Math.max(0, target);
-    return;
-  }
-  animateScroll(container, "left", Math.max(0, target), duration);
-}
-
-function markActiveFeedTab(container: HTMLDivElement | null, feedId: string | undefined) {
-  if (!container || !feedId) return;
-  container.querySelectorAll(".feed-tab.active").forEach((node) => node.classList.remove("active"));
-  container.querySelector<HTMLButtonElement>(`[data-feed-id="${CSS.escape(feedId)}"]`)?.classList.add("active");
-}
-
-function fastScrollToTop(container: HTMLElement) {
-  const start = container.scrollTop;
-  if (start <= 0) return;
-  const duration = Math.max(900, Math.min(2800, start / 8));
-  animateScroll(container, "top", 0, duration);
 }
 
 function isSearchVisible(series: SeriesCatalog, settings: AppSettings, sensitiveTagIds: { relationship: Set<number>; adult: Set<number> }) {
@@ -445,14 +394,10 @@ function HomePage() {
   const [warmFeedIds, setWarmFeedIds] = useState<Set<string>>(() => new Set());
   const [returningFromTitle, setReturningFromTitle] = useState(() => sessionStorage.getItem(HOME_RETURNING_FROM_TITLE_KEY) === "1");
   const pagerRef = useRef<HTMLDivElement | null>(null);
-  const tabsRef = useRef<HTMLDivElement | null>(null);
   const paneRefs = useRef(new Map<string, HTMLDivElement>());
-  const tabRefs = useRef(new Map<string, HTMLButtonElement>());
   const renderCenterIndexRef = useRef(-1);
   const warmFeedIdsRef = useRef(new Set<string>());
   const didInitialPagerAlignRef = useRef(false);
-  const centeredTabIndexRef = useRef(-1);
-  const tabCenterTimerRef = useRef(0);
   const { feeds, activeFeedId, setActiveFeedId } = store;
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
   const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
@@ -460,10 +405,6 @@ function HomePage() {
   useEffect(() => {
     if (!activeFeedId && feeds[0]) setActiveFeedId(feeds[0].id);
   }, [activeFeedId, feeds, setActiveFeedId]);
-
-  useEffect(() => () => {
-    window.clearTimeout(tabCenterTimerRef.current);
-  }, []);
 
   useEffect(() => {
     if (activeFeedIndex < 0 || renderCenterIndexRef.current >= 0) return;
@@ -544,16 +485,6 @@ function HomePage() {
       if (!paneStep) return;
       const scrollIndex = pager.scrollLeft / paneStep;
       const nearestIndex = Math.round(scrollIndex);
-      if (nearestIndex !== centeredTabIndexRef.current) {
-        centeredTabIndexRef.current = nearestIndex;
-        const nearestCenteredFeedId = feeds[nearestIndex]?.id;
-        markActiveFeedTab(tabsRef.current, nearestCenteredFeedId);
-      }
-      window.clearTimeout(tabCenterTimerRef.current);
-      tabCenterTimerRef.current = window.setTimeout(() => {
-        const settledFeedId = feeds[centeredTabIndexRef.current]?.id;
-        centerFeedTab(tabsRef.current, tabRefs.current.get(settledFeedId), 140);
-      }, 80);
       const nearestFeedId = feeds[nearestIndex]?.id;
       if (nearestFeedId && nearestFeedId !== activeFeedId) {
         setActiveFeedId(nearestFeedId);
@@ -569,39 +500,24 @@ function HomePage() {
     handleScroll();
   }, [activeFeedId, feeds, setActiveFeedId, warmFeedAt]);
 
+  const handleFeedPaneScroll = useCallback(
+    (feed: Feed) => {
+      saveHomeScroll(feed);
+    },
+    [],
+  );
+
   useEffect(() => {
     const feed = feeds.find((item) => item.id === activeFeedId) ?? feeds[0] ?? null;
     const pane = feed ? paneRefs.current.get(feed.id) : null;
-    if (!pane || !feed) return;
-    const save = () => saveHomeScroll(feed);
-    appDebugLog("home-scroll", "attach scroll listener", { feedId: feed.id });
-    save();
-    pane.addEventListener("scroll", save, { passive: true });
-    return () => pane.removeEventListener("scroll", save);
-  }, [activeFeedId, feeds]);
-
-  const handleSelectFeed = useCallback(
-    (feed: Feed) => {
-      appDebugLog("home-tabs", "select feed", { feedId: feed.id, feedName: feed.name });
-      setActiveFeedId(feed.id);
-      const pane = paneRefs.current.get(feed.id);
-      if (pane) {
-        pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
-      }
-    },
-    [setActiveFeedId],
-  );
-
-  const handleFeedTabsDoubleTap = useCallback(() => {
-    const feed = feeds.find((item) => item.id === activeFeedId) ?? feeds[0] ?? null;
-    const pane = feed ? paneRefs.current.get(feed.id) : null;
     const scroller = pane?.querySelector<HTMLElement>(".feed-pane-scroll");
-    if (scroller) fastScrollToTop(scroller);
+    if (!pane || !feed || !scroller) return;
+    appDebugLog("home-scroll", "attach scroll listener", { feedId: feed.id });
+    saveHomeScroll(feed);
   }, [activeFeedId, feeds]);
 
   return (
     <div className="page home-page">
-      <FeedTabs onSelectFeed={handleSelectFeed} onDoubleTap={handleFeedTabsDoubleTap} tabsRef={tabsRef} tabRefs={tabRefs} />
       {!store.ready ? (
         <div className="empty-state">
           <strong>Loading local library</strong>
@@ -641,7 +557,11 @@ function HomePage() {
                     else paneRefs.current.delete(feed.id);
                   }}
                 >
-                  <div className="feed-pane-scroll" data-home-scroll-key={homeScrollKey(feed)}>
+                  <div
+                    className="feed-pane-scroll"
+                    data-home-scroll-key={homeScrollKey(feed)}
+                    onScroll={() => handleFeedPaneScroll(feed)}
+                  >
                     {shouldRenderFeed ? <FeedView feed={feed} /> : <HomeFeedPaneSkeleton feed={feed} />}
                   </div>
                 </div>
@@ -664,88 +584,14 @@ function HomePage() {
   );
 }
 
-function FeedTabs({
-  onSelectFeed,
-  onDoubleTap,
-  tabsRef,
-  tabRefs,
-}: {
-  onSelectFeed?: (feed: Feed) => void;
-  onDoubleTap?: () => void;
-  tabsRef: React.RefObject<HTMLDivElement | null>;
-  tabRefs: React.MutableRefObject<Map<string, HTMLButtonElement>>;
-}) {
-  const store = useAppStore();
-  const lastTapAtRef = useRef(0);
-  const suppressClickUntilRef = useRef(0);
-  useEffect(() => {
-    const container = tabsRef.current;
-    const active = store.activeFeedId ? tabRefs.current.get(store.activeFeedId) : null;
-    centerFeedTab(container, active ?? undefined, 0);
-  }, [store.activeFeedId, store.feeds.length, tabRefs, tabsRef]);
-  if (store.feeds.length === 0) return null;
-  return (
-    <div
-      className="feed-tabs"
-      aria-label="Feed tabs"
-      ref={tabsRef}
-      onPointerUp={(event) => {
-        const now = performance.now();
-        if (now - lastTapAtRef.current < 320) {
-          event.preventDefault();
-          lastTapAtRef.current = 0;
-          suppressClickUntilRef.current = now + 420;
-          onDoubleTap?.();
-          return;
-        }
-        lastTapAtRef.current = now;
-      }}
-    >
-      {store.feeds.map((feed) => (
-        <button
-          type="button"
-          key={feed.id}
-          data-feed-id={feed.id}
-          ref={(node) => {
-            if (node) tabRefs.current.set(feed.id, node);
-            else tabRefs.current.delete(feed.id);
-          }}
-          className={`feed-tab ${store.activeFeedId === feed.id ? "active" : ""}`}
-          onClick={() => {
-            if (performance.now() < suppressClickUntilRef.current) return;
-            onSelectFeed?.(feed);
-            if (!onSelectFeed) store.setActiveFeedId(feed.id);
-          }}
-        >
-          <span className="feed-tab-title">{feed.name}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function FeedView({ feed }: { feed: Feed }) {
   const store = useAppStore();
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [feedSearch, setFeedSearch] = useState("");
-  const runtimeFeed = useMemo(
-    () =>
-      feedSearch.trim()
-        ? {
-            ...feed,
-            filters: { ...feed.filters, query: feedSearch.trim() },
-          }
-        : feed,
-    [feed, feedSearch],
-  );
+  const [titleExpanded, setTitleExpanded] = useState(false);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const query = useMemo(
     () =>
       runFeedQuery({
-        feed: runtimeFeed,
+        feed,
         series: store.catalog,
         tags: store.tags,
         history: store.history,
@@ -754,98 +600,84 @@ function FeedView({ feed }: { feed: Feed }) {
         metaHistoryFirst: store.syncMeta?.historyFirstDate,
         metaHistoryLast: store.syncMeta?.historyLastDate,
       }),
-    [runtimeFeed, store.catalog, store.history, store.labels, store.settings, store.syncMeta, store.tags],
+    [feed, store.catalog, store.history, store.labels, store.settings, store.syncMeta, store.tags],
   );
+  const hasDescription = feed.showDescription && Boolean(feed.description.trim());
+  const titleCanExpand = feed.name.trim().length > 34;
+  const descriptionCanExpand = hasDescription && feed.description.trim().length > 72;
+  const descriptionText = hasDescription ? cappedText(feed.description, FEED_DESCRIPTION_EXPANDED_MAX) : "";
   return (
     <>
-      <section className="section">
-        <div className="feed-action-row">
-          <button className="icon-button" type="button" onClick={() => setMenuOpen((open) => !open)} aria-label="Feed menu">
-            <EllipsisVertical size={20} />
+      <section className="section feed-summary-section">
+        <div className={`feed-summary-card ${titleExpanded || descriptionExpanded ? "expanded" : ""}`}>
+          <button
+            className={`feed-title-button ${titleCanExpand ? "expandable" : ""}`}
+            type="button"
+            onClick={() => titleCanExpand && setTitleExpanded((expanded) => !expanded)}
+            aria-expanded={titleCanExpand ? titleExpanded : undefined}
+            aria-disabled={!titleCanExpand}
+          >
+            <FeedBarCoverWash items={query.items.slice(0, 4)} />
+            <FitSingleLineTitle text={feed.name} expanded={titleExpanded} maxChars={FEED_TITLE_EXPANDED_MAX} />
           </button>
-          {menuOpen && (
-            <div className="popover-menu feed-menu">
-              <button type="button" onClick={() => { setSearchOpen((open) => !open); setMenuOpen(false); }}><Search size={17} /> Search</button>
-              <button type="button" onClick={() => { setEditorOpen(true); setMenuOpen(false); }}><SlidersHorizontal size={17} /> Settings</button>
-              <button type="button" onClick={() => { setShareOpen(true); setMenuOpen(false); }}><Share2 size={17} /> Share</button>
-              <button type="button" onClick={() => { setInfoOpen(true); setMenuOpen(false); }}><Info size={17} /> Info</button>
-            </div>
-          )}
-        </div>
-        <div className="feed-view-header">
-          <div className="feed-view-title">
-            <FitSingleLineTitle text={feed.name} />
-            <div className="feed-description-shell">
-              {feed.showDescription && feed.description ? (
-                <p className="feed-description">{feed.description}</p>
-              ) : (
-                <div className="feed-description feed-description-empty" aria-hidden="true" />
-              )}
-            </div>
+          <div className={`feed-summary-lower ${hasDescription ? "" : "empty"}`}>
+            {hasDescription ? (
+              <button
+                className={`feed-description-button ${descriptionCanExpand ? "expandable" : ""}`}
+                type="button"
+                onClick={() => descriptionCanExpand && setDescriptionExpanded((expanded) => !expanded)}
+                aria-expanded={descriptionCanExpand ? descriptionExpanded : undefined}
+                aria-disabled={!descriptionCanExpand}
+              >
+                <FeedBarCoverWash items={query.items.slice(4, 8)} />
+                <span className={`feed-description-text ${descriptionExpanded ? "expanded" : ""}`}>{descriptionText}</span>
+              </button>
+            ) : null}
           </div>
         </div>
-        {searchOpen && (
-          <div className="field feed-search">
-            <label>Search in this feed</label>
-            <input
-              className="input"
-              value={feedSearch}
-              onChange={(event) => setFeedSearch(event.target.value)}
-              placeholder="Filter current feed without changing saved settings"
-              autoComplete="off"
-            />
-          </div>
-        )}
       </section>
       <TitleCollection
         items={query.items}
-        feed={runtimeFeed}
+        feed={feed}
         history={store.history}
         latestDate={store.syncMeta?.historyLastDate}
       />
-      <BottomDrawer title="Feed Settings" open={editorOpen} onOpenChange={setEditorOpen}>
-        <FeedEditor
-          feed={feed}
-          onCancel={() => setEditorOpen(false)}
-          onSave={(updated) => {
-            store.upsertFeed(updated);
-            setEditorOpen(false);
-          }}
-        />
-      </BottomDrawer>
-      <BottomDrawer title="Share Feed" open={shareOpen} onOpenChange={setShareOpen}>
-        <SharePanel payload={{ kind: "feed", version: 2, feed }} />
-      </BottomDrawer>
-      <BottomDrawer title="Feed Info" open={infoOpen} onOpenChange={setInfoOpen}>
-        <div className="settings-list">
-          <div className="setting-row"><span>Titles</span><strong>{query.items.length.toLocaleString()}</strong></div>
-          {query.activeNotes.map((note) => (
-            <div className="setting-row" key={note}><span>{note}</span></div>
-          ))}
-          {query.missingDateData && <div className="setting-row"><span>Some current exports do not include date fields in the catalog yet.</span></div>}
-          <div className="setting-row"><span>Last data refresh</span><strong>{store.syncMeta?.lastSync ? new Date(store.syncMeta.lastSync).toLocaleString() : "Not synced"}</strong></div>
-          <div className="setting-row"><span>Source</span><strong>{store.syncMeta?.source ?? "Offline cache"}</strong></div>
-        </div>
-      </BottomDrawer>
     </>
   );
 }
 
-function FitSingleLineTitle({ text }: { text: string }) {
+function FeedBarCoverWash({ items }: { items: SeriesCatalog[] }) {
+  const covers = items.filter((item) => item.cover).slice(0, 4);
+  if (covers.length === 0) return null;
+  return (
+    <span className="feed-bar-cover-wash" aria-hidden="true">
+      {covers.map((item, index) => (
+        <img src={item.cover ?? ""} alt="" key={`${item.id}-${index}`} loading="lazy" decoding="async" />
+      ))}
+    </span>
+  );
+}
+
+function FitSingleLineTitle({ text, expanded = false, maxChars = FEED_TITLE_EXPANDED_MAX }: { text: string; expanded?: boolean; maxChars?: number }) {
   const titleRef = useRef<HTMLHeadingElement | null>(null);
   const [fontSize, setFontSize] = useState<number | null>(null);
+  const displayText = expanded ? cappedText(text, maxChars) : text;
 
   useLayoutEffect(() => {
     const el = titleRef.current;
     if (!el) return;
+    if (expanded) {
+      setFontSize(null);
+      return;
+    }
     const parent = el.parentElement;
     if (!parent) return;
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     if (!context) return;
     const styles = getComputedStyle(el);
-    const max = Number.parseFloat(styles.fontSize) || 32;
-    const min = max * 0.5;
+    const max = 25;
+    const min = 13;
     const weight = styles.fontWeight;
     const family = styles.fontFamily;
     const fit = () => {
@@ -857,7 +689,7 @@ function FitSingleLineTitle({ text }: { text: string }) {
       for (let i = 0; i < 10; i += 1) {
         const mid = (low + high) / 2;
         context.font = `${weight} ${mid}px ${family}`;
-        if (context.measureText(text).width <= available) {
+        if (context.measureText(displayText).width <= available) {
           best = mid;
           low = mid;
         } else {
@@ -870,31 +702,29 @@ function FitSingleLineTitle({ text }: { text: string }) {
     const observer = new ResizeObserver(() => fit());
     observer.observe(parent);
     return () => observer.disconnect();
-  }, [text]);
+  }, [displayText, expanded]);
 
   return (
     <h1
       ref={titleRef}
-      className="single-line-title"
+      className={`single-line-title ${expanded ? "expanded" : ""}`}
       style={fontSize ? { fontSize: `${fontSize}px` } : undefined}
     >
-      {text}
+      {displayText}
     </h1>
   );
 }
 
 function HomeFeedPaneSkeleton({ feed }: { feed: Feed }) {
   return (
-    <section className="section">
-      <div className="feed-view-header">
-        <div className="feed-view-title">
+    <section className="section feed-summary-section">
+      <div className="feed-summary-card">
+        <div className="feed-title-button skeleton-feed-title">
           <h1 className="single-line-title skeleton-line skeleton-line-title" />
-          <div className="feed-description-shell">
-            {feed.showDescription ? (
-              <p className="feed-description"><span className="skeleton-line skeleton-line-body" /></p>
-            ) : (
-              <div className="feed-description feed-description-empty" aria-hidden="true" />
-            )}
+        </div>
+        <div className="feed-summary-lower">
+          <div className="feed-description-button skeleton-feed-description">
+            {feed.showDescription ? <span className="skeleton-line skeleton-line-body" /> : <span aria-hidden="true" />}
           </div>
         </div>
       </div>
@@ -1325,7 +1155,6 @@ function FeedCoverCard({
       <Link className="feed-cover-link" to="/" onClick={onOpen}>
         {loading ? <div className="mosaic-cover mosaic-loading" aria-hidden="true" /> : <MosaicCover items={covers} title={feed.name} />}
         <strong className="feed-card-title">{feed.name}</strong>
-        {feed.showDescription && feed.description && <span className="feed-card-description">{feed.description}</span>}
       </Link>
       <button
         className="feed-drag-handle"
