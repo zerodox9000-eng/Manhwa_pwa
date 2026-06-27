@@ -76,7 +76,6 @@ const NAV_ITEMS = [
 const SORT_OPTIONS: MetricId[] = METRIC_DEFINITIONS.map((definition) => definition.id);
 const RANGE_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.filterable);
 const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.id !== "title" && definition.id !== "mangabakaLatestRank");
-const resetPageScroll = () => window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
 const HOME_FEED_INITIAL_RENDER_RADIUS = 4;
@@ -88,6 +87,79 @@ const PWA_CHROME_THEME_COLOR = "#11131a";
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 const HOME_SCROLL_PREFIX = "manhwa-home-scroll";
 const HOME_RETURNING_FROM_TITLE_KEY = "manhwa-home-returning-from-title";
+const FEEDS_SCROLL_KEY = "manhwa-feeds-scroll";
+type RgbColor = [number, number, number];
+const DEFAULT_FEED_PALETTE: [RgbColor, RgbColor, RgbColor] = [
+  [126, 82, 166],
+  [64, 132, 158],
+  [170, 92, 132],
+];
+const coverPaletteCache = new Map<string, Promise<RgbColor>>();
+
+function extractBrightCoverColor(image: HTMLImageElement): RgbColor {
+  const canvas = document.createElement("canvas");
+  canvas.width = 20;
+  canvas.height = 28;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return DEFAULT_FEED_PALETTE[0];
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  const candidates: Array<{ color: RgbColor; score: number }> = [];
+  for (let index = 0; index < pixels.length; index += 4) {
+    if (pixels[index + 3] < 220) continue;
+    const color: RgbColor = [pixels[index], pixels[index + 1], pixels[index + 2]];
+    const [r, g, b] = color.map((channel) => channel / 255);
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const saturation = max === 0 ? 0 : (max - min) / max;
+    const luminance = r * 0.2126 + g * 0.7152 + b * 0.0722;
+    if (luminance < 0.2 || luminance > 0.96 || saturation < 0.1) continue;
+    candidates.push({ color, score: luminance * 0.72 + saturation * 0.28 });
+  }
+  if (candidates.length === 0) return DEFAULT_FEED_PALETTE[0];
+  candidates.sort((a, b) => b.score - a.score);
+  const selected = candidates.slice(0, Math.max(10, Math.ceil(candidates.length * 0.22)));
+  const totals = selected.reduce(
+    (result, candidate) => {
+      const weight = candidate.score * candidate.score;
+      result.red += candidate.color[0] * weight;
+      result.green += candidate.color[1] * weight;
+      result.blue += candidate.color[2] * weight;
+      result.weight += weight;
+      return result;
+    },
+    { red: 0, green: 0, blue: 0, weight: 0 },
+  );
+  const averaged: RgbColor = [
+    Math.round(totals.red / totals.weight),
+    Math.round(totals.green / totals.weight),
+    Math.round(totals.blue / totals.weight),
+  ];
+  const luminance = (averaged[0] * 0.2126 + averaged[1] * 0.7152 + averaged[2] * 0.0722) / 255;
+  const lift = luminance < 0.48 ? Math.min(1.6, 0.48 / Math.max(luminance, 0.01)) : 1;
+  return averaged.map((channel) => Math.min(255, Math.round(channel * lift))) as RgbColor;
+}
+
+function sampleCoverColor(url: string, fallback: RgbColor) {
+  const cached = coverPaletteCache.get(url);
+  if (cached) return cached;
+  const sampled = new Promise<RgbColor>((resolve) => {
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.decoding = "async";
+    image.onload = () => {
+      try {
+        resolve(extractBrightCoverColor(image));
+      } catch {
+        resolve(fallback);
+      }
+    };
+    image.onerror = () => resolve(fallback);
+    image.src = url;
+  });
+  coverPaletteCache.set(url, sampled);
+  return sampled;
+}
 function visibleTitle(series: SeriesCatalog, fallback?: SeriesCatalog) {
   return resolveVisibleTitle(series, fallback);
 }
@@ -621,29 +693,30 @@ function FeedView({ feed }: { feed: Feed }) {
     <>
       <section className="section feed-summary-section">
         <div className={`feed-summary-card ${titleExpanded || descriptionExpanded ? "expanded" : ""}`}>
-          <button
-            className={`feed-title-button ${titleCanExpand ? "expandable" : ""}`}
-            type="button"
-            onClick={() => titleCanExpand && setTitleExpanded((expanded) => !expanded)}
-            aria-expanded={titleCanExpand ? titleExpanded : undefined}
-            aria-disabled={!titleCanExpand}
-          >
-            <FeedBarCoverWash items={query.items.slice(0, 4)} />
-            <FitSingleLineTitle text={feed.name} expanded={titleExpanded} maxChars={FEED_TITLE_EXPANDED_MAX} />
-          </button>
-          <div className={`feed-summary-lower ${hasDescription ? "" : "empty"}`}>
-            {hasDescription ? (
-              <button
-                className={`feed-description-button ${descriptionCanExpand ? "expandable" : ""}`}
-                type="button"
-                onClick={() => descriptionCanExpand && setDescriptionExpanded((expanded) => !expanded)}
-                aria-expanded={descriptionCanExpand ? descriptionExpanded : undefined}
-                aria-disabled={!descriptionCanExpand}
-              >
-                <FeedBarCoverWash items={query.items.slice(4, 8)} />
-                <span className={`feed-description-text ${descriptionExpanded ? "expanded" : ""}`}>{descriptionText}</span>
-              </button>
-            ) : null}
+          <FeedBarCoverWash items={query.items.slice(0, 3)} />
+          <div className="feed-summary-content">
+            <button
+              className={`feed-title-button ${titleCanExpand ? "expandable" : ""}`}
+              type="button"
+              onClick={() => titleCanExpand && setTitleExpanded((expanded) => !expanded)}
+              aria-expanded={titleCanExpand ? titleExpanded : undefined}
+              aria-disabled={!titleCanExpand}
+            >
+              <FitSingleLineTitle text={feed.name} expanded={titleExpanded} maxChars={FEED_TITLE_EXPANDED_MAX} />
+            </button>
+            <div className={`feed-summary-lower ${hasDescription ? "" : "empty"}`}>
+              {hasDescription ? (
+                <button
+                  className={`feed-description-button ${descriptionCanExpand ? "expandable" : ""}`}
+                  type="button"
+                  onClick={() => descriptionCanExpand && setDescriptionExpanded((expanded) => !expanded)}
+                  aria-expanded={descriptionCanExpand ? descriptionExpanded : undefined}
+                  aria-disabled={!descriptionCanExpand}
+                >
+                  <span className={`feed-description-text ${descriptionExpanded ? "expanded" : ""}`}>{descriptionText}</span>
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       </section>
@@ -658,68 +731,59 @@ function FeedView({ feed }: { feed: Feed }) {
 }
 
 function FeedBarCoverWash({ items }: { items: SeriesCatalog[] }) {
-  const covers = items.filter((item) => item.cover).slice(0, 4);
-  if (covers.length === 0) return null;
+  const coverKey = items.slice(0, 3).map((item) => item.cover ?? "").join("|");
+  const [palette, setPalette] = useState(DEFAULT_FEED_PALETTE);
+  useEffect(() => {
+    let active = true;
+    const coverUrls = coverKey.split("|");
+    void Promise.all(
+      DEFAULT_FEED_PALETTE.map((fallback, index) => {
+        const url = coverUrls[index];
+        return url ? sampleCoverColor(url, fallback) : Promise.resolve(fallback);
+      }),
+    ).then((colors) => {
+      if (active) setPalette(colors as [RgbColor, RgbColor, RgbColor]);
+    });
+    return () => {
+      active = false;
+    };
+  }, [coverKey]);
+  const average = palette.reduce(
+    (result, color) => [result[0] + color[0] / 3, result[1] + color[1] / 3, result[2] + color[2] / 3] as RgbColor,
+    [0, 0, 0] as RgbColor,
+  );
+  const dark: RgbColor = average.map((channel, index) =>
+    Math.round(channel * 0.34 + ([15, 17, 24] as RgbColor)[index] * 0.66),
+  ) as RgbColor;
+  const style = {
+    "--feed-color-1": palette[0].join(" "),
+    "--feed-color-2": palette[1].join(" "),
+    "--feed-color-3": palette[2].join(" "),
+    "--feed-color-dark": dark.join(" "),
+  } as React.CSSProperties;
   return (
-    <span className="feed-bar-cover-wash" aria-hidden="true">
-      {covers.map((item, index) => (
-        <img src={item.cover ?? ""} alt="" key={`${item.id}-${index}`} loading="lazy" decoding="async" />
-      ))}
-    </span>
+    <span className="feed-bar-cover-wash" style={style} aria-hidden="true" />
   );
 }
 
 function FitSingleLineTitle({ text, expanded = false, maxChars = FEED_TITLE_EXPANDED_MAX }: { text: string; expanded?: boolean; maxChars?: number }) {
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const [fontSize, setFontSize] = useState<number | null>(null);
   const displayText = expanded ? cappedText(text, maxChars) : text;
-
-  useLayoutEffect(() => {
-    const el = titleRef.current;
-    if (!el) return;
-    if (expanded) {
-      setFontSize(null);
-      return;
-    }
-    const parent = el.parentElement;
-    if (!parent) return;
-    const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d");
-    if (!context) return;
-    const styles = getComputedStyle(el);
-    const max = 25;
-    const min = 13;
-    const weight = styles.fontWeight;
-    const family = styles.fontFamily;
-    const fit = () => {
-      const available = parent.clientWidth;
-      if (!available) return;
-      let low = min;
-      let high = max;
-      let best = min;
-      for (let i = 0; i < 10; i += 1) {
-        const mid = (low + high) / 2;
-        context.font = `${weight} ${mid}px ${family}`;
-        if (context.measureText(displayText).width <= available) {
-          best = mid;
-          low = mid;
-        } else {
-          high = mid;
-        }
-      }
-      setFontSize(Math.max(min, Math.min(max, best)));
-    };
-    fit();
-    const observer = new ResizeObserver(() => fit());
-    observer.observe(parent);
-    return () => observer.disconnect();
-  }, [displayText, expanded]);
+  const widthUnits = Math.max(
+    1,
+    [...displayText].reduce((total, character) => {
+      if (character === " ") return total + 0.32;
+      if (/[MW@%&]/.test(character)) return total + 0.9;
+      if (/[ilI1|.,'!:;]/.test(character)) return total + 0.3;
+      if (/[A-Z0-9]/.test(character)) return total + 0.64;
+      return total + 0.55;
+    }, 0) * 1.1,
+  );
+  const responsiveFontSize = `clamp(15px, calc(${(100 / widthUnits).toFixed(4)}cqw - ${(72 / widthUnits).toFixed(3)}px), 30px)`;
 
   return (
     <h1
-      ref={titleRef}
       className={`single-line-title ${expanded ? "expanded" : ""}`}
-      style={fontSize ? { fontSize: `${fontSize}px` } : undefined}
+      style={expanded ? undefined : { fontSize: responsiveFontSize }}
     >
       {displayText}
     </h1>
@@ -730,12 +794,17 @@ function HomeFeedPaneSkeleton({ feed }: { feed: Feed }) {
   return (
     <section className="section feed-summary-section">
       <div className="feed-summary-card">
-        <div className="feed-title-button skeleton-feed-title">
-          <h1 className="single-line-title skeleton-line skeleton-line-title" />
-        </div>
-        <div className="feed-summary-lower">
-          <div className="feed-description-button skeleton-feed-description">
-            {feed.showDescription ? <span className="skeleton-line skeleton-line-body" /> : <span aria-hidden="true" />}
+        <FeedBarCoverWash items={[]} />
+        <div className="feed-summary-content">
+          <div className="feed-title-button skeleton-feed-title">
+            <h1 className="single-line-title skeleton-line skeleton-line-title" />
+          </div>
+          <div className={`feed-summary-lower ${feed.showDescription ? "" : "empty"}`}>
+            {feed.showDescription ? (
+              <div className="feed-description-button skeleton-feed-description">
+                <span className="skeleton-line skeleton-line-body" />
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -1033,6 +1102,22 @@ function FeedsPage() {
   const [coversLoading, setCoversLoading] = useState(true);
 
   useEffect(() => {
+    const target = Number(sessionStorage.getItem(FEEDS_SCROLL_KEY));
+    const firstFrame = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (Number.isFinite(target) && target > 0) window.scrollTo({ top: target, behavior: "auto" });
+      });
+    });
+    const save = () => sessionStorage.setItem(FEEDS_SCROLL_KEY, String(window.scrollY));
+    window.addEventListener("scroll", save, { passive: true });
+    return () => {
+      cancelAnimationFrame(firstFrame);
+      save();
+      window.removeEventListener("scroll", save);
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     setCoversLoading(true);
     const handle = window.setTimeout(() => {
@@ -1086,7 +1171,6 @@ function FeedsPage() {
               over={overId === feed.id}
               onOpen={() => {
                 store.setActiveFeedId(feed.id);
-                resetPageScroll();
               }}
               onEdit={() => setEditorFeed(feed)}
               onDelete={() => store.deleteFeed(feed.id)}

@@ -19,6 +19,7 @@ import { db, loadSyncMeta } from "../db/appDb";
 import { loadBundledCatalog, loadCachedData, syncFrontendData } from "../services/dataService";
 
 const STORAGE_KEY = "manhwa-library-state-v1";
+const THREE_COLUMN_FEEDS_MIGRATION_KEY = "manhwa-three-column-feeds-v1";
 
 interface StoreState {
   ready: boolean;
@@ -183,20 +184,34 @@ const AppStoreContext = createContext<StoreState | null>(null);
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const local = useMemo(loadLocalSnapshot, []);
   const hasSavedState = useMemo(() => localStorage.getItem(STORAGE_KEY) != null, []);
+  const shouldMigrateFeedsToThreeColumns = useMemo(
+    () => localStorage.getItem(THREE_COLUMN_FEEDS_MIGRATION_KEY) !== "1",
+    [],
+  );
   const [ready, setReady] = useState(false);
   const [catalog, setCatalog] = useState<SeriesCatalog[]>([]);
   const [tags, setTags] = useState<TagNode[]>([]);
   const [history, setHistory] = useState<HistoryMap>({});
   const [recommendationFeatures, setRecommendationFeatures] = useState<RecommendationFeature[]>([]);
   const [syncMeta, setSyncMeta] = useState<SyncMeta | null>(null);
-  const [feeds, setFeeds] = useState<Feed[]>(
-    (hasSavedState ? local.feeds ?? [] : (defaultFeedsJson as Feed[])).map((feed) => normalizeFeed(feed)),
-  );
+  const [feeds, setFeeds] = useState<Feed[]>(() => {
+    const normalizedFeeds = (hasSavedState ? local.feeds ?? [] : (defaultFeedsJson as Feed[])).map((feed) =>
+      normalizeFeed(feed),
+    );
+    if (!shouldMigrateFeedsToThreeColumns) return normalizedFeeds;
+    return normalizedFeeds.map((feed) => ({ ...feed, view: { ...feed.view, gridColumns: 3 } }));
+  });
   const [folders, setFolders] = useState<Folder[]>(local.folders ?? []);
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
   const [settings, setSettings] = useState<AppSettings>(mergeSettings(parseSettings(local.settings) ?? local.settings));
   const [activeFeedId, setActiveFeedId] = useState<string | null>(local.activeFeedId ?? null);
   const [syncStatus, setSyncStatus] = useState("");
+
+  useEffect(() => {
+    if (shouldMigrateFeedsToThreeColumns) {
+      localStorage.setItem(THREE_COLUMN_FEEDS_MIGRATION_KEY, "1");
+    }
+  }, [shouldMigrateFeedsToThreeColumns]);
 
   useEffect(() => {
     void (async () => {

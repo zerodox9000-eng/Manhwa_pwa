@@ -3230,5 +3230,239 @@ textarea,
   text-shadow: 0 1px 5px rgba(0, 0, 0, 0.72);
 }
 
+/* Three-cover home header: one real glass surface, with cheap inner text pills. */
+.feed-summary-section {
+  margin: 20px 0;
+}
+
+.feed-summary-card {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+  container-type: inline-size;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(24, 26, 35, 0.58);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 32px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(18px) saturate(1.2);
+  clip-path: inset(0 round 8px);
+}
+
+.feed-bar-cover-wash {
+  position: relative;
+  inset: auto;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: calc((100cqw - 18px) / 2.88);
+  overflow: hidden;
+  border-radius: 0;
+  background:
+    radial-gradient(ellipse at 12% 18%, rgb(var(--feed-color-1) / 0.96) 0%, rgb(var(--feed-color-1) / 0.48) 42%, transparent 72%),
+    radial-gradient(ellipse at 72% 10%, rgb(var(--feed-color-2) / 0.9) 0%, rgb(var(--feed-color-2) / 0.42) 44%, transparent 74%),
+    radial-gradient(ellipse at 90% 88%, rgb(var(--feed-color-3) / 0.88) 0%, rgb(var(--feed-color-3) / 0.4) 42%, transparent 70%),
+    linear-gradient(145deg, rgb(var(--feed-color-dark) / 0.94), rgb(var(--feed-color-2) / 0.46), rgb(var(--feed-color-dark) / 0.9));
+  opacity: 1;
+}
+
+.feed-bar-cover-wash::after {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  content: "";
+  background: rgba(14, 16, 22, 0.18);
+  backdrop-filter: blur(18px) saturate(1.18);
+}
+
+.feed-summary-card.expanded .feed-bar-cover-wash {
+  min-height: 260px;
+}
+
+.feed-summary-content {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.feed-title-button,
+.feed-description-button {
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(27, 30, 40, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 6px 18px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(14px) saturate(1.22);
+}
+
+.feed-title-button {
+  min-height: 46px;
+  padding: 3px 18px;
+  overflow: hidden;
+}
+
+.single-line-title {
+  width: auto;
+  max-width: 100%;
+  color: rgba(250, 251, 255, 0.99);
+  font-size: 30px;
+  font-weight: 900;
+  font-synthesis: weight;
+  line-height: 1.05;
+  letter-spacing: 0;
+  -webkit-text-stroke: 0.55px currentColor;
+  paint-order: stroke fill;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.72);
+  transform: translateY(3px);
+}
+
+.single-line-title.expanded {
+  font-size: 21px;
+  font-weight: 900;
+  line-height: 1.18;
+  transform: translateY(3px);
+}
+
+.feed-summary-lower {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 31px;
+  overflow: visible;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  clip-path: none;
+}
+
+.feed-summary-lower.empty {
+  width: 1px;
+  min-height: 31px;
+}
+
+.feed-description-button {
+  min-height: 31px;
+  padding: 3px 14px;
+  overflow: hidden;
+}
+
+.feed-description-text {
+  max-width: 100%;
+  color: rgba(244, 246, 251, 0.94);
+  font-size: 14px;
+  font-weight: 620;
+  line-height: 1.2;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.68);
+}
+
+.feed-description-text.expanded {
+  color: rgba(244, 246, 251, 0.94);
+}
+
+/* Cover rank and metric badges use the same fake glass at every grid size. */
+.compact-metrics span,
+.poster-shell .rank,
+.title-grid.columns-1 .compact-metrics span,
+.title-grid.columns-2 .compact-metrics span,
+.title-grid.columns-3 .compact-metrics span,
+.title-grid.columns-4 .compact-metrics span,
+.title-grid.columns-5 .compact-metrics span,
+.title-grid.columns-1 .poster-shell .rank,
+.title-grid.columns-2 .poster-shell .rank,
+.title-grid.columns-3 .poster-shell .rank,
+.title-grid.columns-4 .poster-shell .rank,
+.title-grid.columns-5 .poster-shell .rank {
+  border: 0;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.05)),
+    rgba(52, 57, 74, 0.82);
+  box-shadow: none;
+  backdrop-filter: none;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.72);
+}
+
+/* Cover badge size trial: scale from the current 1.2x three-column baseline. */
+.title-grid.columns-3 .compact-metrics {
+  transform: scale(1.2);
+  transform-origin: center;
+}
+
+.title-grid.columns-3 .poster-shell .rank {
+  transform: none;
+}
+
+.title-grid.columns-2 .compact-metrics {
+  overflow: visible;
+  transform: none;
+}
+
+.title-grid.columns-2 .compact-metrics span {
+  min-height: 34px;
+  padding: 3px 11px;
+  font-size: 19.2px;
+  line-height: 1.05;
+}
+
+.title-grid.columns-2 .poster-metrics {
+  bottom: 12px;
+  padding: 0 8px;
+  overflow: visible;
+}
+
+.title-grid.columns-2 .poster-shell .rank {
+  top: 9px;
+  left: 9px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  font-size: 16.5px;
+  transform: none;
+}
+
+.title-grid.columns-1 .compact-metrics {
+  overflow: visible;
+  transform: none;
+}
+
+.title-grid.columns-1 .compact-metrics span {
+  min-height: 63px;
+  padding: 6px 21px;
+  font-size: 36px;
+  line-height: 1.05;
+}
+
+.title-grid.columns-1 .poster-metrics {
+  bottom: 16px;
+  padding: 0 18px;
+  overflow: visible;
+}
+
+.title-grid.columns-1 .poster-shell .rank {
+  top: 12px;
+  left: 12px;
+  width: 59px;
+  height: 59px;
+  min-width: 59px;
+  min-height: 59px;
+  font-size: 27.5px;
+  transform: none;
+}
+
 
 
