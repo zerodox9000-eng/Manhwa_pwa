@@ -317,6 +317,7 @@ export interface AppSettings {
   searchSensitiveTags: boolean;
   searchRelationshipTags: boolean;
   searchAdultTags: boolean;
+  showSearchHistory: boolean;
 }
 
 export interface SyncMeta {

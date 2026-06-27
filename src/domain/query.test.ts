@@ -68,7 +68,7 @@ const history: HistoryMap = {
 };
 
 describe("runFeedQuery", () => {
-  it("excludes titles with no tags from every feed", () => {
+  it("excludes titles without resolvable detail tags from every feed", () => {
     const feed = createFeed("tagged titles only");
     feed.filters.excludeTagIds = [];
     const result = runFeedQuery({
@@ -76,6 +76,7 @@ describe("runFeedQuery", () => {
       series: [
         baseSeries[0],
         { ...baseSeries[0], id: 99, display_title: "No tags", tag_ids: [] },
+        { ...baseSeries[0], id: 100, display_title: "Unknown tags", tag_ids: [999999] },
       ],
       tags,
       history,
@@ -291,6 +292,54 @@ describe("runFeedQuery", () => {
       metaHistoryLast: "2024-05-10",
     });
     expect(result.items.map((item) => item.id)).toEqual([80]);
+  });
+
+  it("never uses estimated dates in rolling release filters", () => {
+    const feed = createFeed("recent real releases");
+    feed.filters.sourceModes = ["anilist", "non-anilist"];
+    feed.filters.sourceMode = "mixed";
+    feed.filters.includeEstimatedDates = true;
+    feed.filters.dateField = "release";
+    feed.filters.rolling = { mode: "fixed", amount: 1, unit: "months", from: "2026-06-01", to: "2026-06-30" };
+    const result = runFeedQuery({
+      feed,
+      series: [
+        { ...baseSeries[0], id: 83, display_title: "Real June release", published: { start_date: "2026-06-05", end_date: null, start_date_is_estimated: false } },
+        { ...baseSeries[0], id: 84, display_title: "Estimated June release", year: 2014, published: { start_date: "2026-06-10", end_date: null, start_date_is_estimated: true } },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+      metaHistoryFirst: "2024-05-01",
+      metaHistoryLast: "2026-06-30",
+    });
+
+    expect(result.items.map((item) => item.id)).toEqual([83]);
+  });
+
+  it("never uses estimated dates in completion date filters", () => {
+    const feed = createFeed("recent real completions");
+    feed.filters.sourceModes = ["anilist", "non-anilist"];
+    feed.filters.sourceMode = "mixed";
+    feed.filters.includeEstimatedDates = true;
+    feed.filters.dateField = "end";
+    feed.filters.rolling = { mode: "fixed", amount: 1, unit: "months", from: "2026-06-01", to: "2026-06-30" };
+    const result = runFeedQuery({
+      feed,
+      series: [
+        { ...baseSeries[0], id: 85, display_title: "Real June completion", published: { start_date: "2025-01-01", end_date: "2026-06-05", end_date_is_estimated: false } },
+        { ...baseSeries[0], id: 86, display_title: "Estimated June completion", published: { start_date: "2014-01-01", end_date: "2026-06-10", end_date_is_estimated: true } },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+      metaHistoryFirst: "2024-05-01",
+      metaHistoryLast: "2026-06-30",
+    });
+
+    expect(result.items.map((item) => item.id)).toEqual([85]);
   });
 
   it("uses MangaBaka latest rank after projecting source mode locally", () => {

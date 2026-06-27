@@ -26,7 +26,6 @@ import {
 import { memo, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Fuse from "fuse.js";
 import { appDebugLog } from "./lib/debug";
-import { useRegisterSW } from "virtual:pwa-register/react";
 import ReactMarkdown from "react-markdown";
 import {
   HashRouter,
@@ -43,13 +42,14 @@ import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT } from "./domain/defaults";
 import { resolveRollingWindow } from "./domain/dates";
-import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
+import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, hasDetailTags, isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
-import { decodeSharePayload, exportCsv, makeShareUrl, type SharePayload } from "./domain/share";
+import { decodeSharePayload, makeShareUrl, type SharePayload } from "./domain/share";
 import type {
   AppSettings,
+  AppStateSnapshot,
   ContentRating,
   Feed,
   FeedViewSettings,
@@ -88,6 +88,16 @@ const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 const HOME_SCROLL_PREFIX = "manhwa-home-scroll";
 const HOME_RETURNING_FROM_TITLE_KEY = "manhwa-home-returning-from-title";
 const FEEDS_SCROLL_KEY = "manhwa-feeds-scroll";
+const SEARCH_OPENED_HISTORY_KEY = "manhwa-search-opened-titles";
+const SEARCH_OPENED_HISTORY_LIMIT = 99;
+const ACCENT_COLORS = [
+  { name: "Rose", value: "#ff3b81" },
+  { name: "Blue", value: "#4f8cff" },
+  { name: "Emerald", value: "#26c281" },
+  { name: "Violet", value: "#8b5cf6" },
+  { name: "Amber", value: "#f59e0b" },
+  { name: "Cyan", value: "#06b6d4" },
+] as const;
 type RouteFeedbackKind = "detail" | "page";
 
 function clearRouteFeedback() {
@@ -289,12 +299,6 @@ function AppFrame() {
   const showingHome = location.pathname === "/";
   const showingTitle = location.pathname.startsWith("/title/");
   const keepHomeMounted = showingHome || showingTitle;
-  const { needRefresh, updateServiceWorker } = useRegisterSW({
-    onRegisteredSW() {
-      void 0;
-    },
-  });
-
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", store.settings.accentColor);
     document.title = store.settings.appName || "Manhwa Lib";
@@ -309,10 +313,6 @@ function AppFrame() {
     }
     themeMeta.content = PWA_CHROME_THEME_COLOR;
   }, [location.pathname]);
-
-  useEffect(() => {
-    if (needRefresh) void updateServiceWorker(true);
-  }, [needRefresh, updateServiceWorker]);
 
   useLayoutEffect(() => {
     clearRouteFeedback();
@@ -507,6 +507,7 @@ function BottomDrawer({
 function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editingFeed, setEditingFeed] = useState<Feed | null>(null);
   const [renderCenterIndex, setRenderCenterIndex] = useState(-1);
   const [returningFromTitle, setReturningFromTitle] = useState(() => sessionStorage.getItem(HOME_RETURNING_FROM_TITLE_KEY) === "1");
   const pagerRef = useRef<HTMLDivElement | null>(null);
@@ -635,7 +636,11 @@ function HomePage() {
                     data-home-scroll-key={homeScrollKey(feed)}
                     onScroll={() => handleFeedPaneScroll(feed)}
                   >
-                    {shouldRenderFeed ? <FeedView feed={feed} preview={!isActive} /> : <HomeFeedPaneSkeleton feed={feed} />}
+                    {shouldRenderFeed ? (
+                      <FeedView feed={feed} preview={!isActive} onEdit={() => setEditingFeed(feed)} />
+                    ) : (
+                      <HomeFeedPaneSkeleton feed={feed} />
+                    )}
                   </div>
                 </div>
               );
@@ -653,14 +658,29 @@ function HomePage() {
           }}
         />
       </BottomDrawer>
+      <BottomDrawer title="Edit Feed" open={Boolean(editingFeed)} onOpenChange={(open) => !open && setEditingFeed(null)}>
+        {editingFeed ? (
+          <FeedEditor
+            feed={editingFeed}
+            onCancel={() => setEditingFeed(null)}
+            onSave={(feed) => {
+              store.upsertFeed(feed);
+              setEditingFeed(null);
+            }}
+          />
+        ) : null}
+      </BottomDrawer>
     </div>
   );
 }
 
-function FeedView({ feed, preview = false }: { feed: Feed; preview?: boolean }) {
+function FeedView({ feed, preview = false, onEdit }: { feed: Feed; preview?: boolean; onEdit?: () => void }) {
   const store = useAppStore();
   const [titleExpanded, setTitleExpanded] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [descriptionOverflows, setDescriptionOverflows] = useState(false);
+  const titleTapTimerRef = useRef<number | null>(null);
+  const descriptionRef = useRef<HTMLSpanElement | null>(null);
   const query = useMemo(
     () =>
       runFeedQuery({
@@ -677,8 +697,23 @@ function FeedView({ feed, preview = false }: { feed: Feed; preview?: boolean }) 
   );
   const hasDescription = feed.showDescription && Boolean(feed.description.trim());
   const titleCanExpand = feed.name.trim().length > 34;
-  const descriptionCanExpand = hasDescription && feed.description.trim().length > 72;
+  const descriptionCanExpand = hasDescription && descriptionOverflows;
   const descriptionText = hasDescription ? cappedText(feed.description, FEED_DESCRIPTION_EXPANDED_MAX) : "";
+  useEffect(
+    () => () => {
+      if (titleTapTimerRef.current != null) window.clearTimeout(titleTapTimerRef.current);
+    },
+    [],
+  );
+  useLayoutEffect(() => {
+    const node = descriptionRef.current;
+    if (!node || descriptionExpanded) return;
+    const update = () => setDescriptionOverflows(node.scrollWidth > node.clientWidth + 1);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [descriptionExpanded, descriptionText]);
   return (
     <>
       <section className="section feed-summary-section">
@@ -688,9 +723,22 @@ function FeedView({ feed, preview = false }: { feed: Feed; preview?: boolean }) 
             <button
               className={`feed-title-button ${titleCanExpand ? "expandable" : ""}`}
               type="button"
-              onClick={() => titleCanExpand && setTitleExpanded((expanded) => !expanded)}
+              onClick={(event) => {
+                if (event.detail > 1 || !titleCanExpand) return;
+                titleTapTimerRef.current = window.setTimeout(() => {
+                  setTitleExpanded((expanded) => !expanded);
+                  titleTapTimerRef.current = null;
+                }, 230);
+              }}
+              onDoubleClick={() => {
+                if (titleTapTimerRef.current != null) {
+                  window.clearTimeout(titleTapTimerRef.current);
+                  titleTapTimerRef.current = null;
+                }
+                onEdit?.();
+              }}
               aria-expanded={titleCanExpand ? titleExpanded : undefined}
-              aria-disabled={!titleCanExpand}
+              aria-label={`${feed.name}. Double tap to edit feed.`}
             >
               <FitSingleLineTitle text={feed.name} expanded={titleExpanded} maxChars={FEED_TITLE_EXPANDED_MAX} />
             </button>
@@ -703,7 +751,7 @@ function FeedView({ feed, preview = false }: { feed: Feed; preview?: boolean }) 
                   aria-expanded={descriptionCanExpand ? descriptionExpanded : undefined}
                   aria-disabled={!descriptionCanExpand}
                 >
-                  <span className={`feed-description-text ${descriptionExpanded ? "expanded" : ""}`}>{descriptionText}</span>
+                  <span ref={descriptionRef} className={`feed-description-text ${descriptionExpanded ? "expanded" : ""}`}>{descriptionText}</span>
                 </button>
               ) : null}
             </div>
@@ -843,6 +891,7 @@ function TitleCollection({
   latestDate,
   loading = false,
   preview = false,
+  onTitleOpen,
 }: {
   items: SeriesCatalog[];
   feed: Feed;
@@ -850,6 +899,7 @@ function TitleCollection({
   latestDate?: string | null;
   loading?: boolean;
   preview?: boolean;
+  onTitleOpen?: (series: SeriesCatalog) => void;
 }) {
   const pageSize = feed.view.gridColumns >= 5 ? 60 : feed.view.gridColumns === 4 ? 72 : 120;
   const countKey = `manhwa-visible-count:${feed.id}:${feed.view.gridColumns}`;
@@ -893,6 +943,7 @@ function TitleCollection({
             history={history}
             latestDate={latestDate}
             metricWindow={metricWindow}
+            onOpen={onTitleOpen}
           />
         ))}
       </div>
@@ -990,6 +1041,7 @@ function TitleCard({
   history,
   latestDate,
   metricWindow,
+  onOpen,
 }: {
   series: SeriesCatalog;
   rank: number;
@@ -998,6 +1050,7 @@ function TitleCard({
   history: HistoryMap;
   latestDate?: string | null;
   metricWindow?: { from: string; to: string } | null;
+  onOpen?: (series: SeriesCatalog) => void;
 }) {
   const title = visibleTitle(series);
   const navigate = useNavigate();
@@ -1011,6 +1064,7 @@ function TitleCard({
         onClick={(event) => {
           if (!isPlainNavigationClick(event)) return;
           event.preventDefault();
+          onOpen?.(series);
           prepareHomeTitleNavigation(feed);
           scheduleRouteChange("detail", () => navigate(detailPath));
         }}
@@ -1039,12 +1093,13 @@ const MemoTitleCard = memo(TitleCard, (prev, next) =>
   prev.feed.view.gridDensity === next.feed.view.gridDensity &&
   prev.history === next.history &&
   prev.latestDate === next.latestDate &&
+  prev.onOpen === next.onOpen &&
   prev.metricWindow?.from === next.metricWindow?.from &&
   prev.metricWindow?.to === next.metricWindow?.to
 );
 
-function TitleCollectionSkeleton({ columns }: { columns: 1 | 2 | 3 | 4 | 5 }) {
-  const count = columns >= 5 ? 10 : columns === 4 ? 12 : 9;
+function TitleCollectionSkeleton({ columns, count: requestedCount }: { columns: 1 | 2 | 3 | 4 | 5; count?: number }) {
+  const count = requestedCount ?? (columns >= 5 ? 10 : columns === 4 ? 12 : 9);
   return (
     <div className={`title-grid columns-${columns} density-standard`} style={{ "--grid-columns": columns } as React.CSSProperties} aria-hidden="true">
       {Array.from({ length: count }).map((_, index) => (
@@ -1887,14 +1942,26 @@ function TagChipCloud({ tags, feed, onTagClick }: { tags: TagNode[]; feed: Feed;
 function SearchPage() {
   const store = useAppStore();
   const [query, setQuery] = useState(() => sessionStorage.getItem("manhwa-search-query") ?? "");
-  const [history, setHistory] = useState<string[]>(() => {
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("manhwa-search-history") ?? "[]") as string[];
     } catch {
       return [];
     }
   });
+  const [openedTitleIds, setOpenedTitleIds] = useState<number[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(SEARCH_OPENED_HISTORY_KEY) ?? "[]") as number[];
+    } catch {
+      return [];
+    }
+  });
   const sensitiveTagIds = useMemo(() => buildSensitiveTagGroups(store.tags), [store.tags]);
+  const tagsById = useMemo(() => new Map(store.tags.map((tag) => [tag.id, tag])), [store.tags]);
+  const eligibleCatalog = useMemo(
+    () => store.catalog.filter((item) => hasDetailTags(item, tagsById)),
+    [store.catalog, tagsById],
+  );
   const searchFeed = useMemo(() => {
     const feed = createFeed("Search results");
     feed.filters.sourceMode = "mixed";
@@ -1908,7 +1975,7 @@ function SearchPage() {
   const deferredQuery = useDeferredValue(inputQuery);
   const searchIndex = useMemo(
     () =>
-      new Fuse(store.catalog, {
+      new Fuse(eligibleCatalog, {
         includeScore: true,
         shouldSort: true,
         ignoreLocation: true,
@@ -1924,7 +1991,7 @@ function SearchPage() {
           { name: "artists", weight: 0.1 },
         ],
       }),
-    [store.catalog],
+    [eligibleCatalog],
   );
   const results = useMemo(() => {
     const term = deferredQuery.trim();
@@ -1941,12 +2008,23 @@ function SearchPage() {
   const remember = (value = query) => {
     const clean = value.trim();
     if (!clean) return;
-    const next = [clean, ...history.filter((item) => item.toLocaleLowerCase() !== clean.toLocaleLowerCase())].slice(0, 12);
-    setHistory(next);
+    const next = [clean, ...searchHistory.filter((item) => item.toLocaleLowerCase() !== clean.toLocaleLowerCase())].slice(0, 12);
+    setSearchHistory(next);
     localStorage.setItem("manhwa-search-history", JSON.stringify(next));
   };
+  const rememberOpenedTitle = useCallback((series: SeriesCatalog) => {
+    setOpenedTitleIds((current) => {
+      const next = [series.id, ...current.filter((id) => id !== series.id)].slice(0, SEARCH_OPENED_HISTORY_LIMIT);
+      localStorage.setItem(SEARCH_OPENED_HISTORY_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+  const openedTitles = useMemo(() => {
+    const byId = new Map(eligibleCatalog.map((item) => [item.id, item]));
+    return openedTitleIds.map((id) => byId.get(id)).filter((item): item is SeriesCatalog => Boolean(item));
+  }, [eligibleCatalog, openedTitleIds]);
   return (
-    <div className="page">
+    <div className="page search-page">
       <h1>Search</h1>
       <form className="field" onSubmit={(event) => { event.preventDefault(); remember(); }}>
         <label>Title</label>
@@ -1971,26 +2049,54 @@ function SearchPage() {
           feed={searchFeed}
           history={store.history}
           latestDate={store.syncMeta?.historyLastDate}
+          onTitleOpen={rememberOpenedTitle}
         />
       ) : (
-        <section>
-          <div className="row">
-            <h2 className="section-title">Recent searches</h2>
-            <span className="spacer" />
-            {history.length > 0 && (
-              <button className="button ghost" type="button" onClick={() => { setHistory([]); localStorage.removeItem("manhwa-search-history"); }}>
-                Clear
-              </button>
-            )}
-          </div>
-          <div className="chips">
-            {history.map((item) => (
-              <button className="chip chipbutton" type="button" key={item} onClick={() => { setQuery(item); remember(item); }}>
-                {item}
-              </button>
-            ))}
-          </div>
-        </section>
+        <>
+          {store.settings.showSearchHistory && openedTitles.length > 0 ? (
+            <section className="section search-opened-history">
+              <div className="row">
+                <h2 className="section-title">Recently opened from Search</h2>
+                <span className="spacer" />
+                <button
+                  className="button ghost"
+                  type="button"
+                  onClick={() => {
+                    setOpenedTitleIds([]);
+                    localStorage.removeItem(SEARCH_OPENED_HISTORY_KEY);
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+              <TitleCollection
+                items={openedTitles}
+                feed={searchFeed}
+                history={store.history}
+                latestDate={store.syncMeta?.historyLastDate}
+                onTitleOpen={rememberOpenedTitle}
+              />
+            </section>
+          ) : null}
+          <section className="section">
+            <div className="row">
+              <h2 className="section-title">Recent searches</h2>
+              <span className="spacer" />
+              {searchHistory.length > 0 && (
+                <button className="button ghost" type="button" onClick={() => { setSearchHistory([]); localStorage.removeItem("manhwa-search-history"); }}>
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="chips">
+              {searchHistory.map((item) => (
+                <button className="chip chipbutton" type="button" key={item} onClick={() => { setQuery(item); remember(item); }}>
+                  {item}
+                </button>
+              ))}
+            </div>
+          </section>
+        </>
       )}
     </div>
   );
@@ -2004,14 +2110,19 @@ function RecommendationsPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingShelf, setEditingShelf] = useState<RecommendationShelf | null>(null);
   const getTitle = useCallback((item: SeriesCatalog) => visibleTitle(item), []);
-  const defaultRecommendationTitle = store.catalog.find((item) => getTitle(item).toLocaleLowerCase() === "bastard");
+  const tagsById = useMemo(() => new Map(store.tags.map((tag) => [tag.id, tag])), [store.tags]);
+  const eligibleCatalog = useMemo(
+    () => store.catalog.filter((item) => hasDetailTags(item, tagsById)),
+    [store.catalog, tagsById],
+  );
+  const defaultRecommendationTitle = eligibleCatalog.find((item) => getTitle(item).toLocaleLowerCase() === "bastard");
   const selected =
-    store.catalog.find((item) => item.id === selectedId) ??
-    store.catalog.find((item) => item.id === Number(params.id)) ??
+    eligibleCatalog.find((item) => item.id === selectedId) ??
+    eligibleCatalog.find((item) => item.id === Number(params.id)) ??
     defaultRecommendationTitle ??
-    store.catalog[0];
+    eligibleCatalog[0];
   const candidates = search.trim()
-    ? store.catalog
+    ? eligibleCatalog
         .filter((item) => getTitle(item).toLowerCase().includes(search.trim().toLowerCase()))
         .slice(0, 12)
     : [];
@@ -2028,7 +2139,8 @@ function RecommendationsPage() {
     store.updateSettings({ recommendationShelves: store.settings.recommendationShelves.filter((shelf) => shelf.id !== id) });
   };
   return (
-    <div className="page">
+    <div className="page recommendations-page">
+      {selected?.cover ? <img className="recommendations-bg" src={selected.cover} alt="" aria-hidden="true" /> : null}
       <div className="row">
         <h1>Recommendations</h1>
         <span className="spacer" />
@@ -2069,11 +2181,12 @@ function RecommendationsPage() {
       )}
       {selected && (
         <section className="selected-rec-base">
-          <Cover series={selected} priority />
-          <div>
-            <span className="muted tiny">Selected</span>
-            <h2>{getTitle(selected)}</h2>
-            <p className="muted tiny">Recommendations prioritize shared tags, then shelf-specific sorting.</p>
+          <div className="detail-cover-shell">
+            <Cover series={selected} priority />
+          </div>
+          <div className="detail-copy">
+            <h2 className="detail-title">{getTitle(selected)}</h2>
+            <p className="detail-creators">{uniqueNames(selected.authors, selected.artists).join(" / ") || "Creator unavailable"}</p>
           </div>
         </section>
       )}
@@ -2195,7 +2308,7 @@ function RecommendationResults({
   ]);
 
   if (items == null) {
-    return <TitleCollectionSkeleton columns={feed.view.gridColumns} />;
+    return <TitleCollectionSkeleton columns={feed.view.gridColumns} count={visibleLimit} />;
   }
 
   return <TitleCollection items={items} feed={feed} history={store.history} latestDate={store.syncMeta?.historyLastDate} />;
@@ -2333,26 +2446,58 @@ function RecommendationShelfEditor({
 
 function SettingsPage() {
   const store = useAppStore();
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [backupStatus, setBackupStatus] = useState("");
+  const importBackup = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const snapshot = JSON.parse(await file.text()) as Partial<AppStateSnapshot>;
+      if (!Array.isArray(snapshot.feeds)) throw new Error("This file does not contain a feeds backup.");
+      store.importSnapshot(snapshot, "replace");
+      setBackupStatus(`Imported ${snapshot.feeds.length.toLocaleString()} feeds.`);
+    } catch (error) {
+      setBackupStatus(error instanceof Error ? error.message : "Could not import this backup.");
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  };
   return (
-    <div className="page">
+    <div className="page settings-page">
       <h1>Settings</h1>
 
-      <SettingsSection title="App Settings">
-        <div className="field">
-          <label>Accent color</label>
-          <input className="input" type="color" value={store.settings.accentColor} onChange={(event) => store.updateSettings({ accentColor: event.target.value })} />
+      <SettingsSection title="Appearance">
+        <div className="setting-stack">
+          <div>
+            <strong>Accent color</strong>
+            <div className="muted tiny">Used for selection, active controls, and navigation.</div>
+          </div>
+          <div className="accent-swatches" role="group" aria-label="Accent color">
+            {ACCENT_COLORS.map((color) => {
+              const selected = store.settings.accentColor.toLowerCase() === color.value.toLowerCase();
+              return (
+                <button
+                  className={`accent-swatch ${selected ? "selected" : ""}`}
+                  style={{ "--swatch-color": color.value } as React.CSSProperties}
+                  type="button"
+                  key={color.value}
+                  onClick={() => store.updateSettings({ accentColor: color.value })}
+                  aria-label={color.name}
+                  aria-pressed={selected}
+                  title={color.name}
+                >
+                  {selected ? <Check size={17} /> : null}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Data & Sync">
-        <div className="field">
-          <label>Data source URL</label>
-          <input className="input" value={store.settings.dataSourceUrl} onChange={(event) => store.updateSettings({ dataSourceUrl: event.target.value })} />
-        </div>
+      <SettingsSection title="Library">
         <div className="setting-row">
           <div>
-            <strong>{store.syncMeta?.totalSeries.toLocaleString() ?? 0} titles cached</strong>
-            <div className="muted tiny">{store.syncStatus || store.syncMeta?.source || "No sync yet"}</div>
+            <strong>{store.syncMeta?.totalSeries.toLocaleString() ?? store.catalog.length.toLocaleString()} total titles</strong>
+            <div className="muted tiny">{store.syncStatus || "Library data is cached for offline use."}</div>
           </div>
           <button className="button" type="button" onClick={() => void store.refreshData()}>
             <Database size={16} /> Refresh
@@ -2365,6 +2510,12 @@ function SettingsPage() {
       </SettingsSection>
 
       <SettingsSection title="Search">
+        <ToggleRow
+          label="Show opened-title history"
+          description="Show up to 99 titles opened from Search."
+          value={store.settings.showSearchHistory}
+          onChange={(showSearchHistory) => store.updateSettings({ showSearchHistory })}
+        />
         <ToggleRow
           label="Show BL / GL families"
           description="Global title search includes Boys Love, Girls Love, Yaoi, Yuri, and child tags only when this is on."
@@ -2379,30 +2530,32 @@ function SettingsPage() {
         />
       </SettingsSection>
 
-      <SettingsSection title="Sharing & Backup">
+      <SettingsSection title="Backup & Help">
         <Link className="button" to="/learn">
           <Info size={16} /> Learn metrics and data
         </Link>
-        <SharePanelButton payload={{ kind: "settings", version: 2, settings: store.settings }} label="Share settings" />
         <button
           className="button"
           type="button"
-          onClick={() => downloadText("manhwa-library-backup.json", JSON.stringify(makeSnapshot(store), null, 2))}
+          onClick={() => downloadText("manhwa-feeds-backup.json", JSON.stringify(makeSnapshot(store), null, 2))}
         >
-          <Download size={16} /> Export JSON backup
+          <Download size={16} /> Export Feeds JSON Backup
         </button>
+        <input
+          ref={importInputRef}
+          className="visually-hidden"
+          type="file"
+          accept="application/json,.json"
+          onChange={(event) => void importBackup(event.target.files?.[0])}
+        />
         <button
           className="button"
           type="button"
-          onClick={() =>
-            downloadText(
-              "manhwa-library-feeds.csv",
-              exportCsv(store.feeds.map((feed) => ({ name: feed.name, description: feed.description, sourceMode: feed.filters.sourceMode, createdAt: feed.createdAt }))),
-            )
-          }
+          onClick={() => importInputRef.current?.click()}
         >
-          <Download size={16} /> Export feeds CSV
+          <Import size={16} /> Import Feeds JSON Backup
         </button>
+        {backupStatus ? <div className="settings-status" role="status">{backupStatus}</div> : null}
         <button className="button danger" type="button" onClick={() => void store.resetLocalState()}>
           Reset local app state
         </button>
@@ -2413,7 +2566,7 @@ function SettingsPage() {
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="section">
+    <section className="section settings-section">
       <h2 className="section-title">{title}</h2>
       <div className="settings-list">{children}</div>
     </section>
@@ -2453,12 +2606,14 @@ function TitleDetailPage() {
       return {
         ...DEFAULT_DETAIL_VISIBLE,
         description: true,
-        authorsArtists: true,
         links: true,
         ...JSON.parse(localStorage.getItem(detailLayoutKey) ?? "{}"),
+        cover: true,
+        title: true,
+        authorsArtists: true,
       };
     } catch {
-      return { ...DEFAULT_DETAIL_VISIBLE, description: true, authorsArtists: true, links: true };
+      return { ...DEFAULT_DETAIL_VISIBLE, description: true, authorsArtists: true, links: true, cover: true, title: true };
     }
   });
   const tagsById = useMemo(() => new Map(store.tags.map((tag) => [tag.id, tag])), [store.tags]);
@@ -2536,7 +2691,7 @@ function TitleDetailPage() {
   }, [loadingDetail, series, showError, visible.recommendations]);
 
   return (
-    <div className="detail-page">
+    <div className="detail-page title-detail-page">
       {series?.cover && <img className="detail-bg" src={series.cover} alt="" />}
       <div className="detail-top-actions">
         <button
@@ -2557,20 +2712,16 @@ function TitleDetailPage() {
       ) : series ? (
         <>
           <section className="detail-identity">
-            {visible.cover && (
-              <div className="detail-cover-shell">
-                {series.cover ? (
-                  <img className="detail-cover loading-cover-image" src={series.cover} alt="" onLoad={markImageLoaded} />
-                ) : (
-                  <div className="detail-cover cover-fallback">No cover</div>
-                )}
-              </div>
-            )}
-            <div className="detail-copy">
-              {visible.title && <h1 className="detail-title">{series.display_title}</h1>}
-              {visible.authorsArtists && (
-                <p className="detail-creators">{uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable"}</p>
+            <div className="detail-cover-shell">
+              {series.cover ? (
+                <img className="detail-cover loading-cover-image" src={series.cover} alt="" onLoad={markImageLoaded} />
+              ) : (
+                <div className="detail-cover cover-fallback">No cover</div>
               )}
+            </div>
+            <div className="detail-copy">
+              <h1 className="detail-title">{series.display_title}</h1>
+              <p className="detail-creators">{uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable"}</p>
               <section className="detail-meta-strip" aria-label="Publication details">
                 {visible.year && series.year ? (
                   <div className="detail-meta-chip">
@@ -2853,13 +3004,10 @@ function DetailSettingsDrawer({
   onChange: React.Dispatch<React.SetStateAction<AppSettings["detailVisible"]>>;
 }) {
   const fields: [keyof AppSettings["detailVisible"], string, string][] = [
-    ["cover", "Cover", "Show the title artwork."],
-    ["title", "Title", "Show the primary title."],
     ["recommendations", "Recommendations", "Show recommendation shelves below title details."],
     ["description", "Description", "Show the full available synopsis."],
     ["genreTags", "Genres", "Show the main genre row."],
     ["allTags", "All tags", "Show every catalog tag."],
-    ["authorsArtists", "Creators", "Show authors and artists."],
     ["links", "External links", "Show MangaBaka, AniList, and other sources."],
     ["discoveryMetrics", "Fan Rank", "Show Fan Rank in the stat row."],
     ["popularity", "Popularity", "Show AniList popularity."],
@@ -2888,40 +3036,31 @@ function DetailSettingsDrawer({
 
 function LearnPage() {
   return (
-    <div className="page">
+    <div className="page learn-page">
       <h1>Learn</h1>
       <div className="learn-grid">
-        <LearnItem title="MangaBaka">
-          MangaBaka is the catalog backbone: titles, covers, chapters, status, dates, content rating, links, and the detailed tag
-          hierarchy come from the backend export. <a href="https://mangabaka.org" target="_blank" rel="noreferrer">Open MangaBaka</a>.
+        <LearnItem title="Catalog and tags">
+          <a href="https://mangabaka.org" target="_blank" rel="noreferrer">MangaBaka</a> supplies the main catalog, covers,
+          publication details, links, and tag hierarchy. Titles without a recognized detail tag are hidden from discovery results.
         </LearnItem>
-        <LearnItem title="AniList Metrics">
-          Popularity, favourites, and mean score are used only for AniList-mapped titles. Non-AniList titles can still be browsed
-          through common filters such as title, tags, year, chapters, and status. <a href="https://anilist.co" target="_blank" rel="noreferrer">Open AniList</a>.
+        <LearnItem title="AniList signals">
+          <a href="https://anilist.co" target="_blank" rel="noreferrer">AniList</a> supplies popularity, favourites, and mean score
+          for mapped titles. These values provide audience-size and engagement context; they are not available for every title.
         </LearnItem>
         <LearnItem title="Fan Rank">
-          Fan Rank is the percentile version of the balanced fan discovery score. It combines fandom attachment and popularity confidence so niche titles do not unfairly dominate.
+          Fan Rank is similar to comparing a YouTube video&apos;s likes with its views to estimate how strongly viewers engaged.
+          Here, favourites are compared with popularity, adjusted for sample-size confidence, and converted to a percentile so very
+          small audiences do not unfairly dominate.
         </LearnItem>
-        <LearnItem title="Cover Stats">
-          Cover stat slots show at most three metrics. Fan% is the default rank signal, with Pop and Fav beside it for context.
+        <LearnItem title="Dates and history">
+          Release and completion windows use confirmed dates only; estimated dates never qualify. Growth values compare available
+          historical snapshots, so longer windows depend on how much history has been collected.
         </LearnItem>
-        <LearnItem title="Safe Defaults">
-          Safe and suggestive content are enabled by default. BL, GL, Smut, and Hentai are exact-tag exclusions unless a feed explicitly includes them.
-        </LearnItem>
-        <LearnItem title="Offline And Sharing">
-          Catalog, tags, history, feeds, settings, and opened details are cached locally. Share links contain compressed
-          config data and open an import preview before changing anything.
-        </LearnItem>
-        <LearnItem title="Other Sources">
-          Non-AniList titles prefer <a href="https://www.mangaupdates.com" target="_blank" rel="noreferrer">MangaUpdates</a>, then{" "}
-          <a href="https://www.anime-planet.com/manga" target="_blank" rel="noreferrer">Anime-Planet</a>. Available English reading links appear last.
-        </LearnItem>
-        <LearnItem title="Live Data Sync">
-          The app now merges live backend catalog stats with query-only enriched fields so cover stats and detail stats use the current backend values.
-        </LearnItem>
-        <LearnItem title="Data Limits">
-          Long growth windows become more useful as backend history accumulates. Until then, the app runs against available history and
-          tells you when a query is limited.
+        <LearnItem title="Additional sources">
+          When available, title identity and links are cross-checked with{" "}
+          <a href="https://www.mangaupdates.com" target="_blank" rel="noreferrer">MangaUpdates</a> and{" "}
+          <a href="https://www.anime-planet.com/manga" target="_blank" rel="noreferrer">Anime-Planet</a>. Feeds and settings stay
+          on this device and can be moved with the JSON backup.
         </LearnItem>
       </div>
     </div>
@@ -3056,6 +3195,8 @@ function SharePanel({ payload }: { payload: SharePayload }) {
 function makeSnapshot(store: ReturnType<typeof useAppStore>) {
   return {
     feeds: store.feeds,
+    folders: store.folders,
+    labels: store.labels,
     settings: store.settings,
     activeFeedId: store.activeFeedId,
     lastRoute: window.location.hash,

@@ -123,7 +123,7 @@ export const DEFAULT_RECOMMENDATION_SHELVES: RecommendationShelf[] = [
 export const DEFAULT_SETTINGS: AppSettings = {
   appName: "Manhwa Lib",
   themeMode: "dark",
-  accentColor: "#ff006e",
+  accentColor: "#ff3b81",
   dataSourceUrl: RAW_EXPORT_BASE,
   adultUnlocked: false,
   contentRatings: ["safe", "suggestive"],
@@ -152,6 +152,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   searchSensitiveTags: false,
   searchRelationshipTags: false,
   searchAdultTags: false,
+  showSearchHistory: true,
 };
 
 function makeId() {

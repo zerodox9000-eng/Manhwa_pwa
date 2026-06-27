@@ -6,8 +6,8 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --accent: #ff006e;
-  --accent-soft: rgba(255, 0, 110, 0.16);
+  --accent: #ff3b81;
+  --accent-soft: color-mix(in srgb, var(--accent) 18%, transparent);
   --bg: #08090d;
   --panel: rgba(19, 20, 27, 0.82);
   --panel-2: rgba(25, 26, 34, 0.96);
@@ -3557,5 +3557,231 @@ html[data-route-pending="page"] .route-transition-page {
   contain-intrinsic-size: auto 250px;
 }
 
+/* Current utility surfaces: compact, readable, and consistent with the app glass. */
+.feed-summary-card.expanded .feed-bar-cover-wash {
+  min-height: 0;
+}
 
+.feed-description-text.expanded {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
 
+html:has(.title-detail-page),
+body:has(.title-detail-page) {
+  scrollbar-width: none;
+}
+
+html:has(.title-detail-page)::-webkit-scrollbar,
+body:has(.title-detail-page)::-webkit-scrollbar {
+  display: none;
+  width: 0;
+}
+
+.settings-page {
+  width: min(760px, 100%);
+}
+
+.bottom-nav .nav-item.active {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.settings-page > h1 {
+  margin-bottom: 20px;
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.settings-section {
+  margin: 0 0 22px;
+}
+
+.settings-section > .section-title {
+  margin-left: 4px;
+}
+
+.settings-page .settings-list {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(24, 26, 35, 0.58);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 16px 38px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(18px) saturate(1.16);
+}
+
+.settings-page .setting-row,
+.settings-page .setting-stack {
+  min-height: 64px;
+  padding: 13px 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.settings-page .setting-row + .setting-row,
+.settings-page .settings-list > .button + .button,
+.settings-page .settings-list > .button + .settings-status,
+.settings-page .settings-list > .settings-status + .button {
+  border-top: 1px solid rgba(255, 255, 255, 0.075);
+}
+
+.settings-page .settings-list > .button {
+  width: 100%;
+  min-height: 50px;
+  justify-content: flex-start;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.settings-page .settings-list > .button:hover,
+.settings-page .settings-list > .button:focus-visible {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.setting-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.accent-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 42px);
+  gap: 9px;
+}
+
+.accent-swatch {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: var(--swatch-color);
+  color: white;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+}
+
+.accent-swatch.selected {
+  border-color: rgba(255, 255, 255, 0.95);
+  box-shadow:
+    inset 0 0 0 2px rgba(0, 0, 0, 0.2),
+    0 0 0 3px color-mix(in srgb, var(--swatch-color) 42%, transparent);
+}
+
+.settings-status {
+  padding: 11px 14px;
+  color: rgba(232, 237, 248, 0.82);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.recommendations-page {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.recommendations-page::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(8, 9, 13, 0.12), var(--bg) 360px),
+    linear-gradient(90deg, rgba(8, 9, 13, 0.76), rgba(8, 9, 13, 0.25) 52%, rgba(8, 9, 13, 0.82));
+}
+
+.recommendations-bg {
+  position: absolute;
+  inset: -32px -32px auto;
+  z-index: -2;
+  width: calc(100% + 64px);
+  height: 360px;
+  object-fit: cover;
+  opacity: 0.5;
+  filter: blur(24px) saturate(0.92);
+  transform: scale(1.06);
+  pointer-events: none;
+}
+
+.recommendations-page > .row:first-of-type,
+.recommendations-page > .field,
+.recommendations-page > section {
+  position: relative;
+  z-index: 1;
+}
+
+.selected-rec-base {
+  display: grid;
+  grid-template-columns: minmax(112px, 168px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  justify-content: stretch;
+  width: 100%;
+  max-width: none;
+  margin: 24px 0 28px;
+}
+
+.selected-rec-base .detail-cover-shell,
+.selected-rec-base .cover-wrap {
+  width: 100%;
+}
+
+.selected-rec-base .detail-title {
+  margin: 0 0 10px;
+  font-size: clamp(25px, 6vw, 40px);
+  line-height: 1.08;
+}
+
+.selected-rec-base .detail-creators {
+  margin: 0;
+}
+
+.learn-page {
+  width: min(760px, 100%);
+}
+
+.learn-page .learn-grid {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(24, 26, 35, 0.58);
+  backdrop-filter: blur(16px) saturate(1.12);
+}
+
+.learn-page .learn-item {
+  padding: 15px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.learn-page .learn-item + .learn-item {
+  border-top: 1px solid rgba(255, 255, 255, 0.075);
+}
+
+@media (max-width: 430px) {
+  .accent-swatches {
+    grid-template-columns: repeat(6, minmax(34px, 1fr));
+  }
+
+  .accent-swatch {
+    width: 38px;
+    height: 38px;
+  }
+}

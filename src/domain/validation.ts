@@ -350,6 +350,7 @@ const appSettingsSchema = z
     searchSensitiveTags: z.boolean().optional(),
     searchRelationshipTags: z.boolean().optional(),
     searchAdultTags: z.boolean().optional(),
+    showSearchHistory: z.boolean().optional(),
   })
   .passthrough();
 

@@ -9,7 +9,7 @@ import type {
   UserLabel,
 } from "./types";
 import { isDateWithin, isFutureDate, resolveRollingWindow } from "./dates";
-import { chapterNumber, displayComparableMetricValue, displayReleaseDate, effectiveEndDate, effectiveReleaseDate, historyDeltaForWindow, metricDefinition, metricValue } from "./metrics";
+import { chapterNumber, displayComparableMetricValue, displayReleaseDate, effectiveEndDate, historyDeltaForWindow, metricDefinition, metricValue } from "./metrics";
 
 const RELATIONSHIP_SENSITIVE_NAMES = new Set(["boys love", "girls love"]);
 const ADULT_SENSITIVE_NAMES = new Set(["smut", "hentai"]);
@@ -155,6 +155,10 @@ export function labelMatchesSeries(label: UserLabel, item: SeriesCatalog) {
   return true;
 }
 
+export function hasDetailTags(item: SeriesCatalog, tagsById: ReadonlyMap<number, TagNode>) {
+  return item.tag_ids?.some((tagId) => tagsById.has(tagId)) ?? false;
+}
+
 export function runFeedQuery(args: {
   feed: Feed;
   series: SeriesCatalog[];
@@ -208,7 +212,7 @@ export function runFeedQuery(args: {
   }
 
   const result = candidates.filter((item) => {
-    if (!item.tag_ids?.length) return false;
+    if (!hasDetailTags(item, tagsById)) return false;
 
     const rating = item.content_rating as AppSettings["contentRatings"][number] | null;
     if (rating && !filters.contentRatings.includes(rating)) return false;
@@ -256,7 +260,7 @@ export function runFeedQuery(args: {
     }
 
     if (window && filters.dateField !== "none") {
-      const dateValue = filters.dateField === "release" ? effectiveReleaseDate(item) : effectiveEndDate(item);
+      const dateValue = filters.dateField === "release" ? displayReleaseDate(item) : effectiveEndDate(item);
       if (!dateValue) {
         missingDateData = true;
         return false;

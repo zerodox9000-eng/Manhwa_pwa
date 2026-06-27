@@ -88,12 +88,16 @@ function normalizeRecommendationShelves(settings?: Partial<AppSettings>) {
 
 function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
   const recommendationShelves = normalizeRecommendationShelves(settings);
+  const accentColor = settings?.accentColor?.toLowerCase() === "#ff006e"
+    ? "#ff3b81"
+    : settings?.accentColor ?? DEFAULT_SETTINGS.accentColor;
   const relationshipTags =
     settings?.searchRelationshipTags ?? settings?.searchSensitiveTags ?? DEFAULT_SETTINGS.searchRelationshipTags;
   const adultTags = settings?.searchAdultTags ?? settings?.searchSensitiveTags ?? DEFAULT_SETTINGS.searchAdultTags;
   return {
     ...DEFAULT_SETTINGS,
     ...settings,
+    accentColor,
     defaultFeedView: {
       ...DEFAULT_SETTINGS.defaultFeedView,
       ...settings?.defaultFeedView,
