@@ -55,6 +55,7 @@ export const DEFAULT_FEED_VIEW: FeedViewSettings = {
 export const DEFAULT_DETAIL_VISIBLE: DetailVisibleFields = {
   cover: true,
   title: true,
+  recommendations: true,
   description: false,
   genreTags: true,
   allTags: false,

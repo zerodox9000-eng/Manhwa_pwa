@@ -68,6 +68,26 @@ const history: HistoryMap = {
 };
 
 describe("runFeedQuery", () => {
+  it("excludes titles with no tags from every feed", () => {
+    const feed = createFeed("tagged titles only");
+    feed.filters.excludeTagIds = [];
+    const result = runFeedQuery({
+      feed,
+      series: [
+        baseSeries[0],
+        { ...baseSeries[0], id: 99, display_title: "No tags", tag_ids: [] },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+      metaHistoryFirst: "2024-05-01",
+      metaHistoryLast: "2024-05-10",
+    });
+
+    expect(result.items.map((item) => item.id)).toEqual([1]);
+  });
+
   it("hides default exact sensitive parent tags only while they are excluded", () => {
     const feed = createFeed("safe");
     feed.filters.excludeTagIds = [2];

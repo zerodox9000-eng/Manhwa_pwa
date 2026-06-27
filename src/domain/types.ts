@@ -276,6 +276,7 @@ export interface UserLabel {
 export interface DetailVisibleFields {
   cover: boolean;
   title: boolean;
+  recommendations: boolean;
   description: boolean;
   genreTags: boolean;
   allTags: boolean;

@@ -78,8 +78,8 @@ const RANGE_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.filte
 const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.id !== "title" && definition.id !== "mangabakaLatestRank");
 const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
-const HOME_FEED_INITIAL_RENDER_RADIUS = 4;
 const HOME_FEED_RENDER_RADIUS = 4;
+const HOME_FEED_PREVIEW_TITLES = 18;
 const FEED_TITLE_EXPANDED_MAX = 140;
 const FEED_DESCRIPTION_EXPANDED_MAX = 260;
 const PWA_CHROME_THEME_COLOR = "#11131a";
@@ -88,6 +88,26 @@ const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 const HOME_SCROLL_PREFIX = "manhwa-home-scroll";
 const HOME_RETURNING_FROM_TITLE_KEY = "manhwa-home-returning-from-title";
 const FEEDS_SCROLL_KEY = "manhwa-feeds-scroll";
+type RouteFeedbackKind = "detail" | "page";
+
+function clearRouteFeedback() {
+  delete document.documentElement.dataset.routePending;
+}
+
+function scheduleRouteChange(kind: RouteFeedbackKind, action: () => void) {
+  document.documentElement.dataset.routePending = kind;
+  requestAnimationFrame(() => requestAnimationFrame(action));
+  window.setTimeout(clearRouteFeedback, 1800);
+}
+
+function isPlainNavigationClick(event: React.MouseEvent) {
+  return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+}
+
+function markImageLoaded(event: React.SyntheticEvent<HTMLImageElement>) {
+  event.currentTarget.classList.add("image-loaded");
+}
+
 type RgbColor = [number, number, number];
 const DEFAULT_FEED_PALETTE: [RgbColor, RgbColor, RgbColor] = [
   [126, 82, 166],
@@ -264,6 +284,7 @@ function App() {
 function AppFrame() {
   const store = useAppStore();
   const location = useLocation();
+  const navigate = useNavigate();
   const nav = NAV_ITEMS.filter((item) => store.settings.bottomNavItems.includes(item.id));
   const showingHome = location.pathname === "/";
   const showingTitle = location.pathname.startsWith("/title/");
@@ -293,9 +314,14 @@ function AppFrame() {
     if (needRefresh) void updateServiceWorker(true);
   }, [needRefresh, updateServiceWorker]);
 
+  useLayoutEffect(() => {
+    clearRouteFeedback();
+  }, [location.pathname]);
+
   return (
     <div className="app-shell">
       <SessionRestorer />
+      <RouteTransitionFeedback />
       <main>
         {keepHomeMounted && (
           <div className={showingTitle ? "route-cache-hidden" : undefined} aria-hidden={showingTitle || undefined}>
@@ -325,7 +351,16 @@ function AppFrame() {
         {nav.map((item) => {
           const Icon = item.icon;
           return (
-            <NavLink key={item.id} to={item.to} className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}>
+            <NavLink
+              key={item.id}
+              to={item.to}
+              className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+              onClick={(event) => {
+                if (!isPlainNavigationClick(event) || location.pathname === item.to) return;
+                event.preventDefault();
+                scheduleRouteChange("page", () => navigate(item.to));
+              }}
+            >
               <Icon size={20} />
               <span>{item.label}</span>
             </NavLink>
@@ -472,14 +507,11 @@ function BottomDrawer({
 function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
-  const [preloadReady, setPreloadReady] = useState(false);
   const [renderCenterIndex, setRenderCenterIndex] = useState(-1);
-  const [warmFeedIds, setWarmFeedIds] = useState<Set<string>>(() => new Set());
   const [returningFromTitle, setReturningFromTitle] = useState(() => sessionStorage.getItem(HOME_RETURNING_FROM_TITLE_KEY) === "1");
   const pagerRef = useRef<HTMLDivElement | null>(null);
   const paneRefs = useRef(new Map<string, HTMLDivElement>());
   const renderCenterIndexRef = useRef(-1);
-  const warmFeedIdsRef = useRef(new Set<string>());
   const didInitialPagerAlignRef = useRef(false);
   const { feeds, activeFeedId, setActiveFeedId } = store;
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
@@ -495,31 +527,6 @@ function HomePage() {
     setRenderCenterIndex(activeFeedIndex);
   }, [activeFeedIndex]);
 
-  useEffect(() => {
-    const feedIds = new Set(feeds.map((feed) => feed.id));
-    let changed = false;
-    const nextWarmFeedIds = new Set<string>();
-    warmFeedIdsRef.current.forEach((feedId) => {
-      if (feedIds.has(feedId)) nextWarmFeedIds.add(feedId);
-      else changed = true;
-    });
-    if (!changed) return;
-    warmFeedIdsRef.current = nextWarmFeedIds;
-    setWarmFeedIds(nextWarmFeedIds);
-  }, [feeds]);
-
-  const warmFeedAt = useCallback(
-    (index: number) => {
-      const feed = feeds[Math.max(0, Math.min(feeds.length - 1, index))];
-      if (!feed || warmFeedIdsRef.current.has(feed.id)) return;
-      const nextWarmFeedIds = new Set(warmFeedIdsRef.current);
-      nextWarmFeedIds.add(feed.id);
-      warmFeedIdsRef.current = nextWarmFeedIds;
-      startTransition(() => setWarmFeedIds(nextWarmFeedIds));
-    },
-    [feeds],
-  );
-
   useLayoutEffect(() => {
     if (!store.ready || !activeFeed) return;
     const pane = paneRefs.current.get(activeFeed.id);
@@ -533,12 +540,6 @@ function HomePage() {
       } catch {
         // Best effort only.
       }
-      window.setTimeout(() => {
-        setPreloadReady(true);
-        for (let offset = -HOME_FEED_RENDER_RADIUS; offset <= HOME_FEED_RENDER_RADIUS; offset += 1) {
-          warmFeedAt(activeFeedIndex + offset);
-        }
-      }, 120);
       return;
     }
     if (!didInitialPagerAlignRef.current) {
@@ -546,19 +547,9 @@ function HomePage() {
       pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
       restoreHomeScroll(activeFeed);
     }
-  }, [activeFeed, activeFeedIndex, returningFromTitle, store.ready, warmFeedAt]);
-
-  useEffect(() => {
-    if (!store.ready || activeFeedIndex < 0) return;
-    const warmOrder = [5, -1, -2, -3, -4, -5];
-    const timers = warmOrder.map((offset, step) =>
-      window.setTimeout(() => warmFeedAt(activeFeedIndex + offset), 450 + step * 220),
-    );
-    return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [activeFeedIndex, store.ready, warmFeedAt]);
+  }, [activeFeed, returningFromTitle, store.ready]);
 
   const warmFeedsAroundScrollPosition = useCallback(() => {
-    setPreloadReady(true);
     const pager = pagerRef.current;
     if (!pager || feeds.length === 0) return;
     const handleScroll = () => {
@@ -576,12 +567,9 @@ function HomePage() {
         renderCenterIndexRef.current = nearestIndex;
         startTransition(() => setRenderCenterIndex(nearestIndex));
       }
-      for (let offset = -HOME_FEED_RENDER_RADIUS; offset <= HOME_FEED_RENDER_RADIUS; offset += 1) {
-        warmFeedAt(nearestIndex + offset);
-      }
     };
     handleScroll();
-  }, [activeFeedId, feeds, setActiveFeedId, warmFeedAt]);
+  }, [activeFeedId, feeds, setActiveFeedId]);
 
   const handleFeedPaneScroll = useCallback(
     (feed: Feed) => {
@@ -602,10 +590,16 @@ function HomePage() {
   return (
     <div className="page home-page">
       {!store.ready ? (
-        <div className="empty-state">
-          <strong>Loading local library</strong>
-          <span className="muted">{store.syncStatus || "Opening IndexedDB cache"}</span>
-        </div>
+        activeFeed ? (
+          <div className="startup-home-skeleton">
+            <HomeFeedPaneSkeleton feed={activeFeed} />
+          </div>
+        ) : (
+          <div className="empty-state">
+            <strong>Loading local library</strong>
+            <span className="muted">{store.syncStatus || "Opening IndexedDB cache"}</span>
+          </div>
+        )
       ) : !activeFeed ? (
         <div className="empty-state">
           <Library size={34} />
@@ -623,17 +617,13 @@ function HomePage() {
             {store.feeds.map((feed, index) => {
               const isActive = index === activeFeedIndex;
               const renderOriginIndex = renderCenterIndex >= 0 ? renderCenterIndex : activeFeedIndex;
-              const renderRadius = returningFromTitle
-                ? 0
-                : preloadReady
-                  ? HOME_FEED_RENDER_RADIUS
-                  : HOME_FEED_INITIAL_RENDER_RADIUS;
+              const renderRadius = returningFromTitle ? 0 : HOME_FEED_RENDER_RADIUS;
               const isNearby = renderOriginIndex >= 0 && Math.abs(index - renderOriginIndex) <= renderRadius;
-              const shouldRenderFeed = isActive || isNearby || warmFeedIds.has(feed.id);
+              const shouldRenderFeed = isActive || isNearby;
               return (
                 <div
                   key={feed.id}
-                  className="feed-pager-panel"
+                  className={`feed-pager-panel ${isActive ? "is-active" : ""}`}
                   data-feed-id={feed.id}
                   ref={(node) => {
                     if (node) paneRefs.current.set(feed.id, node);
@@ -645,7 +635,7 @@ function HomePage() {
                     data-home-scroll-key={homeScrollKey(feed)}
                     onScroll={() => handleFeedPaneScroll(feed)}
                   >
-                    {shouldRenderFeed ? <FeedView feed={feed} /> : <HomeFeedPaneSkeleton feed={feed} />}
+                    {shouldRenderFeed ? <FeedView feed={feed} preview={!isActive} /> : <HomeFeedPaneSkeleton feed={feed} />}
                   </div>
                 </div>
               );
@@ -667,7 +657,7 @@ function HomePage() {
   );
 }
 
-function FeedView({ feed }: { feed: Feed }) {
+function FeedView({ feed, preview = false }: { feed: Feed; preview?: boolean }) {
   const store = useAppStore();
   const [titleExpanded, setTitleExpanded] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
@@ -725,7 +715,38 @@ function FeedView({ feed }: { feed: Feed }) {
         feed={feed}
         history={store.history}
         latestDate={store.syncMeta?.historyLastDate}
+        preview={preview}
       />
+    </>
+  );
+}
+
+function RouteTransitionFeedback() {
+  return (
+    <>
+      <div className="route-transition-feedback route-transition-detail" aria-hidden="true">
+        <div className="detail-page">
+          <div className="detail-top-actions route-transition-actions">
+            <span className="skeleton-chip" />
+            <span className="spacer" />
+            <span className="skeleton-chip" />
+          </div>
+          <DetailSkeleton series={null} showRecommendations={false} />
+        </div>
+      </div>
+      <div className="route-transition-feedback route-transition-page" aria-hidden="true">
+        <div className="page route-page-skeleton">
+          <span className="skeleton-line skeleton-line-title" />
+          <div className="title-grid columns-3 density-standard" style={{ "--grid-columns": 3 } as React.CSSProperties}>
+            {Array.from({ length: 9 }).map((_, index) => (
+              <div className="title-card-wrap" key={index}>
+                <div className="cover-wrap skeleton-box" />
+                <span className="skeleton-line skeleton-line-body" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </>
   );
 }
@@ -792,24 +813,26 @@ function FitSingleLineTitle({ text, expanded = false, maxChars = FEED_TITLE_EXPA
 
 function HomeFeedPaneSkeleton({ feed }: { feed: Feed }) {
   return (
-    <section className="section feed-summary-section">
-      <div className="feed-summary-card">
-        <FeedBarCoverWash items={[]} />
-        <div className="feed-summary-content">
-          <div className="feed-title-button skeleton-feed-title">
-            <h1 className="single-line-title skeleton-line skeleton-line-title" />
-          </div>
-          <div className={`feed-summary-lower ${feed.showDescription ? "" : "empty"}`}>
-            {feed.showDescription ? (
-              <div className="feed-description-button skeleton-feed-description">
-                <span className="skeleton-line skeleton-line-body" />
-              </div>
-            ) : null}
+    <>
+      <section className="section feed-summary-section">
+        <div className="feed-summary-card">
+          <FeedBarCoverWash items={[]} />
+          <div className="feed-summary-content">
+            <div className="feed-title-button skeleton-feed-title">
+              <h1 className="single-line-title skeleton-line skeleton-line-title" />
+            </div>
+            <div className={`feed-summary-lower ${feed.showDescription ? "" : "empty"}`}>
+              {feed.showDescription ? (
+                <div className="feed-description-button skeleton-feed-description">
+                  <span className="skeleton-line skeleton-line-body" />
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
+      </section>
       <TitleCollectionSkeleton columns={feed.view.gridColumns} />
-    </section>
+    </>
   );
 }
 
@@ -819,12 +842,14 @@ function TitleCollection({
   history,
   latestDate,
   loading = false,
+  preview = false,
 }: {
   items: SeriesCatalog[];
   feed: Feed;
   history: HistoryMap;
   latestDate?: string | null;
   loading?: boolean;
+  preview?: boolean;
 }) {
   const pageSize = feed.view.gridColumns >= 5 ? 60 : feed.view.gridColumns === 4 ? 72 : 120;
   const countKey = `manhwa-visible-count:${feed.id}:${feed.view.gridColumns}`;
@@ -836,7 +861,7 @@ function TitleCollection({
   useEffect(() => {
     sessionStorage.setItem(countKey, String(visibleCount));
   }, [countKey, visibleCount]);
-  const visibleItems = items.slice(0, visibleCount);
+  const visibleItems = items.slice(0, preview ? Math.min(visibleCount, HOME_FEED_PREVIEW_TITLES) : visibleCount);
   const metricWindow = useMemo(() => resolveRollingWindow(feed.filters.rolling, latestDate), [feed.filters.rolling, latestDate]);
 
   if (loading) {
@@ -871,7 +896,9 @@ function TitleCollection({
           />
         ))}
       </div>
-      <LoadMore visibleCount={visibleCount} total={items.length} onMore={() => setVisibleCount((count) => count + pageSize)} />
+      {preview ? null : (
+        <LoadMore visibleCount={visibleCount} total={items.length} onMore={() => setVisibleCount((count) => count + pageSize)} />
+      )}
     </>
   );
 }
@@ -899,7 +926,15 @@ function Cover({ series, priority = false }: { series: SeriesCatalog; priority?:
   return (
     <div className="cover-wrap">
       {series.cover ? (
-        <img src={series.cover} alt="" loading={priority ? "eager" : "lazy"} decoding="async" fetchPriority={priority ? "high" : "auto"} />
+        <img
+          className="loading-cover-image"
+          src={series.cover}
+          alt=""
+          loading={priority ? "eager" : "lazy"}
+          decoding="async"
+          fetchPriority={priority ? "high" : "auto"}
+          onLoad={markImageLoaded}
+        />
       ) : (
         <div className="cover-fallback cover-fallback-initials">{initials || "ML"}</div>
       )}
@@ -914,7 +949,17 @@ function MosaicCover({ items, title }: { items: SeriesCatalog[]; title: string }
       {covers.length === 0 ? (
         <div className="mosaic-fallback">{title.slice(0, 2).toUpperCase()}</div>
       ) : (
-        covers.map((item, index) => <img src={item.cover ?? ""} alt="" key={`${item.id}-${index}`} loading="lazy" />)
+        covers.map((item, index) => (
+          <img
+            className="loading-cover-image"
+            src={item.cover ?? ""}
+            alt=""
+            key={`${item.id}-${index}`}
+            loading="lazy"
+            decoding="async"
+            onLoad={markImageLoaded}
+          />
+        ))
       )}
     </div>
   );
@@ -955,9 +1000,21 @@ function TitleCard({
   metricWindow?: { from: string; to: string } | null;
 }) {
   const title = visibleTitle(series);
+  const navigate = useNavigate();
+  const detailPath = `/title/${series.id}`;
   return (
     <div className="title-card-wrap">
-      <Link to={`/title/${series.id}`} className="title-card" data-testid="title-card" onClickCapture={() => prepareHomeTitleNavigation(feed)}>
+      <Link
+        to={detailPath}
+        className="title-card"
+        data-testid="title-card"
+        onClick={(event) => {
+          if (!isPlainNavigationClick(event)) return;
+          event.preventDefault();
+          prepareHomeTitleNavigation(feed);
+          scheduleRouteChange("detail", () => navigate(detailPath));
+        }}
+      >
         <div className="poster-shell">
           <Cover series={series} priority={rank <= 18} />
           {view.visible.rank && <span className="rank">{rank}</span>}
@@ -1120,9 +1177,13 @@ function FeedsPage() {
   useEffect(() => {
     let cancelled = false;
     setCoversLoading(true);
-    const handle = window.setTimeout(() => {
-      const next = new Map<string, SeriesCatalog[]>();
-      for (const feed of store.feeds) {
+    let index = 0;
+    let handle = 0;
+    const next = new Map<string, SeriesCatalog[]>();
+    const processBatch = () => {
+      const batchEnd = Math.min(index + 4, store.feeds.length);
+      for (; index < batchEnd; index += 1) {
+        const feed = store.feeds[index];
         next.set(
           feed.id,
           runFeedQuery({
@@ -1137,11 +1198,15 @@ function FeedsPage() {
           }).items.slice(0, 4),
         );
       }
-      if (!cancelled) {
-        setCoverMap(next);
+      if (cancelled) return;
+      setCoverMap(new Map(next));
+      if (index < store.feeds.length) {
+        handle = window.setTimeout(processBatch, 16);
+      } else {
         setCoversLoading(false);
       }
-    }, 24);
+    };
+    handle = window.setTimeout(processBatch, 0);
     return () => {
       cancelled = true;
       window.clearTimeout(handle);
@@ -1245,9 +1310,19 @@ function FeedCoverCard({
   onDragEnd: React.PointerEventHandler<HTMLButtonElement>;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const navigate = useNavigate();
   return (
     <article className={`feed-cover-card ${dragging ? "dragging" : ""} ${over ? "drag-over" : ""}`} data-feed-id={feed.id}>
-      <Link className="feed-cover-link" to="/" onClick={onOpen}>
+      <Link
+        className="feed-cover-link"
+        to="/"
+        onClick={(event) => {
+          if (!isPlainNavigationClick(event)) return;
+          event.preventDefault();
+          onOpen();
+          scheduleRouteChange("page", () => navigate("/"));
+        }}
+      >
         {loading ? <div className="mosaic-cover mosaic-loading" aria-hidden="true" /> : <MosaicCover items={covers} title={feed.name} />}
         <strong className="feed-card-title">{feed.name}</strong>
       </Link>
@@ -2452,16 +2527,24 @@ function TitleDetailPage() {
   const showError = invalidRoute || (!loading && !detail && status && status !== "Loading detail");
 
   useEffect(() => {
-    if (loadingDetail || showError || !series) return;
-    const handle = window.setTimeout(() => setShowRecommendations(true), 32);
+    if (loadingDetail || showError || !series || !visible.recommendations) {
+      setShowRecommendations(false);
+      return;
+    }
+    const handle = window.setTimeout(() => setShowRecommendations(true), 180);
     return () => window.clearTimeout(handle);
-  }, [loadingDetail, series, showError]);
+  }, [loadingDetail, series, showError, visible.recommendations]);
 
   return (
     <div className="detail-page">
       {series?.cover && <img className="detail-bg" src={series.cover} alt="" />}
       <div className="detail-top-actions">
-        <button className="icon-button" type="button" onClick={() => navigate(-1)} aria-label="Back">
+        <button
+          className="icon-button"
+          type="button"
+          onClick={() => scheduleRouteChange("page", () => navigate(-1))}
+          aria-label="Back"
+        >
           <ArrowLeft size={22} />
         </button>
         <span className="spacer" />
@@ -2470,13 +2553,17 @@ function TitleDetailPage() {
         </button>
       </div>
       {loadingDetail ? (
-        <DetailSkeleton series={catalogItem ?? null} />
+        <DetailSkeleton series={catalogItem ?? null} showRecommendations={visible.recommendations} />
       ) : series ? (
         <>
           <section className="detail-identity">
             {visible.cover && (
               <div className="detail-cover-shell">
-                {series.cover ? <img className="detail-cover" src={series.cover} alt="" /> : <div className="detail-cover cover-fallback">No cover</div>}
+                {series.cover ? (
+                  <img className="detail-cover loading-cover-image" src={series.cover} alt="" onLoad={markImageLoaded} />
+                ) : (
+                  <div className="detail-cover cover-fallback">No cover</div>
+                )}
               </div>
             )}
             <div className="detail-copy">
@@ -2538,7 +2625,7 @@ function TitleDetailPage() {
               </div>
             </section>
           )}
-          {showRecommendations && (
+          {visible.recommendations && showRecommendations && (
             <section className="detail-block detail-recommendations">
               <div className="row">
                 <h2 className="section-title">Recommendations</h2>
@@ -2571,7 +2658,7 @@ function TitleDetailPage() {
           <p className="muted">{status}</p>
         </div>
       ) : (
-        <DetailSkeleton series={null} />
+        <DetailSkeleton series={null} showRecommendations={visible.recommendations} />
       )}
       <BottomDrawer title="Detail Settings" open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DetailSettingsDrawer visible={visible} onChange={setVisible} />
@@ -2580,7 +2667,13 @@ function TitleDetailPage() {
   );
 }
 
-function DetailSkeleton({ series }: { series: SeriesCatalog | null }) {
+function DetailSkeleton({
+  series,
+  showRecommendations = true,
+}: {
+  series: SeriesCatalog | null;
+  showRecommendations?: boolean;
+}) {
   const hiddenStats = series
     ? [
         formatMetricValue(series, "popularity", undefined, undefined),
@@ -2597,12 +2690,12 @@ function DetailSkeleton({ series }: { series: SeriesCatalog | null }) {
         <div className="detail-copy">
           <div className="skeleton-line skeleton-line-title" />
           <div className="skeleton-line skeleton-line-creators" />
+          <section className="detail-meta-strip detail-skeleton-strip">
+            <div className="detail-meta-chip skeleton-chip" />
+            <div className="detail-meta-chip skeleton-chip" />
+            <div className="detail-meta-chip skeleton-chip" />
+          </section>
         </div>
-      </section>
-      <section className="detail-meta-strip detail-skeleton-strip" aria-hidden="true">
-        <div className="detail-meta-chip skeleton-chip" />
-        <div className="detail-meta-chip skeleton-chip" />
-        <div className="detail-meta-chip skeleton-chip" />
       </section>
       <section className="detail-stat-grid detail-skeleton-grid detail-skeleton-stats" aria-hidden="true">
         <div className="detail-stat skeleton-stat skeleton-stat-compact" />
@@ -2632,16 +2725,18 @@ function DetailSkeleton({ series }: { series: SeriesCatalog | null }) {
           <span className="chip link-chip skeleton-chip" />
         </div>
       </section>
-      <section className="detail-block detail-recommendations" aria-hidden="true">
-        <div className="row">
-          <h2 className="section-title">Recommendations</h2>
-        </div>
-        <div className="title-grid columns-3 recommendation-picker detail-skeleton-rec-grid">
-          {Array.from({ length: RECOMMENDATION_DEFAULT_RESULTS }).map((_, index) => (
-            <div className="recommendation-pick skeleton-rec" key={index} />
-          ))}
-        </div>
-      </section>
+      {showRecommendations ? (
+        <section className="detail-block detail-recommendations" aria-hidden="true">
+          <div className="row">
+            <h2 className="section-title">Recommendations</h2>
+          </div>
+          <div className="title-grid columns-3 recommendation-picker detail-skeleton-rec-grid">
+            {Array.from({ length: RECOMMENDATION_DEFAULT_RESULTS }).map((_, index) => (
+              <div className="recommendation-pick skeleton-rec" key={index} />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </>
   );
 }
@@ -2760,6 +2855,7 @@ function DetailSettingsDrawer({
   const fields: [keyof AppSettings["detailVisible"], string, string][] = [
     ["cover", "Cover", "Show the title artwork."],
     ["title", "Title", "Show the primary title."],
+    ["recommendations", "Recommendations", "Show recommendation shelves below title details."],
     ["description", "Description", "Show the full available synopsis."],
     ["genreTags", "Genres", "Show the main genre row."],
     ["allTags", "All tags", "Show every catalog tag."],

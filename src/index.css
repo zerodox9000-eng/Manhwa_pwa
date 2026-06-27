@@ -3464,5 +3464,98 @@ textarea,
   transform: none;
 }
 
+/* Immediate route acknowledgement while the destination React tree mounts. */
+.route-transition-feedback {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  display: none;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  pointer-events: auto;
+  contain: strict;
+}
+
+html[data-route-pending="detail"] .route-transition-detail,
+html[data-route-pending="page"] .route-transition-page {
+  display: block;
+}
+
+.route-transition-actions {
+  display: flex;
+  align-items: center;
+}
+
+.route-transition-actions .skeleton-chip {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  border-radius: 8px;
+}
+
+.route-page-skeleton {
+  padding-top: calc(18px + env(safe-area-inset-top));
+}
+
+.route-page-skeleton > .skeleton-line-title {
+  margin: 0 0 22px;
+}
+
+.route-cache-hidden {
+  content-visibility: hidden;
+  contain: strict;
+}
+
+/* Keep every cover on a real placeholder until its image has decoded. */
+.loading-cover-image {
+  opacity: 0;
+  transition: opacity 90ms linear;
+}
+
+.loading-cover-image.image-loaded {
+  opacity: 1;
+}
+
+.cover-wrap:has(> .loading-cover-image:not(.image-loaded))::after,
+.mosaic-cover:has(.loading-cover-image:not(.image-loaded))::after,
+.detail-cover-shell:has(> .loading-cover-image:not(.image-loaded))::after {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  content: "";
+  pointer-events: none;
+  background:
+    linear-gradient(100deg, transparent 22%, rgba(255, 255, 255, 0.13) 46%, transparent 70%),
+    rgba(255, 255, 255, 0.055);
+  background-size: 220% 100%;
+  animation: cover-loading-shimmer 1.05s linear infinite;
+}
+
+.mosaic-cover,
+.detail-cover-shell {
+  position: relative;
+  overflow: hidden;
+}
+
+.detail-cover-shell {
+  border-radius: 8px;
+}
+
+@keyframes cover-loading-shimmer {
+  from {
+    background-position: 220% 0;
+  }
+  to {
+    background-position: -220% 0;
+  }
+}
+
+.feed-pager-panel.is-active .title-grid .title-card-wrap {
+  content-visibility: auto !important;
+  contain-intrinsic-size: auto 250px;
+}
+
 
 

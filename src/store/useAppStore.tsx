@@ -214,63 +214,75 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, [shouldMigrateFeedsToThreeColumns]);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
-      const bundledCatalogPromise = loadBundledCatalog();
-      const cachedDataPromise = loadCachedData();
-      const metaPromise = loadSyncMeta();
-      let cacheResolved = false;
-      let showedBundled = false;
-      const bundledTimer = window.setTimeout(() => {
-        void bundledCatalogPromise.then((bundledCatalog) => {
-          if (cacheResolved || bundledCatalog.length === 0) return;
-          showedBundled = true;
-          setCatalog(bundledCatalog);
-          setSyncMeta({
-            lastSync: new Date().toISOString(),
-            totalSeries: bundledCatalog.length,
-            historyFirstDate: null,
-            historyLastDate: null,
-            versionHash: `bundled-${bundledCatalog.length}`,
-            source: "Bundled query index",
-          });
-          setReady(true);
-        });
-      }, 260);
-
-      const [{ catalog: cachedCatalog, tags: cachedTags, history: cachedHistory, recommendationFeatures: cachedRecommendationFeatures }, meta] = await Promise.all([
-        cachedDataPromise,
-        metaPromise,
+      const [
+        { catalog: cachedCatalog, tags: cachedTags, history: cachedHistory, recommendationFeatures: cachedRecommendationFeatures },
+        meta,
+        bundledCatalog,
+      ] = await Promise.all([
+        loadCachedData(),
+        loadSyncMeta(),
+        loadBundledCatalog(),
       ]);
-      cacheResolved = true;
-      window.clearTimeout(bundledTimer);
+      if (cancelled) return;
+
       if (cachedCatalog.length > 0) {
         setCatalog(cachedCatalog);
         setTags(cachedTags);
         setHistory(cachedHistory);
         setRecommendationFeatures(cachedRecommendationFeatures);
         setSyncMeta(meta);
-      } else if (!showedBundled) {
-        const bundledCatalog = await bundledCatalogPromise;
-        if (bundledCatalog.length > 0) {
-          setCatalog(bundledCatalog);
-          setSyncMeta({
-            lastSync: new Date().toISOString(),
-            totalSeries: bundledCatalog.length,
-            historyFirstDate: null,
-            historyLastDate: null,
-            versionHash: `bundled-${bundledCatalog.length}`,
-            source: "Bundled query index",
-          });
+        setReady(true);
+
+        const lastSyncTime = meta?.lastSync ? Date.parse(meta.lastSync) : Number.NaN;
+        const cacheIsStale = !Number.isFinite(lastSyncTime) || Date.now() - lastSyncTime > 6 * 60 * 60 * 1000;
+        const needsRefresh =
+          !meta?.versionHash?.includes("live-merged") ||
+          !cachedCatalog.some((item) => item.published?.start_date || item.published?.end_date) ||
+          cacheIsStale;
+        if (needsRefresh && navigator.onLine) {
+          window.setTimeout(() => void refreshData(), 2400);
+        }
+        return;
+      }
+
+      if (navigator.onLine) {
+        try {
+          setSyncStatus("Loading current library");
+          const synced = await syncFrontendData(settings.dataSourceUrl, setSyncStatus);
+          if (cancelled) return;
+          setCatalog(synced.catalog);
+          setTags(synced.tags);
+          setHistory(synced.history);
+          setRecommendationFeatures(synced.recommendationFeatures);
+          setSyncMeta(synced.meta);
+          setSettings((current) => ({ ...current, dataSourceUrl: synced.meta.source }));
+          setSyncStatus("");
+          setReady(true);
+          return;
+        } catch {
+          if (cancelled) return;
+          setSyncStatus("Using bundled offline library");
         }
       }
-      setReady(true);
-      const hasLiveMergedCatalog = meta?.versionHash?.includes("live-merged");
-      const hasQueryDates = cachedCatalog.some((item) => item.published?.start_date || item.published?.end_date);
-      const online = typeof navigator === "undefined" || navigator.onLine;
-      if (cachedCatalog.length === 0 || !hasQueryDates || !hasLiveMergedCatalog || online) {
-        window.setTimeout(() => void refreshData(), 1800);
+
+      if (bundledCatalog.length > 0) {
+        setCatalog(bundledCatalog);
+        setSyncMeta({
+          lastSync: new Date().toISOString(),
+          totalSeries: bundledCatalog.length,
+          historyFirstDate: null,
+          historyLastDate: null,
+          versionHash: `bundled-${bundledCatalog.length}`,
+          source: "Bundled query index",
+        });
       }
+      setReady(true);
     })();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

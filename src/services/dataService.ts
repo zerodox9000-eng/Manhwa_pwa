@@ -203,14 +203,12 @@ export async function syncFrontendData(
 
   await db.transaction(
     "rw",
-    [db.catalog, db.tags, db.details, db.recommendationFeatures, db.history],
+    [db.catalog, db.tags, db.recommendationFeatures, db.history],
     async () => {
       await db.catalog.clear();
       await db.tags.clear();
       await db.recommendationFeatures.clear();
       await db.history.clear();
-      await db.details.clear();
-
       await db.catalog.bulkPut(catalog);
       await db.tags.bulkPut(tags);
       if (recommendationFeatures.length > 0) {

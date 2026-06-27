@@ -208,6 +208,8 @@ export function runFeedQuery(args: {
   }
 
   const result = candidates.filter((item) => {
+    if (!item.tag_ids?.length) return false;
+
     const rating = item.content_rating as AppSettings["contentRatings"][number] | null;
     if (rating && !filters.contentRatings.includes(rating)) return false;
 
