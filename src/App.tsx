@@ -311,7 +311,21 @@ function AppFrame() {
       themeMeta.name = "theme-color";
       document.head.appendChild(themeMeta);
     }
-    themeMeta.content = PWA_CHROME_THEME_COLOR;
+    const enforceChromeTheme = () => {
+      themeMeta.content = PWA_CHROME_THEME_COLOR;
+      document.documentElement.style.backgroundColor = PWA_CHROME_THEME_COLOR;
+      document.body.style.backgroundColor = PWA_CHROME_THEME_COLOR;
+    };
+    const enforceAfterViewportChange = () => requestAnimationFrame(enforceChromeTheme);
+    enforceChromeTheme();
+    window.addEventListener("focusin", enforceAfterViewportChange);
+    window.addEventListener("focusout", enforceAfterViewportChange);
+    window.visualViewport?.addEventListener("resize", enforceAfterViewportChange);
+    return () => {
+      window.removeEventListener("focusin", enforceAfterViewportChange);
+      window.removeEventListener("focusout", enforceAfterViewportChange);
+      window.visualViewport?.removeEventListener("resize", enforceAfterViewportChange);
+    };
   }, [location.pathname]);
 
   useLayoutEffect(() => {

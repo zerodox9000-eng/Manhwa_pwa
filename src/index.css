@@ -3098,10 +3098,7 @@ textarea,
 
 .detail-stat,
 .detail-block .chip,
-.link-chip,
-.input,
-.setting-row,
-.drawer-content {
+.link-chip {
   backdrop-filter: blur(14px) saturate(1.12);
 }
 
@@ -3791,4 +3788,20 @@ body:has(.title-detail-page)::-webkit-scrollbar {
     width: 38px;
     height: 38px;
   }
+}
+
+/* Keyboard-safe feed editor: cheap scrolling and a contained neutral focus edge. */
+.drawer-content {
+  max-height: min(86dvh, 760px);
+  background: #111218;
+  contain: layout paint;
+  touch-action: pan-y;
+}
+
+.drawer-content .input:focus,
+.drawer-content .select:focus,
+.drawer-content .textarea:focus {
+  border-color: rgba(255, 255, 255, 0.2);
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
