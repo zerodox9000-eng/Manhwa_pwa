@@ -2756,7 +2756,16 @@ function TitleDetailPage() {
         <button
           className="icon-button"
           type="button"
-          onClick={() => scheduleRouteChange("page", () => navigate(-1))}
+          onClick={() => {
+            clearRouteFeedback();
+            const cachedHome = document.querySelector<HTMLElement>(".route-cache-hidden");
+            if (!cachedHome) {
+              navigate(-1);
+              return;
+            }
+            cachedHome.classList.add("route-cache-revealing");
+            requestAnimationFrame(() => requestAnimationFrame(() => navigate(-1)));
+          }}
           aria-label="Back"
         >
           <ArrowLeft size={22} />

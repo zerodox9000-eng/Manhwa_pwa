@@ -3215,6 +3215,13 @@ textarea,
   overflow: hidden;
 }
 
+.route-cache-hidden.route-cache-revealing {
+  z-index: 28;
+  visibility: visible;
+  pointer-events: auto;
+  background: var(--bg);
+}
+
 .feed-pager .title-grid .title-card-wrap {
   content-visibility: visible !important;
   contain-intrinsic-size: auto;
@@ -3505,11 +3512,6 @@ html[data-route-pending="page"] .route-transition-page {
 
 .route-page-skeleton > .skeleton-line-title {
   margin: 0 0 22px;
-}
-
-.route-cache-hidden {
-  content-visibility: hidden;
-  contain: strict;
 }
 
 /* Keep every cover on a real placeholder until its image has decoded. */
