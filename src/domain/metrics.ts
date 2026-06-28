@@ -1,6 +1,8 @@
 import type { HistoryMap, MetricId, SeriesCatalog } from "./types";
 import { isFutureDate, parseDate } from "./dates";
 
+const UNDERRATED_POPULARITY_PERCENTILE_CUTOFF = 50;
+
 export interface MetricDefinition {
   id: MetricId;
   label: string;
@@ -114,7 +116,7 @@ export function metricValue(series: SeriesCatalog, metric: MetricId, history: Hi
     const popularityPercentile = analytics.popularityPercentile;
     const displayedPopPct = displayedPopularityPercentile(series);
     if (fanRank == null || popularityPercentile == null || displayedPopPct == null) return -Infinity;
-    if (displayedPopPct < 70) return -Infinity;
+    if (displayedPopPct < UNDERRATED_POPULARITY_PERCENTILE_CUTOFF) return -Infinity;
     return fanRank - popularityPercentile;
   }
   if (metric === "fanFavouriteDiscoveryScore") return analytics.fanFavouriteDiscoveryScore ?? -Infinity;

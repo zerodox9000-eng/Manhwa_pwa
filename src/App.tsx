@@ -23,8 +23,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { memo, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import Fuse from "fuse.js";
+import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { appDebugLog } from "./lib/debug";
 import ReactMarkdown from "react-markdown";
 import {
@@ -42,7 +41,7 @@ import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT } from "./domain/defaults";
 import { resolveRollingWindow } from "./domain/dates";
-import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, hasDetailTags, isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
+import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, hasDetailTags, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
@@ -78,6 +77,7 @@ const RANGE_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.filte
 const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.id !== "title" && definition.id !== "mangabakaLatestRank");
 const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
+const SEARCH_DEBOUNCE_MS = 140;
 const HOME_FEED_RENDER_RADIUS = 4;
 const HOME_FEED_PREVIEW_TITLES = 18;
 const FEED_TITLE_EXPANDED_MAX = 140;
@@ -251,15 +251,6 @@ function restoreHomeScroll(feed: Feed | null) {
     return;
   }
   container.scrollTo({ top: target, behavior: "auto" });
-}
-
-function isSearchVisible(series: SeriesCatalog, settings: AppSettings, sensitiveTagIds: { relationship: Set<number>; adult: Set<number> }) {
-  const rating = series.content_rating as AppSettings["contentRatings"][number] | null;
-  if (rating && !settings.contentRatings.includes(rating)) return false;
-  const tagIds = new Set(series.tag_ids ?? []);
-  if (!settings.searchRelationshipTags && [...sensitiveTagIds.relationship].some((id) => tagIds.has(id))) return false;
-  if (!settings.searchAdultTags && [...sensitiveTagIds.adult].some((id) => tagIds.has(id))) return false;
-  return true;
 }
 
 function formatStatusLabel(value: string | null | undefined) {
@@ -1976,6 +1967,14 @@ function SearchPage() {
     () => store.catalog.filter((item) => hasDetailTags(item, tagsById)),
     [store.catalog, tagsById],
   );
+  const searchableCatalog = useMemo(
+    () => eligibleCatalog.filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds)),
+    [
+      eligibleCatalog,
+      sensitiveTagIds,
+      store.settings,
+    ],
+  );
   const searchFeed = useMemo(() => {
     const feed = createFeed("Search results");
     feed.filters.sourceMode = "mixed";
@@ -1986,36 +1985,82 @@ function SearchPage() {
   }, [store.settings.contentRatings]);
   const getTitle = useCallback((item: SeriesCatalog) => visibleTitle(item), []);
   const inputQuery = query;
-  const deferredQuery = useDeferredValue(inputQuery);
-  const searchIndex = useMemo(
-    () =>
-      new Fuse(eligibleCatalog, {
-        includeScore: true,
-        shouldSort: true,
-        ignoreLocation: true,
-        minMatchCharLength: 2,
-        threshold: 0.28,
-        keys: [
-          { name: "display_title", weight: 0.55 },
-          { name: "animeplanet_title", weight: 0.5 },
-          { name: "mangabaka_title", weight: 0.2 },
-          { name: "native_title", weight: 0.18 },
-          { name: "romanized_title", weight: 0.18 },
-          { name: "authors", weight: 0.1 },
-          { name: "artists", weight: 0.1 },
-        ],
-      }),
-    [eligibleCatalog],
+  const [debouncedQuery, setDebouncedQuery] = useState(inputQuery);
+  const [searchResultIds, setSearchResultIds] = useState<number[]>([]);
+  const searchWorkerRef = useRef<Worker | null>(null);
+  const searchRequestRef = useRef(0);
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedQuery(inputQuery), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [inputQuery]);
+
+  useEffect(() => {
+    const worker = new Worker(new URL("./workers/search.worker.ts", import.meta.url), { type: "module" });
+    searchWorkerRef.current = worker;
+    worker.onmessage = (event: MessageEvent<{ type: "results"; requestId: number; ids: number[] }>) => {
+      if (event.data.type !== "results" || event.data.requestId !== searchRequestRef.current) return;
+      setSearchResultIds(event.data.ids);
+    };
+    return () => {
+      worker.terminate();
+      searchWorkerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    searchRequestRef.current += 1;
+    setSearchResultIds([]);
+    searchWorkerRef.current?.postMessage({
+      type: "index",
+      items: searchableCatalog.map((item) => ({
+        id: item.id,
+        display_title: item.display_title,
+        animeplanet_title: item.animeplanet_title,
+        mangabaka_title: item.mangabaka_title,
+        native_title: item.native_title,
+        romanized_title: item.romanized_title,
+        authors: item.authors,
+        artists: item.artists,
+      })),
+    });
+  }, [searchableCatalog]);
+
+  useEffect(() => {
+    const term = debouncedQuery.trim();
+    const requestId = searchRequestRef.current + 1;
+    searchRequestRef.current = requestId;
+    if (!term) {
+      setSearchResultIds([]);
+      return;
+    }
+
+    const sensitiveFamily = sensitiveTagIdsForSearch(term, sensitiveTagIds);
+    if (sensitiveFamily) {
+      setSearchResultIds(
+        searchableCatalog
+        .filter((item) => item.tag_ids.some((tagId) => sensitiveFamily.has(tagId)))
+        .sort((a, b) => getTitle(a).localeCompare(getTitle(b)))
+        .slice(0, 60)
+        .map((item) => item.id),
+      );
+      return;
+    }
+
+    searchWorkerRef.current?.postMessage({ type: "search", query: term, requestId });
+  }, [debouncedQuery, getTitle, searchableCatalog, sensitiveTagIds]);
+
+  const searchableCatalogById = useMemo(
+    () => new Map(searchableCatalog.map((item) => [item.id, item])),
+    [searchableCatalog],
   );
-  const results = useMemo(() => {
-    const term = deferredQuery.trim();
-    if (!term) return [];
-    return searchIndex
-      .search(term, { limit: 60 })
-      .map((result) => result.item)
-      .filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds))
-      .sort((a, b) => getTitle(a).localeCompare(getTitle(b)));
-  }, [deferredQuery, getTitle, searchIndex, sensitiveTagIds, store.settings]);
+  const results = useMemo(
+    () =>
+      searchResultIds
+        .map((id) => searchableCatalogById.get(id))
+        .filter((item): item is SeriesCatalog => Boolean(item))
+        .sort((a, b) => getTitle(a).localeCompare(getTitle(b))),
+    [getTitle, searchResultIds, searchableCatalogById],
+  );
   useEffect(() => {
     sessionStorage.setItem("manhwa-search-query", inputQuery);
   }, [inputQuery]);
