@@ -3597,6 +3597,81 @@ body:has(.title-detail-page)::-webkit-scrollbar {
   font-weight: 900;
 }
 
+.profile-identity-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 20px;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-height: 72px;
+  margin: 0 0 22px;
+  padding: 11px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 8px;
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 54%),
+    rgba(24, 26, 35, 0.62);
+  color: var(--text);
+  text-align: left;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 14px 34px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(18px) saturate(1.16);
+  cursor: pointer;
+}
+
+.profile-identity-row:focus-visible,
+.profile-row:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 75%, white);
+  outline-offset: 2px;
+}
+
+.profile-avatar {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--profile-accent) 82%, white), color-mix(in srgb, var(--profile-accent) 68%, black));
+  color: white;
+  font-size: 19px;
+  font-weight: 900;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 8px 20px color-mix(in srgb, var(--profile-accent) 20%, transparent);
+}
+
+.profile-avatar.small {
+  width: 42px;
+  height: 42px;
+  font-size: 16px;
+}
+
+.profile-identity-copy,
+.profile-row-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.profile-identity-copy strong,
+.profile-row-copy strong {
+  overflow: hidden;
+  font-size: 16px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-identity-copy span,
+.profile-row-copy span {
+  color: rgba(224, 229, 241, 0.62);
+  font-size: 12px;
+  font-weight: 650;
+}
+
 .settings-section {
   margin: 0 0 22px;
 }
@@ -3685,6 +3760,106 @@ body:has(.title-detail-page)::-webkit-scrollbar {
   color: rgba(232, 237, 248, 0.82);
   font-size: 12px;
   font-weight: 700;
+}
+
+.profile-drawer {
+  display: grid;
+  gap: 16px;
+}
+
+.drawer-content:has(.profile-drawer) {
+  border-color: rgba(255, 255, 255, 0.13);
+  background:
+    linear-gradient(125deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 52%),
+    rgba(19, 20, 28, 0.82);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 -20px 54px rgba(0, 0, 0, 0.44);
+  backdrop-filter: blur(24px) saturate(1.22);
+}
+
+.drawer-content:has(.profile-drawer)::before {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  width: 38px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  content: "";
+  transform: translateX(-50%);
+}
+
+.profile-list {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.profile-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 20px;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile-row + .profile-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.075);
+}
+
+.profile-row.active {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 68%),
+    rgba(255, 255, 255, 0.025);
+}
+
+.profile-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.profile-actions .button {
+  min-height: 44px;
+  justify-content: flex-start;
+}
+
+.profile-actions .button:last-child {
+  grid-column: 1 / -1;
+}
+
+.profile-form,
+.profile-confirm {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.profile-confirm p {
+  margin: 0;
+}
+
+.profile-seed-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.profile-seed-options .segment {
+  min-height: 40px;
+  padding: 7px 8px;
+  font-size: 12px;
 }
 
 .recommendations-page {

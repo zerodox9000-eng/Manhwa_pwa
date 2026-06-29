@@ -339,6 +339,47 @@ export interface AppStateSnapshot {
   lastRoute: string;
 }
 
+export type ProfileSeedMode = "blank" | "defaults" | "clone";
+
+export interface Profile {
+  id: string;
+  name: string;
+  accentColor: string;
+  createdAt: string;
+  updatedAt: string;
+  lastUsedAt: string;
+}
+
+export interface ProfileSessionState {
+  lastRoute: string;
+  scroll: Record<string, number>;
+  searchHistory: string[];
+  openedTitleIds: number[];
+  searchQuery: string;
+}
+
+export interface ProfileState {
+  profileId: string;
+  schemaVersion: 1;
+  feeds: Feed[];
+  folders: Folder[];
+  labels: UserLabel[];
+  settings: AppSettings;
+  activeFeedId: string | null;
+  session: ProfileSessionState;
+}
+
+export interface ProfilesBackup {
+  kind: "manhwa-profiles-backup";
+  version: 1;
+  exportedAt: string;
+  activeProfileId: string;
+  profiles: Array<{
+    profile: Profile;
+    state: ProfileState;
+  }>;
+}
+
 export interface QueryResult {
   items: SeriesCatalog[];
   limitedHistory: boolean;

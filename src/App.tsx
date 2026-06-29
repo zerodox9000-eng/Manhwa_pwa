@@ -3,6 +3,7 @@ import * as Switch from "@radix-ui/react-switch";
 import {
   ArrowLeft,
   Check,
+  ChevronRight,
   Copy,
   Database,
   Download,
@@ -21,6 +22,9 @@ import {
   Share2,
   SlidersHorizontal,
   Trash2,
+  UserPlus,
+  UserRound,
+  Users,
   X,
 } from "lucide-react";
 import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -55,6 +59,7 @@ import type {
   HistoryMap,
   MetricId,
   MetricRange,
+  ProfileSeedMode,
   RecommendationShelf,
   SeriesCatalog,
   SeriesDetail,
@@ -63,6 +68,7 @@ import type {
 } from "./domain/types";
 import { fetchSeriesDetail } from "./services/dataService";
 import { AppStoreProvider, useAppStore } from "./store/useAppStore";
+import { ACTIVE_PROFILE_KEY } from "./store/profilePersistence";
 
 const NAV_ITEMS = [
   { id: "home", to: "/", label: "Home", icon: Home },
@@ -84,11 +90,9 @@ const FEED_TITLE_EXPANDED_MAX = 140;
 const FEED_DESCRIPTION_EXPANDED_MAX = 260;
 const PWA_CHROME_THEME_COLOR = "#11131a";
 
-const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 const HOME_SCROLL_PREFIX = "manhwa-home-scroll";
 const HOME_RETURNING_FROM_TITLE_KEY = "manhwa-home-returning-from-title";
 const FEEDS_SCROLL_KEY = "manhwa-feeds-scroll";
-const SEARCH_OPENED_HISTORY_KEY = "manhwa-search-opened-titles";
 const SEARCH_OPENED_HISTORY_LIMIT = 99;
 const ACCENT_COLORS = [
   { name: "Rose", value: "#ff3b81" },
@@ -200,9 +204,13 @@ function cappedText(text: string, max: number) {
   return `${trimmed.slice(0, Math.max(0, max - 1)).trimEnd()}...`;
 }
 
+function profileStorageKey(key: string) {
+  return `${key}:${localStorage.getItem(ACTIVE_PROFILE_KEY) ?? "default"}`;
+}
+
 function homeScrollKey(feed: Feed | null) {
-  if (!feed) return `${HOME_SCROLL_PREFIX}:none`;
-  return `${HOME_SCROLL_PREFIX}:${feed.id}:${feed.view.gridColumns}:${feed.view.gridDensity}`;
+  if (!feed) return profileStorageKey(`${HOME_SCROLL_PREFIX}:none`);
+  return profileStorageKey(`${HOME_SCROLL_PREFIX}:${feed.id}:${feed.view.gridColumns}:${feed.view.gridDensity}`);
 }
 
 function getHomeScrollContainer(feed: Feed | null) {
@@ -216,14 +224,6 @@ function saveHomeScroll(feed: Feed | null) {
     const key = homeScrollKey(feed);
     const scrollTop = getHomeScrollContainer(feed)?.scrollTop ?? 0;
     localStorage.setItem(key, String(scrollTop));
-    const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
-      path?: string;
-      scroll?: Record<string, number>;
-    };
-    localStorage.setItem(
-      SESSION_RESTORE_KEY,
-      JSON.stringify({ ...saved, path: "/", scroll: { ...(saved.scroll ?? {}), "/": scrollTop, [key]: scrollTop } }),
-    );
   } catch {
     // Best effort only.
   }
@@ -233,7 +233,7 @@ function prepareHomeTitleNavigation(feed: Feed | null) {
   if (!getHomeScrollContainer(feed)) return;
   saveHomeScroll(feed);
   try {
-    sessionStorage.setItem(HOME_RETURNING_FROM_TITLE_KEY, "1");
+    sessionStorage.setItem(profileStorageKey(HOME_RETURNING_FROM_TITLE_KEY), "1");
   } catch {
     // Best effort only.
   }
@@ -323,6 +323,19 @@ function AppFrame() {
     clearRouteFeedback();
   }, [location.pathname]);
 
+  if (!store.profileReady) {
+    return (
+      <div className="app-shell">
+        <main>
+          <div className="page profile-loading-page" aria-label="Loading local profile">
+            <div className="skeleton-line skeleton-line-title" />
+            <div className="skeleton-block" />
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <SessionRestorer />
@@ -335,7 +348,7 @@ function AppFrame() {
         )}
         {showingTitle ? (
           <Routes>
-            <Route path="/title/:id" element={<TitleDetailPage />} />
+            <Route path="/title/:id" element={<TitleDetailPage key={store.activeProfile.id} />} />
           </Routes>
         ) : (
           !showingHome && (
@@ -378,26 +391,37 @@ function AppFrame() {
 
 function SessionRestorer() {
   const store = useAppStore();
+  const updateProfileSession = store.updateProfileSession;
   const location = useLocation();
   const navigate = useNavigate();
-  const restored = useRef(false);
+  const restoredProfileId = useRef("");
+  const sessionRef = useRef(store.profileSession);
+  const sessionWriteTimer = useRef<number | null>(null);
   const activeFeed = useMemo(
     () => store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null,
     [store.activeFeedId, store.feeds],
   );
 
   useEffect(() => {
-    if (restored.current || !store.ready) return;
-    restored.current = true;
+    sessionRef.current = store.profileSession;
+  }, [store.profileSession]);
+
+  useEffect(() => {
+    if (!store.ready || restoredProfileId.current === store.activeProfile.id) return;
+    restoredProfileId.current = store.activeProfile.id;
     if (!store.settings.restoreLastSession) return;
-    try {
-      const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as { path?: string };
-      const openedAtRoot = location.pathname === "/" && !location.search && (!window.location.hash || window.location.hash === "#/");
-      if (saved.path && saved.path !== "/" && openedAtRoot) navigate(saved.path, { replace: true });
-    } catch {
-      // Bad restore metadata should never block the app.
-    }
-  }, [location.pathname, location.search, navigate, store.ready, store.settings.restoreLastSession]);
+    const savedPath = store.profileSession.lastRoute.replace(/^#/, "");
+    const openedAtRoot = location.pathname === "/" && !location.search && (!window.location.hash || window.location.hash === "#/");
+    if (savedPath && savedPath !== "/" && openedAtRoot) navigate(savedPath, { replace: true });
+  }, [
+    location.pathname,
+    location.search,
+    navigate,
+    store.activeProfile.id,
+    store.profileSession.lastRoute,
+    store.ready,
+    store.settings.restoreLastSession,
+  ]);
 
   useEffect(() => {
     if (!store.settings.restoreLastSession) return;
@@ -411,17 +435,12 @@ function SessionRestorer() {
       requestAnimationFrame(() => requestAnimationFrame(() => restoreHomeScroll(activeFeed)));
       return;
     }
-    try {
-      const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as { scroll?: Record<string, number> };
-      const candidates = [saved.scroll?.[key], Number(localStorage.getItem(key)), saved.scroll?.[path]];
-      const y = candidates.find((value) => Number.isFinite(value)) ?? 0;
-      if (y > 0) {
-        requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: y })));
-      }
-    } catch {
-      // Ignore stale restore payloads.
+    const candidates = [store.profileSession.scroll[key], Number(localStorage.getItem(key)), store.profileSession.scroll[path]];
+    const y = candidates.find((value) => Number.isFinite(value)) ?? 0;
+    if (y > 0) {
+      requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: y })));
     }
-  }, [activeFeed, location.pathname, location.search, store.settings.restoreLastSession]);
+  }, [activeFeed, location.pathname, location.search, store.activeProfile.id, store.profileSession.scroll, store.settings.restoreLastSession]);
 
   useEffect(() => {
     if (!store.settings.restoreLastSession) return;
@@ -432,47 +451,36 @@ function SessionRestorer() {
       const container = getHomeScrollContainer(activeFeed);
       if (!container) return;
       const save = () => {
-        try {
-          const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
-            path?: string;
-            scroll?: Record<string, number>;
-          };
-          localStorage.setItem(
-            SESSION_RESTORE_KEY,
-            JSON.stringify({
-              ...saved,
-              path,
-              scroll: { ...(saved.scroll ?? {}), [path]: container.scrollTop, [key]: container.scrollTop },
-            }),
-          );
-          localStorage.setItem(key, String(container.scrollTop));
-        } catch {
-          // localStorage can be unavailable in private contexts.
-        }
+        localStorage.setItem(key, String(container.scrollTop));
+        if (sessionWriteTimer.current != null) window.clearTimeout(sessionWriteTimer.current);
+        sessionWriteTimer.current = window.setTimeout(() => {
+          updateProfileSession({
+            lastRoute: path,
+            scroll: { ...sessionRef.current.scroll, [path]: container.scrollTop, [key]: container.scrollTop },
+          });
+        }, 120);
       };
       save();
       container.addEventListener("scroll", save, { passive: true });
       return () => container.removeEventListener("scroll", save);
     }
     const save = () => {
-      try {
-        const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
-          path?: string;
-          scroll?: Record<string, number>;
-        };
-        localStorage.setItem(
-          SESSION_RESTORE_KEY,
-          JSON.stringify({ ...saved, path, scroll: { ...(saved.scroll ?? {}), [path]: window.scrollY, [key]: window.scrollY } }),
-        );
-        if (location.pathname === "/") localStorage.setItem(key, String(window.scrollY));
-      } catch {
-        // localStorage can be unavailable in private contexts.
-      }
+      if (sessionWriteTimer.current != null) window.clearTimeout(sessionWriteTimer.current);
+      sessionWriteTimer.current = window.setTimeout(() => {
+        updateProfileSession({
+          lastRoute: path,
+          scroll: { ...sessionRef.current.scroll, [path]: window.scrollY, [key]: window.scrollY },
+        });
+      }, 120);
     };
     save();
     window.addEventListener("scroll", save, { passive: true });
     return () => window.removeEventListener("scroll", save);
-  }, [activeFeed, location.pathname, location.search, store.settings.restoreLastSession]);
+  }, [activeFeed, location.pathname, location.search, store.activeProfile.id, store.settings.restoreLastSession, updateProfileSession]);
+
+  useEffect(() => () => {
+    if (sessionWriteTimer.current != null) window.clearTimeout(sessionWriteTimer.current);
+  }, []);
 
   return null;
 }
@@ -514,7 +522,9 @@ function HomePage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingFeed, setEditingFeed] = useState<Feed | null>(null);
   const [renderCenterIndex, setRenderCenterIndex] = useState(-1);
-  const [returningFromTitle, setReturningFromTitle] = useState(() => sessionStorage.getItem(HOME_RETURNING_FROM_TITLE_KEY) === "1");
+  const [returningFromTitle, setReturningFromTitle] = useState(
+    () => sessionStorage.getItem(profileStorageKey(HOME_RETURNING_FROM_TITLE_KEY)) === "1",
+  );
   const pagerRef = useRef<HTMLDivElement | null>(null);
   const paneRefs = useRef(new Map<string, HTMLDivElement>());
   const renderCenterIndexRef = useRef(-1);
@@ -549,7 +559,7 @@ function HomePage() {
       restoreHomeScroll(activeFeed);
       setReturningFromTitle(false);
       try {
-        sessionStorage.removeItem(HOME_RETURNING_FROM_TITLE_KEY);
+        sessionStorage.removeItem(profileStorageKey(HOME_RETURNING_FROM_TITLE_KEY));
       } catch {
         // Best effort only.
       }
@@ -924,7 +934,7 @@ function TitleCollection({
   onTitleOpen?: (series: SeriesCatalog) => void;
 }) {
   const pageSize = feed.view.gridColumns >= 5 ? 60 : feed.view.gridColumns === 4 ? 72 : 120;
-  const countKey = `manhwa-visible-count:${feed.id}:${feed.view.gridColumns}`;
+  const countKey = profileStorageKey(`manhwa-visible-count:${feed.id}:${feed.view.gridColumns}`);
   const [visibleCount, setVisibleCount] = useState(() => Number(sessionStorage.getItem(countKey)) || pageSize);
   useEffect(() => {
     const saved = Number(sessionStorage.getItem(countKey)) || pageSize;
@@ -1239,13 +1249,13 @@ function FeedsPage() {
   const [coversLoading, setCoversLoading] = useState(true);
 
   useEffect(() => {
-    const target = Number(sessionStorage.getItem(FEEDS_SCROLL_KEY));
+    const target = Number(sessionStorage.getItem(profileStorageKey(FEEDS_SCROLL_KEY)));
     const firstFrame = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (Number.isFinite(target) && target > 0) window.scrollTo({ top: target, behavior: "auto" });
       });
     });
-    const save = () => sessionStorage.setItem(FEEDS_SCROLL_KEY, String(window.scrollY));
+    const save = () => sessionStorage.setItem(profileStorageKey(FEEDS_SCROLL_KEY), String(window.scrollY));
     window.addEventListener("scroll", save, { passive: true });
     return () => {
       cancelAnimationFrame(firstFrame);
@@ -1966,21 +1976,12 @@ function TagChipCloud({ tags, feed, onTagClick }: { tags: TagNode[]; feed: Feed;
 
 function SearchPage() {
   const store = useAppStore();
-  const [query, setQuery] = useState(() => sessionStorage.getItem("manhwa-search-query") ?? "");
-  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("manhwa-search-history") ?? "[]") as string[];
-    } catch {
-      return [];
-    }
-  });
-  const [openedTitleIds, setOpenedTitleIds] = useState<number[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(SEARCH_OPENED_HISTORY_KEY) ?? "[]") as number[];
-    } catch {
-      return [];
-    }
-  });
+  const updateProfileSession = store.updateProfileSession;
+  const setSearchHistory = store.setSearchHistory;
+  const setOpenedTitleIds = store.setOpenedTitleIds;
+  const [query, setQuery] = useState(store.profileSession.searchQuery);
+  const searchHistory = store.profileSession.searchHistory;
+  const openedTitleIds = store.profileSession.openedTitleIds;
   const sensitiveTagIds = useMemo(() => buildSensitiveTagGroups(store.tags), [store.tags]);
   const tagsById = useMemo(() => new Map(store.tags.map((tag) => [tag.id, tag])), [store.tags]);
   const eligibleCatalog = useMemo(
@@ -2082,22 +2083,22 @@ function SearchPage() {
     [getTitle, searchResultIds, searchableCatalogById],
   );
   useEffect(() => {
-    sessionStorage.setItem("manhwa-search-query", inputQuery);
-  }, [inputQuery]);
+    updateProfileSession({ searchQuery: inputQuery });
+  }, [inputQuery, updateProfileSession]);
+  useEffect(() => {
+    setQuery(store.profileSession.searchQuery);
+  }, [store.activeProfile.id, store.profileSession.searchQuery]);
   const remember = (value = query) => {
     const clean = value.trim();
     if (!clean) return;
     const next = [clean, ...searchHistory.filter((item) => item.toLocaleLowerCase() !== clean.toLocaleLowerCase())].slice(0, 12);
     setSearchHistory(next);
-    localStorage.setItem("manhwa-search-history", JSON.stringify(next));
   };
   const rememberOpenedTitle = useCallback((series: SeriesCatalog) => {
-    setOpenedTitleIds((current) => {
-      const next = [series.id, ...current.filter((id) => id !== series.id)].slice(0, SEARCH_OPENED_HISTORY_LIMIT);
-      localStorage.setItem(SEARCH_OPENED_HISTORY_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, []);
+    const next = [series.id, ...store.profileSession.openedTitleIds.filter((id) => id !== series.id)]
+      .slice(0, SEARCH_OPENED_HISTORY_LIMIT);
+    setOpenedTitleIds(next);
+  }, [setOpenedTitleIds, store.profileSession.openedTitleIds]);
   const openedTitles = useMemo(() => {
     const byId = new Map(eligibleCatalog.map((item) => [item.id, item]));
     return openedTitleIds.map((id) => byId.get(id)).filter((item): item is SeriesCatalog => Boolean(item));
@@ -2140,10 +2141,7 @@ function SearchPage() {
                 <button
                   className="button ghost"
                   type="button"
-                  onClick={() => {
-                    setOpenedTitleIds([]);
-                    localStorage.removeItem(SEARCH_OPENED_HISTORY_KEY);
-                  }}
+                  onClick={() => setOpenedTitleIds([])}
                 >
                   Clear
                 </button>
@@ -2162,7 +2160,7 @@ function SearchPage() {
               <h2 className="section-title">Recent searches</h2>
               <span className="spacer" />
               {searchHistory.length > 0 && (
-                <button className="button ghost" type="button" onClick={() => { setSearchHistory([]); localStorage.removeItem("manhwa-search-history"); }}>
+                <button className="button ghost" type="button" onClick={() => setSearchHistory([])}>
                   Clear
                 </button>
               )}
@@ -2560,6 +2558,7 @@ function SettingsPage() {
   const store = useAppStore();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [backupStatus, setBackupStatus] = useState("");
+  const [profilesOpen, setProfilesOpen] = useState(false);
   const importBackup = async (file: File | undefined) => {
     if (!file) return;
     try {
@@ -2576,6 +2575,17 @@ function SettingsPage() {
   return (
     <div className="page settings-page">
       <h1>Settings</h1>
+
+      <button className="profile-identity-row" type="button" onClick={() => setProfilesOpen(true)}>
+        <span className="profile-avatar" style={{ "--profile-accent": store.activeProfile.accentColor } as React.CSSProperties}>
+          {store.activeProfile.name.trim().slice(0, 1).toLocaleUpperCase() || <UserRound size={20} />}
+        </span>
+        <span className="profile-identity-copy">
+          <strong>{store.activeProfile.name}</strong>
+          <span>Local profile</span>
+        </span>
+        <ChevronRight size={20} aria-hidden="true" />
+      </button>
 
       <SettingsSection title="Appearance">
         <div className="setting-stack">
@@ -2667,12 +2677,242 @@ function SettingsPage() {
         >
           <Import size={16} /> Import Feeds JSON Backup
         </button>
+        <button
+          className="button"
+          type="button"
+          onClick={() => downloadText(
+            `${safeFilename(store.activeProfile.name)}-profile-backup.json`,
+            JSON.stringify({
+              kind: "manhwa-profile-backup",
+              version: 1,
+              exportedAt: new Date().toISOString(),
+              profile: store.activeProfile,
+              state: store.exportActiveProfile(),
+            }, null, 2),
+          )}
+        >
+          <Download size={16} /> Export Current Profile
+        </button>
+        <button
+          className="button"
+          type="button"
+          onClick={() => void store.exportAllProfiles().then((backup) => {
+            downloadText("manhwa-all-profiles-backup.json", JSON.stringify(backup, null, 2));
+          })}
+        >
+          <Users size={16} /> Export All Profiles
+        </button>
         {backupStatus ? <div className="settings-status" role="status">{backupStatus}</div> : null}
-        <button className="button danger" type="button" onClick={() => void store.resetLocalState()}>
-          Reset local app state
+        <button
+          className="button danger"
+          type="button"
+          onClick={() => {
+            if (window.confirm(`Reset ${store.activeProfile.name}? This removes its feeds, settings, and history.`)) {
+              void store.resetCurrentProfile();
+            }
+          }}
+        >
+          <Trash2 size={16} /> Reset Current Profile
+        </button>
+        <button
+          className="button danger"
+          type="button"
+          onClick={() => {
+            if (window.confirm("Reset the entire app? Every local profile will be removed.")) {
+              void store.resetEntireApp();
+            }
+          }}
+        >
+          <Trash2 size={16} /> Reset Entire App
         </button>
       </SettingsSection>
+      <ProfileManagerDrawer open={profilesOpen} onOpenChange={setProfilesOpen} />
     </div>
+  );
+}
+
+function ProfileManagerDrawer({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const store = useAppStore();
+  const [mode, setMode] = useState<"list" | "add" | "rename" | "delete">("list");
+  const [name, setName] = useState("");
+  const [seedMode, setSeedMode] = useState<ProfileSeedMode>("blank");
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setMode("list");
+    setName("");
+    setStatus("");
+    setBusy(false);
+  }, [open]);
+
+  const run = async (action: () => Promise<void>) => {
+    setStatus("");
+    setBusy(true);
+    try {
+      await action();
+      setMode("list");
+      setName("");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "That profile action failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <BottomDrawer title="Profiles" open={open} onOpenChange={onOpenChange}>
+      <div className="profile-drawer">
+        <div className="profile-list">
+          {store.profiles.map((profile) => {
+            const active = profile.id === store.activeProfile.id;
+            return (
+              <button
+                className={`profile-row ${active ? "active" : ""}`}
+                type="button"
+                key={profile.id}
+                aria-current={active ? "true" : undefined}
+                disabled={busy}
+                onClick={() => {
+                  if (!active) void run(() => store.switchProfile(profile.id));
+                }}
+              >
+                <span className="profile-avatar small" style={{ "--profile-accent": profile.accentColor } as React.CSSProperties}>
+                  {profile.name.trim().slice(0, 1).toLocaleUpperCase()}
+                </span>
+                <span className="profile-row-copy">
+                  <strong>{profile.name}</strong>
+                  <span>{active ? "Current profile" : "Tap to switch"}</span>
+                </span>
+                {active ? <Check size={18} /> : <ChevronRight size={18} />}
+              </button>
+            );
+          })}
+        </div>
+
+        {mode === "add" ? (
+          <div className="profile-form">
+            <label className="field">
+              <span>Name</span>
+              <input className="input" value={name} maxLength={40} autoFocus onChange={(event) => setName(event.target.value)} />
+            </label>
+            <div className="segments profile-seed-options" role="group" aria-label="Starting content">
+              {([
+                ["blank", "Blank"],
+                ["defaults", "Defaults"],
+                ["clone", "Clone current"],
+              ] as const).map(([value, label]) => (
+                <button
+                  className={`segment ${seedMode === value ? "active" : ""}`}
+                  type="button"
+                  key={value}
+                  aria-pressed={seedMode === value}
+                  onClick={() => setSeedMode(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="toolbar">
+              <button className="button" type="button" onClick={() => setMode("list")}>Cancel</button>
+              <span className="spacer" />
+              <button
+                className="button primary"
+                type="button"
+                disabled={busy}
+                onClick={() => void run(async () => {
+                  const profile = await store.createProfile(name, seedMode);
+                  await store.switchProfile(profile.id);
+                })}
+              >
+                <UserPlus size={16} /> Create
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {mode === "rename" ? (
+          <div className="profile-form">
+            <label className="field">
+              <span>Profile name</span>
+              <input className="input" value={name} maxLength={40} autoFocus onChange={(event) => setName(event.target.value)} />
+            </label>
+            <div className="toolbar">
+              <button className="button" type="button" onClick={() => setMode("list")}>Cancel</button>
+              <span className="spacer" />
+              <button
+                className="button primary"
+                type="button"
+                disabled={busy}
+                onClick={() => void run(() => store.renameProfile(store.activeProfile.id, name))}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {mode === "delete" ? (
+          <div className="profile-confirm">
+            <strong>Delete {store.activeProfile.name}?</strong>
+            <p className="muted">Its feeds, settings, and history will be removed. Other profiles stay untouched.</p>
+            <div className="toolbar">
+              <button className="button" type="button" onClick={() => setMode("list")}>Cancel</button>
+              <span className="spacer" />
+              <button
+                className="button danger"
+                type="button"
+                disabled={busy || store.profiles.length <= 1}
+                onClick={() => void run(() => store.deleteProfile(store.activeProfile.id))}
+              >
+                <Trash2 size={16} /> Delete
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {mode === "list" ? (
+          <div className="profile-actions">
+            <button className="button" type="button" disabled={busy} onClick={() => { setName(""); setSeedMode("blank"); setMode("add"); }}>
+              <UserPlus size={17} /> Add
+            </button>
+            <button className="button" type="button" disabled={busy} onClick={() => { setName(store.activeProfile.name); setMode("rename"); }}>
+              Rename
+            </button>
+            <button className="button" type="button" disabled={busy} onClick={() => void run(async () => { await store.duplicateProfile(store.activeProfile.id); })}>
+              <Copy size={17} /> Duplicate
+            </button>
+            <button
+              className="button"
+              type="button"
+              disabled={busy}
+              onClick={() => downloadText(
+                `${safeFilename(store.activeProfile.name)}-profile-backup.json`,
+                JSON.stringify({
+                  kind: "manhwa-profile-backup",
+                  version: 1,
+                  exportedAt: new Date().toISOString(),
+                  profile: store.activeProfile,
+                  state: store.exportActiveProfile(),
+                }, null, 2),
+              )}
+            >
+              <Download size={17} /> Export
+            </button>
+            <button
+              className="button danger"
+              type="button"
+              disabled={busy || store.profiles.length <= 1}
+              onClick={() => setMode("delete")}
+            >
+              <Trash2 size={17} /> Delete
+            </button>
+          </div>
+        ) : null}
+        {status ? <div className="settings-status" role="status">{status}</div> : null}
+      </div>
+    </BottomDrawer>
   );
 }
 
@@ -2712,7 +2952,7 @@ function TitleDetailPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showAllRecommendations, setShowAllRecommendations] = useState(false);
   const [showRecommendations, setShowRecommendations] = useState(false);
-  const detailLayoutKey = `manhwa-detail-layout:${store.activeFeedId ?? "default"}`;
+  const detailLayoutKey = profileStorageKey(`manhwa-detail-layout:${store.activeFeedId ?? "default"}`);
   const [visible, setVisible] = useState(() => {
     try {
       return {
@@ -3326,6 +3566,10 @@ function downloadText(filename: string, text: string) {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function safeFilename(value: string) {
+  return value.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "profile";
 }
 
 export default App;

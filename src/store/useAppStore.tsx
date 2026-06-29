@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS } from "../domain/defaults";
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import { feedUsesAniListOnlyParameters } from "../domain/query";
@@ -9,31 +9,85 @@ import type {
   Feed,
   Folder,
   HistoryMap,
+  Profile,
+  ProfileSeedMode,
+  ProfileSessionState,
+  ProfileState,
+  ProfilesBackup,
   RecommendationFeature,
   SeriesCatalog,
   SyncMeta,
   TagNode,
   UserLabel,
 } from "../domain/types";
-import { db, loadSyncMeta } from "../db/appDb";
+import { db, loadSyncMeta, profileDb } from "../db/appDb";
 import { loadBundledCatalog, loadCachedData, syncFrontendData } from "../services/dataService";
+import {
+  ACTIVE_PROFILE_KEY,
+  LEGACY_STATE_KEY,
+  createProfileRecord,
+  createProfileState,
+  deleteProfileRecord,
+  loadProfileState,
+  makeProfilesBackup,
+  migrateLegacyProfile,
+  saveProfile,
+} from "./profilePersistence";
 
-const STORAGE_KEY = "manhwa-library-state-v1";
+const STORAGE_KEY = LEGACY_STATE_KEY;
 const THREE_COLUMN_FEEDS_MIGRATION_KEY = "manhwa-three-column-feeds-v1";
+const PROFILE_WRITE_DELAY_MS = 180;
+const PROFILE_RUNTIME_CACHE_KEY = "manhwa-profile-runtime-v1";
+
+function persistInBackground(promise: Promise<unknown>) {
+  void promise.catch((error) => console.error("Profile persistence failed", error));
+}
+
+interface ProfileRuntimeCache {
+  activeProfile: Profile;
+  profiles: Profile[];
+  state: ProfileState;
+}
+
+function loadProfileRuntimeCache(): ProfileRuntimeCache | null {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(PROFILE_RUNTIME_CACHE_KEY) ?? "null") as ProfileRuntimeCache | null;
+    if (!value?.activeProfile?.id || value.state?.profileId !== value.activeProfile.id || !Array.isArray(value.profiles)) {
+      return null;
+    }
+    return value;
+  } catch {
+    return null;
+  }
+}
 
 interface StoreState {
   ready: boolean;
+  profileReady: boolean;
   catalog: SeriesCatalog[];
   tags: TagNode[];
   history: HistoryMap;
   recommendationFeatures: RecommendationFeature[];
   syncMeta: SyncMeta | null;
+  profiles: Profile[];
+  activeProfile: Profile;
+  profileSession: ProfileSessionState;
   feeds: Feed[];
   folders: Folder[];
   labels: UserLabel[];
   settings: AppSettings;
   activeFeedId: string | null;
   syncStatus: string;
+  switchProfile: (id: string) => Promise<void>;
+  createProfile: (name: string, mode: ProfileSeedMode) => Promise<Profile>;
+  renameProfile: (id: string, name: string) => Promise<void>;
+  duplicateProfile: (id: string, name?: string) => Promise<Profile>;
+  deleteProfile: (id: string) => Promise<void>;
+  updateProfileSession: (patch: Partial<ProfileSessionState>) => void;
+  setSearchHistory: (history: string[]) => void;
+  setOpenedTitleIds: (ids: number[]) => void;
+  exportActiveProfile: () => ProfileState;
+  exportAllProfiles: () => Promise<ProfilesBackup>;
   setActiveFeedId: (id: string | null) => void;
   upsertFeed: (feed: Feed) => void;
   deleteFeed: (id: string) => void;
@@ -43,9 +97,19 @@ interface StoreState {
   upsertLabel: (label: UserLabel) => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
   refreshData: () => Promise<void>;
-  resetLocalState: () => Promise<void>;
+  resetCurrentProfile: () => Promise<void>;
+  resetEntireApp: () => Promise<void>;
   importSnapshot: (snapshot: Partial<AppStateSnapshot>, mode: "merge" | "replace") => void;
 }
+
+const FALLBACK_PROFILE: Profile = {
+  id: "loading",
+  name: "User 1",
+  accentColor: DEFAULT_SETTINGS.accentColor,
+  createdAt: "",
+  updatedAt: "",
+  lastUsedAt: "",
+};
 
 function loadLocalSnapshot(): Partial<AppStateSnapshot> {
   try {
@@ -65,6 +129,36 @@ function loadLocalSnapshot(): Partial<AppStateSnapshot> {
     return parseAppStateSnapshot(JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}")) ?? {};
   } catch {
     return {};
+  }
+}
+
+function loadLegacySession(): Partial<ProfileSessionState> {
+  const readArray = <T,>(key: string): T[] => {
+    try {
+      const value = JSON.parse(localStorage.getItem(key) ?? "[]");
+      return Array.isArray(value) ? value as T[] : [];
+    } catch {
+      return [];
+    }
+  };
+  try {
+    const route = JSON.parse(localStorage.getItem("manhwa-library-route-v1") ?? "{}") as {
+      path?: string;
+      scroll?: Record<string, number>;
+    };
+    return {
+      lastRoute: route.path || "#/",
+      scroll: route.scroll ?? {},
+      searchHistory: readArray<string>("manhwa-search-history"),
+      openedTitleIds: readArray<number>("manhwa-search-opened-titles"),
+      searchQuery: sessionStorage.getItem("manhwa-search-query") ?? "",
+    };
+  } catch {
+    return {
+      searchHistory: readArray<string>("manhwa-search-history"),
+      openedTitleIds: readArray<number>("manhwa-search-opened-titles"),
+      searchQuery: sessionStorage.getItem("manhwa-search-query") ?? "",
+    };
   }
 }
 
@@ -187,29 +281,132 @@ const AppStoreContext = createContext<StoreState | null>(null);
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const local = useMemo(loadLocalSnapshot, []);
+  const legacySession = useMemo(loadLegacySession, []);
+  const runtimeCache = useMemo(loadProfileRuntimeCache, []);
   const hasSavedState = useMemo(() => localStorage.getItem(STORAGE_KEY) != null, []);
   const shouldMigrateFeedsToThreeColumns = useMemo(
     () => localStorage.getItem(THREE_COLUMN_FEEDS_MIGRATION_KEY) !== "1",
     [],
   );
-  const [ready, setReady] = useState(false);
+  const [dataReady, setDataReady] = useState(false);
+  const [profileReady, setProfileReady] = useState(false);
   const [catalog, setCatalog] = useState<SeriesCatalog[]>([]);
   const [tags, setTags] = useState<TagNode[]>([]);
   const [history, setHistory] = useState<HistoryMap>({});
   const [recommendationFeatures, setRecommendationFeatures] = useState<RecommendationFeature[]>([]);
   const [syncMeta, setSyncMeta] = useState<SyncMeta | null>(null);
-  const [feeds, setFeeds] = useState<Feed[]>(() => {
-    const normalizedFeeds = (hasSavedState ? local.feeds ?? [] : (defaultFeedsJson as Feed[])).map((feed) =>
-      normalizeFeed(feed),
-    );
+  const defaultFeeds = useMemo(
+    () => (defaultFeedsJson as Feed[]).map((feed) => {
+      const normalized = normalizeFeed(feed);
+      return { ...normalized, view: { ...normalized.view, gridColumns: 3 as const } };
+    }),
+    [],
+  );
+  const initialFeeds = useMemo(() => {
+    if (!hasSavedState) return defaultFeeds;
+    const normalizedFeeds = (local.feeds ?? []).map((feed) => normalizeFeed(feed));
     if (!shouldMigrateFeedsToThreeColumns) return normalizedFeeds;
-    return normalizedFeeds.map((feed) => ({ ...feed, view: { ...feed.view, gridColumns: 3 } }));
+    return normalizedFeeds.map((feed) => ({ ...feed, view: { ...feed.view, gridColumns: 3 as const } }));
+  }, [defaultFeeds, hasSavedState, local.feeds, shouldMigrateFeedsToThreeColumns]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [activeProfile, setActiveProfile] = useState<Profile>(FALLBACK_PROFILE);
+  const [profileSession, setProfileSession] = useState<ProfileSessionState>({
+    lastRoute: "#/",
+    scroll: {},
+    searchHistory: [],
+    openedTitleIds: [],
+    searchQuery: "",
   });
+  const [feeds, setFeeds] = useState<Feed[]>(initialFeeds);
   const [folders, setFolders] = useState<Folder[]>(local.folders ?? []);
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
   const [settings, setSettings] = useState<AppSettings>(mergeSettings(parseSettings(local.settings) ?? local.settings));
   const [activeFeedId, setActiveFeedId] = useState<string | null>(local.activeFeedId ?? null);
   const [syncStatus, setSyncStatus] = useState("");
+  const writeTimerRef = useRef<number | null>(null);
+  const runtimeCacheTimerRef = useRef<number | null>(null);
+  const writeInFlightRef = useRef<Promise<void> | null>(null);
+  const pendingWriteRef = useRef<{ profile: Profile; state: ProfileState } | null>(null);
+  const currentProfileRef = useRef(activeProfile);
+  const currentProfileStateRef = useRef<ProfileState | null>(null);
+  const profileCacheRef = useRef(new Map<string, Profile>());
+  const profileStateCacheRef = useRef(new Map<string, ProfileState>());
+  const switchingProfileRef = useRef(false);
+
+  const applyProfileState = useCallback((profile: Profile, state: ProfileState) => {
+    setActiveProfile(profile);
+    setFeeds(state.feeds.map((feed) => normalizeFeed(feed, { preserveMetricSlots: true })));
+    setFolders(state.folders ?? []);
+    setLabels(state.labels ?? []);
+    setSettings(mergeSettings(state.settings));
+    setActiveFeedId(state.activeFeedId ?? null);
+    setProfileSession({
+      lastRoute: state.session?.lastRoute || "#/",
+      scroll: { ...(state.session?.scroll ?? {}) },
+      searchHistory: [...(state.session?.searchHistory ?? [])],
+      openedTitleIds: [...(state.session?.openedTitleIds ?? [])],
+      searchQuery: state.session?.searchQuery ?? "",
+    });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (runtimeCache) {
+      runtimeCache.profiles.forEach((profile) => profileCacheRef.current.set(profile.id, profile));
+      profileStateCacheRef.current.set(runtimeCache.activeProfile.id, runtimeCache.state);
+      applyProfileState(runtimeCache.activeProfile, runtimeCache.state);
+      setProfiles(runtimeCache.profiles);
+      setProfileReady(true);
+    }
+    void (async () => {
+      const discovered = await migrateLegacyProfile(hasSavedState ? local : null, {
+        feeds: initialFeeds,
+        settings: mergeSettings(parseSettings(local.settings) ?? local.settings),
+        session: legacySession,
+      });
+      if (cancelled) return;
+      const requestedId = runtimeCache?.activeProfile.id ?? localStorage.getItem(ACTIVE_PROFILE_KEY);
+      const selected = runtimeCache?.activeProfile.id === requestedId
+        ? runtimeCache.activeProfile
+        : discovered.find((profile) => profile.id === requestedId) ?? discovered[0];
+      discovered.forEach((profile) => profileCacheRef.current.set(profile.id, profile));
+      const storedStates = await profileDb.profileStates.bulkGet(discovered.map((profile) => profile.id));
+      if (cancelled) return;
+      discovered.forEach((profile, index) => {
+        const state = storedStates[index];
+        if (state) profileStateCacheRef.current.set(profile.id, state);
+      });
+      const state = runtimeCache?.activeProfile.id === selected.id
+        ? runtimeCache.state
+        : profileStateCacheRef.current.get(selected.id) ?? createProfileState(selected.id, {
+        feeds: initialFeeds,
+        settings: DEFAULT_SETTINGS,
+      });
+      profileStateCacheRef.current.set(selected.id, state);
+      const mergedProfiles = runtimeCache
+        ? [
+            ...discovered,
+            ...runtimeCache.profiles.filter((profile) => !discovered.some((item) => item.id === profile.id)),
+          ]
+        : discovered;
+      if (!runtimeCache) applyProfileState(selected, state);
+      setProfiles(mergedProfiles);
+      localStorage.setItem(ACTIVE_PROFILE_KEY, selected.id);
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem("manhwa-library-route-v1");
+      localStorage.removeItem("manhwa-search-history");
+      localStorage.removeItem("manhwa-search-opened-titles");
+      sessionStorage.removeItem("manhwa-search-query");
+      setProfileReady(true);
+      if (runtimeCache) persistInBackground(saveProfile(runtimeCache.activeProfile, runtimeCache.state));
+    })().catch((error) => {
+      console.error("Profile migration failed", error);
+      setProfileReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [applyProfileState, hasSavedState, initialFeeds, legacySession, local, runtimeCache]);
 
   useEffect(() => {
     if (shouldMigrateFeedsToThreeColumns) {
@@ -237,7 +434,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         setHistory(cachedHistory);
         setRecommendationFeatures(cachedRecommendationFeatures);
         setSyncMeta(meta);
-        setReady(true);
+        setDataReady(true);
 
         const lastSyncTime = meta?.lastSync ? Date.parse(meta.lastSync) : Number.NaN;
         const cacheIsStale = !Number.isFinite(lastSyncTime) || Date.now() - lastSyncTime > 6 * 60 * 60 * 1000;
@@ -263,7 +460,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           setSyncMeta(synced.meta);
           setSettings((current) => ({ ...current, dataSourceUrl: synced.meta.source }));
           setSyncStatus("");
-          setReady(true);
+          setDataReady(true);
           return;
         } catch {
           if (cancelled) return;
@@ -282,7 +479,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           source: "Bundled query index",
         });
       }
-      setReady(true);
+      setDataReady(true);
     })();
     return () => {
       cancelled = true;
@@ -290,17 +487,89 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const buildCurrentProfileState = useCallback((): ProfileState => createProfileState(activeProfile.id, {
+    feeds,
+    folders,
+    labels,
+    settings,
+    activeFeedId,
+    session: profileSession,
+  }), [activeFeedId, activeProfile.id, feeds, folders, labels, profileSession, settings]);
+
   useEffect(() => {
-    const snapshot: AppStateSnapshot = {
-      feeds,
-      folders,
-      labels,
-      settings,
-      activeFeedId,
-      lastRoute: window.location.hash,
+    currentProfileRef.current = activeProfile;
+    currentProfileStateRef.current = activeProfile.id === "loading" ? null : buildCurrentProfileState();
+    if (currentProfileStateRef.current) {
+      profileStateCacheRef.current.set(activeProfile.id, currentProfileStateRef.current);
+    }
+    if (profileReady && currentProfileStateRef.current) {
+      if (runtimeCacheTimerRef.current != null) window.clearTimeout(runtimeCacheTimerRef.current);
+      const state = currentProfileStateRef.current;
+      runtimeCacheTimerRef.current = window.setTimeout(() => {
+        sessionStorage.setItem(PROFILE_RUNTIME_CACHE_KEY, JSON.stringify({
+          activeProfile,
+          profiles,
+          state,
+        } satisfies ProfileRuntimeCache));
+      }, PROFILE_WRITE_DELAY_MS);
+    }
+  }, [activeProfile, buildCurrentProfileState, profileReady, profiles]);
+
+  const flushProfileWrite = useCallback(async () => {
+    if (writeTimerRef.current != null) {
+      window.clearTimeout(writeTimerRef.current);
+      writeTimerRef.current = null;
+    }
+    const state = currentProfileStateRef.current;
+    const profile = currentProfileRef.current;
+    if (!state || profile.id === "loading") return;
+    pendingWriteRef.current = { profile, state };
+    if (!writeInFlightRef.current) {
+      const writeLatest = async () => {
+        while (pendingWriteRef.current) {
+          const pending = pendingWriteRef.current;
+          pendingWriteRef.current = null;
+          await saveProfile(pending.profile, pending.state);
+        }
+      };
+      const write = writeLatest().finally(() => {
+        if (writeInFlightRef.current === write) writeInFlightRef.current = null;
+      });
+      writeInFlightRef.current = write;
+    }
+    await writeInFlightRef.current;
+  }, []);
+
+  useEffect(() => {
+    if (!profileReady || switchingProfileRef.current) return;
+    if (writeTimerRef.current != null) window.clearTimeout(writeTimerRef.current);
+    writeTimerRef.current = window.setTimeout(() => {
+      writeTimerRef.current = null;
+      persistInBackground(flushProfileWrite());
+    }, PROFILE_WRITE_DELAY_MS);
+    return () => {
+      if (writeTimerRef.current != null) window.clearTimeout(writeTimerRef.current);
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-  }, [feeds, folders, labels, settings, activeFeedId]);
+  }, [activeFeedId, activeProfile, feeds, flushProfileWrite, folders, labels, profileReady, profileSession, settings]);
+
+  useEffect(() => {
+    const flush = () => {
+      const state = currentProfileStateRef.current;
+      if (state) {
+        sessionStorage.setItem(PROFILE_RUNTIME_CACHE_KEY, JSON.stringify({
+          activeProfile: currentProfileRef.current,
+          profiles,
+          state,
+        } satisfies ProfileRuntimeCache));
+      }
+      persistInBackground(flushProfileWrite());
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      if (runtimeCacheTimerRef.current != null) window.clearTimeout(runtimeCacheTimerRef.current);
+    };
+  }, [flushProfileWrite, profiles]);
 
   const refreshData = useCallback(async () => {
     setSyncStatus("Starting sync");
@@ -364,17 +633,173 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const updateSettings = useCallback((patch: Partial<AppSettings>) => {
     setSettings((current) => mergeSettings({ ...current, ...patch }));
+    if (patch.accentColor) {
+      const now = new Date().toISOString();
+      setActiveProfile((current) => ({ ...current, accentColor: patch.accentColor!, updatedAt: now }));
+      setProfiles((current) => current.map((profile) => (
+        profile.id === currentProfileRef.current.id
+          ? { ...profile, accentColor: patch.accentColor!, updatedAt: now }
+          : profile
+      )));
+    }
   }, []);
 
-  const resetLocalState = useCallback(async () => {
-    localStorage.removeItem(STORAGE_KEY);
-    await db.details.clear();
+  const updateProfileSession = useCallback((patch: Partial<ProfileSessionState>) => {
+    setProfileSession((current) => ({
+      ...current,
+      ...patch,
+      scroll: patch.scroll ? { ...patch.scroll } : current.scroll,
+      searchHistory: patch.searchHistory ? [...patch.searchHistory] : current.searchHistory,
+      openedTitleIds: patch.openedTitleIds ? [...patch.openedTitleIds] : current.openedTitleIds,
+    }));
+  }, []);
+  const setSearchHistory = useCallback((searchHistory: string[]) => {
+    updateProfileSession({ searchHistory });
+  }, [updateProfileSession]);
+  const setOpenedTitleIds = useCallback((openedTitleIds: number[]) => {
+    updateProfileSession({ openedTitleIds });
+  }, [updateProfileSession]);
+
+  const switchProfile = useCallback(async (id: string) => {
+    if (id === currentProfileRef.current.id) return;
+    switchingProfileRef.current = true;
+    persistInBackground(flushProfileWrite());
+    const profile = profileCacheRef.current.get(id) ?? await profileDb.profiles.get(id);
+    const state = profileStateCacheRef.current.get(id) ?? await loadProfileState(id);
+    if (!profile || !state) {
+      switchingProfileRef.current = false;
+      throw new Error("That profile could not be loaded.");
+    }
+    const now = new Date().toISOString();
+    const selected = { ...profile, lastUsedAt: now };
+    profileCacheRef.current.set(id, selected);
+    applyProfileState(selected, state);
+    setProfiles((current) => current.map((item) => (item.id === id ? selected : item)));
+    localStorage.setItem(ACTIVE_PROFILE_KEY, id);
+    persistInBackground(profileDb.profiles.put(selected));
+    switchingProfileRef.current = false;
+    window.location.hash = state.session.lastRoute || "#/";
+  }, [applyProfileState, flushProfileWrite]);
+
+  const createProfile = useCallback(async (name: string, mode: ProfileSeedMode) => {
+    const cleanName = name.trim();
+    if (!cleanName) throw new Error("Profile name is required.");
+    if (profiles.some((profile) => profile.name.localeCompare(cleanName, undefined, { sensitivity: "accent" }) === 0)) {
+      throw new Error("Profile names must be unique.");
+    }
+    const profile = createProfileRecord(cleanName, mode === "clone" ? settings.accentColor : DEFAULT_SETTINGS.accentColor);
+    const state = mode === "clone"
+      ? createProfileState(profile.id, structuredClone(buildCurrentProfileState()))
+      : createProfileState(profile.id, {
+          feeds: mode === "defaults" ? structuredClone(defaultFeeds) : [],
+          settings: DEFAULT_SETTINGS,
+          activeFeedId: mode === "defaults" ? defaultFeeds[0]?.id ?? null : null,
+        });
+    profileStateCacheRef.current.set(profile.id, state);
+    profileCacheRef.current.set(profile.id, profile);
+    persistInBackground(saveProfile(profile, state));
+    setProfiles((current) => [...current, profile]);
+    return profile;
+  }, [buildCurrentProfileState, defaultFeeds, profiles, settings.accentColor]);
+
+  const renameProfile = useCallback(async (id: string, name: string) => {
+    const cleanName = name.trim();
+    if (!cleanName) throw new Error("Profile name is required.");
+    if (profiles.some((profile) => profile.id !== id && profile.name.localeCompare(cleanName, undefined, { sensitivity: "accent" }) === 0)) {
+      throw new Error("Profile names must be unique.");
+    }
+    const now = new Date().toISOString();
+    const profile = profiles.find((item) => item.id === id);
+    if (!profile) throw new Error("Profile not found.");
+    const updated = { ...profile, name: cleanName, updatedAt: now };
+    profileCacheRef.current.set(id, updated);
+    setProfiles((current) => current.map((item) => (item.id === id ? updated : item)));
+    if (activeProfile.id === id) setActiveProfile(updated);
+    persistInBackground(profileDb.profiles.put(updated));
+  }, [activeProfile.id, profiles]);
+
+  const duplicateProfile = useCallback(async (id: string, name?: string) => {
+    persistInBackground(flushProfileWrite());
+    const sourceProfile = profiles.find((profile) => profile.id === id);
+    const sourceState = id === activeProfile.id
+      ? buildCurrentProfileState()
+      : profileStateCacheRef.current.get(id) ?? await loadProfileState(id);
+    if (!sourceProfile || !sourceState) throw new Error("Profile not found.");
+    const base = name?.trim() || `${sourceProfile.name} Copy`;
+    let uniqueName = base;
+    let suffix = 2;
+    while (profiles.some((profile) => profile.name.localeCompare(uniqueName, undefined, { sensitivity: "accent" }) === 0)) {
+      uniqueName = `${base} ${suffix}`;
+      suffix += 1;
+    }
+    const profile = createProfileRecord(uniqueName, sourceProfile.accentColor);
+    const state = createProfileState(profile.id, structuredClone(sourceState));
+    profileCacheRef.current.set(profile.id, profile);
+    profileStateCacheRef.current.set(profile.id, state);
+    setProfiles((current) => [...current, profile]);
+    persistInBackground(saveProfile(profile, state));
+    return profile;
+  }, [activeProfile.id, buildCurrentProfileState, flushProfileWrite, profiles]);
+
+  const deleteProfile = useCallback(async (id: string) => {
+    if (profiles.length <= 1) throw new Error("The final profile cannot be deleted.");
+    if (id === activeProfile.id) {
+      const next = profiles.find((profile) => profile.id !== id);
+      if (!next) throw new Error("Another profile is required.");
+      await switchProfile(next.id);
+    }
+    await deleteProfileRecord(id);
+    profileCacheRef.current.delete(id);
+    profileStateCacheRef.current.delete(id);
+    setProfiles((current) => current.filter((profile) => profile.id !== id));
+  }, [activeProfile.id, profiles, switchProfile]);
+
+  const resetCurrentProfile = useCallback(async () => {
+    const now = new Date().toISOString();
     setFeeds([]);
     setFolders([]);
     setLabels([]);
-    setSettings(DEFAULT_SETTINGS);
+    setSettings(mergeSettings(DEFAULT_SETTINGS));
     setActiveFeedId(null);
+    setActiveProfile((current) => ({
+      ...current,
+      accentColor: DEFAULT_SETTINGS.accentColor,
+      updatedAt: now,
+    }));
+    setProfiles((current) => current.map((profile) => (
+      profile.id === currentProfileRef.current.id
+        ? { ...profile, accentColor: DEFAULT_SETTINGS.accentColor, updatedAt: now }
+        : profile
+    )));
+    setProfileSession({
+      lastRoute: "#/",
+      scroll: {},
+      searchHistory: [],
+      openedTitleIds: [],
+      searchQuery: "",
+    });
   }, []);
+
+  const resetEntireApp = useCallback(async () => {
+    if (writeTimerRef.current != null) window.clearTimeout(writeTimerRef.current);
+    switchingProfileRef.current = true;
+    currentProfileStateRef.current = null;
+    await Promise.all([
+      profileDb.transaction("rw", profileDb.profiles, profileDb.profileStates, async () => {
+        await profileDb.profileStates.clear();
+        await profileDb.profiles.clear();
+      }),
+      db.details.clear(),
+    ]);
+    localStorage.removeItem(ACTIVE_PROFILE_KEY);
+    sessionStorage.removeItem(PROFILE_RUNTIME_CACHE_KEY);
+    window.location.reload();
+  }, []);
+
+  const exportAllProfiles = useCallback(async () => {
+    await flushProfileWrite();
+    return makeProfilesBackup(activeProfile.id);
+  }, [activeProfile.id, flushProfileWrite]);
 
   const importSnapshot = useCallback((snapshot: Partial<AppStateSnapshot>, mode: "merge" | "replace") => {
     const safeSnapshot = parseAppStateSnapshot(snapshot) ?? snapshot;
@@ -399,18 +824,32 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<StoreState>(
     () => ({
-      ready,
+      ready: dataReady && profileReady,
+      profileReady,
       catalog,
       tags,
       history,
       recommendationFeatures,
       syncMeta,
+      profiles,
+      activeProfile,
+      profileSession,
       feeds,
       folders,
       labels,
       settings,
       activeFeedId,
       syncStatus,
+      switchProfile,
+      createProfile,
+      renameProfile,
+      duplicateProfile,
+      deleteProfile,
+      updateProfileSession,
+      setSearchHistory,
+      setOpenedTitleIds,
+      exportActiveProfile: buildCurrentProfileState,
+      exportAllProfiles,
       setActiveFeedId,
       upsertFeed,
       deleteFeed,
@@ -420,22 +859,37 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       upsertLabel,
       updateSettings,
       refreshData,
-      resetLocalState,
+      resetCurrentProfile,
+      resetEntireApp,
       importSnapshot,
     }),
     [
-      ready,
+      dataReady,
+      profileReady,
       catalog,
       tags,
       history,
       recommendationFeatures,
       syncMeta,
+      profiles,
+      activeProfile,
+      profileSession,
       feeds,
       folders,
       labels,
       settings,
       activeFeedId,
       syncStatus,
+      switchProfile,
+      createProfile,
+      renameProfile,
+      duplicateProfile,
+      deleteProfile,
+      updateProfileSession,
+      setSearchHistory,
+      setOpenedTitleIds,
+      buildCurrentProfileState,
+      exportAllProfiles,
       setActiveFeedId,
       upsertFeed,
       deleteFeed,
@@ -445,7 +899,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       upsertLabel,
       updateSettings,
       refreshData,
-      resetLocalState,
+      resetCurrentProfile,
+      resetEntireApp,
       importSnapshot,
     ],
   );
