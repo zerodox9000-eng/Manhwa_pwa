@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rankRecommendations } from "./recommendations";
+import { rankRecommendations, rankRecommendationsAsync } from "./recommendations";
 import type { RecommendationFeature, SeriesCatalog, TagNode } from "./types";
 
 function series(id: number, title: string, extra: Partial<SeriesCatalog> = {}): SeriesCatalog {
@@ -166,6 +166,23 @@ function expectPreferredOver(ranked: number[], preferred: number, bad: number) {
 }
 
 describe("rankRecommendations", () => {
+  it("keeps the yielding ranker identical to the synchronous ranker", async () => {
+    const base = titles[0];
+    const args = {
+      base,
+      candidates: titles.slice(1),
+      tags: [],
+      features,
+      shelf,
+      history: {},
+      latestDate: null,
+    };
+
+    const synchronous = rankRecommendations(args).map((item) => item.id);
+    const yielding = (await rankRecommendationsAsync(args)).map((item) => item.id);
+    expect(yielding).toEqual(synchronous);
+  });
+
   it("keeps the business career regression golden cluster at the top", () => {
     for (const baseId of [189, 45119, 67834]) {
       const ranked = rankedIds(baseId);

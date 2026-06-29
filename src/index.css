@@ -3215,13 +3215,6 @@ textarea,
   overflow: hidden;
 }
 
-.route-cache-hidden.route-cache-revealing {
-  z-index: 28;
-  visibility: visible;
-  pointer-events: auto;
-  background: var(--bg);
-}
-
 .feed-pager .title-grid .title-card-wrap {
   content-visibility: visible !important;
   contain-intrinsic-size: auto;

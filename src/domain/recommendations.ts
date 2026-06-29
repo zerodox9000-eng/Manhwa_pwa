@@ -874,7 +874,7 @@ export function scoreRecommendation(base: RecommendationFeature, candidate: Reco
   };
 }
 
-export function rankRecommendations(args: {
+interface RankRecommendationArgs {
   base: SeriesCatalog;
   candidates: SeriesCatalog[];
   tags: TagNode[];
@@ -882,26 +882,23 @@ export function rankRecommendations(args: {
   shelf: RecommendationShelf;
   history: HistoryMap;
   latestDate?: string | null;
-}) {
+}
+
+function recommendationContext(args: RankRecommendationArgs) {
   const { base, candidates, tags, features, shelf, history, latestDate } = args;
   const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
   const featuresById = new Map(features.map((feature) => [feature.id, feature]));
   const baseFeature = withDominantContext(base, featuresById.get(base.id) ?? buildFallbackRecommendationFeature(base, tagsById), tagsById);
+  return { baseFeature, candidates, featuresById, history, latestDate, shelf, tagsById };
+}
 
-  const scoreCandidates = (mode: "strict" | "relaxed", skipIds = new Set<number>()) =>
-    candidates
-      .filter((item) => !skipIds.has(item.id))
-      .map((item): ScoredRecommendation | null => {
-        const candidateFeature = withDominantContext(item, featuresById.get(item.id) ?? buildFallbackRecommendationFeature(item, tagsById), tagsById);
-        const score = scoreRecommendation(baseFeature, candidateFeature, mode);
-        return score ? { item, matchTier: mode === "strict" ? 0 : 1, ...score } : null;
-      })
-      .filter((item): item is ScoredRecommendation => Boolean(item));
-
-  const strict = scoreCandidates("strict");
-  const strictIds = new Set(strict.map(({ item }) => item.id));
-  const relaxed = strict.length >= 12 ? [] : scoreCandidates("relaxed", strictIds);
-  return [...strict, ...relaxed]
+function finishRecommendationRanking(
+  scored: ScoredRecommendation[],
+  shelf: RecommendationShelf,
+  history: HistoryMap,
+  latestDate?: string | null,
+) {
+  return scored
     .sort((a, b) => {
       if (a.matchTier !== b.matchTier) return a.matchTier - b.matchTier;
       if (Math.abs(a.finalScore - b.finalScore) > 0.0001) return b.finalScore - a.finalScore;
@@ -925,4 +922,98 @@ export function rankRecommendations(args: {
       return a.item.display_title.localeCompare(b.item.display_title);
     })
     .map(({ item }) => item);
+}
+
+function scoreRecommendationCandidates(
+  context: ReturnType<typeof recommendationContext>,
+  mode: "strict" | "relaxed",
+  skipIds = new Set<number>(),
+) {
+  const scored: ScoredRecommendation[] = [];
+  for (const item of context.candidates) {
+    if (skipIds.has(item.id)) continue;
+    const candidateFeature = withDominantContext(
+      item,
+      context.featuresById.get(item.id) ?? buildFallbackRecommendationFeature(item, context.tagsById),
+      context.tagsById,
+    );
+    const score = scoreRecommendation(context.baseFeature, candidateFeature, mode);
+    if (score) scored.push({ item, matchTier: mode === "strict" ? 0 : 1, ...score });
+  }
+  return scored;
+}
+
+export function rankRecommendations(args: RankRecommendationArgs) {
+  const context = recommendationContext(args);
+  const strict = scoreRecommendationCandidates(context, "strict");
+  const strictIds = new Set(strict.map(({ item }) => item.id));
+  const relaxed = strict.length >= 12 ? [] : scoreRecommendationCandidates(context, "relaxed", strictIds);
+  return finishRecommendationRanking([...strict, ...relaxed], context.shelf, context.history, context.latestDate);
+}
+
+function yieldToNavigation() {
+  return new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+}
+
+async function recommendationContextAsync(args: RankRecommendationArgs, signal?: AbortSignal) {
+  const { base, candidates, tags, features, shelf, history, latestDate } = args;
+  const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
+  const featuresById = new Map<number, RecommendationFeature>();
+
+  await yieldToNavigation();
+  for (let index = 0; index < features.length; index += 1) {
+    if (signal?.aborted) return null;
+    const feature = features[index];
+    featuresById.set(feature.id, feature);
+    if ((index + 1) % 256 === 0) await yieldToNavigation();
+  }
+
+  if (signal?.aborted) return null;
+  const baseFeature = withDominantContext(
+    base,
+    featuresById.get(base.id) ?? buildFallbackRecommendationFeature(base, tagsById),
+    tagsById,
+  );
+  return { baseFeature, candidates, featuresById, history, latestDate, shelf, tagsById };
+}
+
+async function scoreRecommendationCandidatesAsync(
+  context: ReturnType<typeof recommendationContext>,
+  mode: "strict" | "relaxed",
+  skipIds: Set<number>,
+  signal?: AbortSignal,
+) {
+  const scored: ScoredRecommendation[] = [];
+  let processed = 0;
+
+  for (const item of context.candidates) {
+    if (signal?.aborted) return [];
+    if (!skipIds.has(item.id)) {
+      const candidateFeature = withDominantContext(
+        item,
+        context.featuresById.get(item.id) ?? buildFallbackRecommendationFeature(item, context.tagsById),
+        context.tagsById,
+      );
+      const score = scoreRecommendation(context.baseFeature, candidateFeature, mode);
+      if (score) scored.push({ item, matchTier: mode === "strict" ? 0 : 1, ...score });
+    }
+    processed += 1;
+    if (processed % 4 === 0) await yieldToNavigation();
+  }
+
+  return scored;
+}
+
+export async function rankRecommendationsAsync(args: RankRecommendationArgs, signal?: AbortSignal) {
+  const context = await recommendationContextAsync(args, signal);
+  if (!context) return [];
+  const strict = await scoreRecommendationCandidatesAsync(context, "strict", new Set(), signal);
+  if (signal?.aborted) return [];
+  const strictIds = new Set(strict.map(({ item }) => item.id));
+  const relaxed =
+    strict.length >= 12
+      ? []
+      : await scoreRecommendationCandidatesAsync(context, "relaxed", strictIds, signal);
+  if (signal?.aborted) return [];
+  return finishRecommendationRanking([...strict, ...relaxed], context.shelf, context.history, context.latestDate);
 }

@@ -41,9 +41,9 @@ import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT } from "./domain/defaults";
 import { resolveRollingWindow } from "./domain/dates";
-import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, hasDetailTags, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
-import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
-import { rankRecommendations } from "./domain/recommendations";
+import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, hasAniList, hasDetailTags, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
+import { displayComparableMetricValue, formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
+import { rankRecommendationsAsync } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
 import { decodeSharePayload, makeShareUrl, type SharePayload } from "./domain/share";
 import type {
@@ -106,7 +106,7 @@ function clearRouteFeedback() {
 
 function scheduleRouteChange(kind: RouteFeedbackKind, action: () => void) {
   document.documentElement.dataset.routePending = kind;
-  requestAnimationFrame(() => requestAnimationFrame(action));
+  action();
   window.setTimeout(clearRouteFeedback, 1800);
 }
 
@@ -518,10 +518,17 @@ function HomePage() {
   const pagerRef = useRef<HTMLDivElement | null>(null);
   const paneRefs = useRef(new Map<string, HTMLDivElement>());
   const renderCenterIndexRef = useRef(-1);
+  const pendingFeedIndexRef = useRef(-1);
+  const feedSettleTimerRef = useRef<number | null>(null);
   const didInitialPagerAlignRef = useRef(false);
   const { feeds, activeFeedId, setActiveFeedId } = store;
+  const activeFeedIdRef = useRef(activeFeedId);
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
   const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
+
+  useEffect(() => {
+    activeFeedIdRef.current = activeFeedId;
+  }, [activeFeedId]);
 
   useEffect(() => {
     if (!activeFeedId && feeds[0]) setActiveFeedId(feeds[0].id);
@@ -558,24 +565,34 @@ function HomePage() {
   const warmFeedsAroundScrollPosition = useCallback(() => {
     const pager = pagerRef.current;
     if (!pager || feeds.length === 0) return;
-    const handleScroll = () => {
-      const firstPane = paneRefs.current.get(feeds[0]?.id);
-      const secondPane = paneRefs.current.get(feeds[1]?.id);
-      const paneStep = secondPane && firstPane ? secondPane.offsetLeft - firstPane.offsetLeft : firstPane?.offsetWidth;
-      if (!paneStep) return;
-      const scrollIndex = pager.scrollLeft / paneStep;
-      const nearestIndex = Math.round(scrollIndex);
-      const nearestFeedId = feeds[nearestIndex]?.id;
-      if (nearestFeedId && nearestFeedId !== activeFeedId) {
-        setActiveFeedId(nearestFeedId);
+    const firstPane = paneRefs.current.get(feeds[0]?.id);
+    const secondPane = paneRefs.current.get(feeds[1]?.id);
+    const paneStep = secondPane && firstPane ? secondPane.offsetLeft - firstPane.offsetLeft : firstPane?.offsetWidth;
+    if (!paneStep) return;
+
+    const nearestIndex = Math.max(0, Math.min(feeds.length - 1, Math.round(pager.scrollLeft / paneStep)));
+    pendingFeedIndexRef.current = nearestIndex;
+    if (nearestIndex !== renderCenterIndexRef.current) {
+      renderCenterIndexRef.current = nearestIndex;
+      startTransition(() => setRenderCenterIndex(nearestIndex));
+    }
+
+    if (feedSettleTimerRef.current !== null) window.clearTimeout(feedSettleTimerRef.current);
+    feedSettleTimerRef.current = window.setTimeout(() => {
+      feedSettleTimerRef.current = null;
+      const settledFeedId = feeds[pendingFeedIndexRef.current]?.id;
+      if (settledFeedId && settledFeedId !== activeFeedIdRef.current) {
+        setActiveFeedId(settledFeedId);
       }
-      if (nearestIndex !== renderCenterIndexRef.current) {
-        renderCenterIndexRef.current = nearestIndex;
-        startTransition(() => setRenderCenterIndex(nearestIndex));
-      }
-    };
-    handleScroll();
-  }, [activeFeedId, feeds, setActiveFeedId]);
+    }, 110);
+  }, [feeds, setActiveFeedId]);
+
+  useEffect(
+    () => () => {
+      if (feedSettleTimerRef.current !== null) window.clearTimeout(feedSettleTimerRef.current);
+    },
+    [],
+  );
 
   const handleFeedPaneScroll = useCallback(
     (feed: Feed) => {
@@ -1177,7 +1194,10 @@ function TitleMetrics({
   latestDate?: string | null;
   metricWindow?: { from: string; to: string } | null;
 }) {
-  const metricSlots: MetricId[] = useMemo(() => (view.metricSlots ?? []).slice(0, 3), [view.metricSlots]);
+  const metricSlots: MetricId[] = useMemo(
+    () => (view.metricSlots ?? []).filter((metric) => metric !== "underratedScore").slice(0, 3),
+    [view.metricSlots],
+  );
   const values = useMemo(
     () => {
       if (metricSlots.length === 0) return [];
@@ -1187,7 +1207,7 @@ function TitleMetrics({
     },
     [history, latestDate, metricSlots, metricWindow, series],
   );
-  if (metricSlots.length === 0) return null;
+  if (values.length === 0) return null;
   return (
     <div className={`metrics ${compact ? "compact-metrics" : ""}`}>
       {values.map(({ metric, value }) => (
@@ -2285,27 +2305,56 @@ function RecommendationsPage() {
   );
 }
 
-function recommendationItems(base: SeriesCatalog, shelf: RecommendationShelf, store: ReturnType<typeof useAppStore>) {
-  const buildPool = (metricRanges: RecommendationShelf["metricRanges"]) => {
-    const filterFeed = createFeed(shelf.name);
-    filterFeed.filters.sourceModes = shelf.sourceModes;
-    filterFeed.filters.sourceMode = shelf.sourceModes.length === 2 ? "mixed" : shelf.sourceModes[0];
-    filterFeed.filters.contentRatings = ["safe", "suggestive"];
-    filterFeed.filters.metricRanges = metricRanges;
-    return runFeedQuery({
-      feed: filterFeed,
-      series: store.catalog,
-      tags: store.tags,
-      history: store.history,
-      labels: store.labels,
-      settings: store.settings,
-      metaHistoryFirst: store.syncMeta?.historyFirstDate,
-      metaHistoryLast: store.syncMeta?.historyLastDate,
-    }).items.filter((item) => item.id !== base.id);
+async function recommendationItems(
+  base: SeriesCatalog,
+  shelf: RecommendationShelf,
+  store: ReturnType<typeof useAppStore>,
+  signal: AbortSignal,
+) {
+  const yieldToRoute = () => new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+
+  const buildPool = async (metricRanges: RecommendationShelf["metricRanges"]) => {
+    const pool: SeriesCatalog[] = [];
+    const tagsById = new Map(store.tags.map((tag) => [tag.id, tag]));
+    const latestDate = store.syncMeta?.historyLastDate;
+    const growthWindow = resolveRollingWindow({ mode: "last", amount: 1, unit: "days" }, latestDate);
+
+    for (let index = 0; index < store.catalog.length; index += 1) {
+      if (signal.aborted) return [];
+      const item = store.catalog[index];
+      const rating = item.content_rating as ContentRating | null;
+      const sourceMode = hasAniList(item) ? "anilist" : "non-anilist";
+      const matchesRanges = metricRanges.every((range) => {
+        const value =
+          growthWindow && (range.metric.includes("Growth") || range.metric.includes("Delta"))
+            ? historyDeltaForWindow(item.id, range.metric, store.history, growthWindow.from, growthWindow.to)
+            : displayComparableMetricValue(item, range.metric, store.history, latestDate);
+        return (
+          typeof value === "number" &&
+          Number.isFinite(value) &&
+          (range.min == null || value >= range.min) &&
+          (range.max == null || value <= range.max)
+        );
+      });
+
+      if (
+        item.id !== base.id &&
+        hasDetailTags(item, tagsById) &&
+        (!rating || rating === "safe" || rating === "suggestive") &&
+        shelf.sourceModes.includes(sourceMode) &&
+        matchesRanges
+      ) {
+        pool.push(item);
+      }
+
+      if ((index + 1) % 128 === 0) await yieldToRoute();
+    }
+
+    return pool;
   };
 
   const rankPool = (pool: SeriesCatalog[]) =>
-    rankRecommendations({
+    rankRecommendationsAsync({
       base,
       candidates: pool,
       tags: store.tags,
@@ -2313,11 +2362,12 @@ function recommendationItems(base: SeriesCatalog, shelf: RecommendationShelf, st
       shelf,
       history: store.history,
       latestDate: store.syncMeta?.historyLastDate,
-    });
+    }, signal);
 
-  const ranked = rankPool(buildPool(shelf.metricRanges));
+  const ranked = await rankPool(await buildPool(shelf.metricRanges));
+  if (signal.aborted) return [];
   if (ranked.length || !shelf.metricRanges.length) return ranked;
-  return rankPool(buildPool([]));
+  return rankPool(await buildPool([]));
 }
 
 function RecommendationResults({
@@ -2338,14 +2388,17 @@ function RecommendationResults({
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     setItems(null);
     const handle = window.setTimeout(() => {
       if (cancelled) return;
-      const ranked = recommendationItems(base, shelf, store).slice(0, visibleLimit);
-      if (!cancelled) setItems(ranked);
-    }, 24);
+      void recommendationItems(base, shelf, store, controller.signal).then((ranked) => {
+        if (!cancelled && !controller.signal.aborted) setItems(ranked.slice(0, visibleLimit));
+      });
+    }, 600);
     return () => {
       cancelled = true;
+      controller.abort();
       window.clearTimeout(handle);
     };
   }, [
@@ -2758,13 +2811,7 @@ function TitleDetailPage() {
           type="button"
           onClick={() => {
             clearRouteFeedback();
-            const cachedHome = document.querySelector<HTMLElement>(".route-cache-hidden");
-            if (!cachedHome) {
-              navigate(-1);
-              return;
-            }
-            cachedHome.classList.add("route-cache-revealing");
-            requestAnimationFrame(() => requestAnimationFrame(() => navigate(-1)));
+            navigate(-1);
           }}
           aria-label="Back"
         >
@@ -3116,9 +3163,9 @@ function LearnPage() {
           for mapped titles. These values provide audience-size and engagement context; they are not available for every title.
         </LearnItem>
         <LearnItem title="Fan Rank">
-          Fan Rank is similar to comparing a YouTube video&apos;s likes with its views to estimate how strongly viewers engaged.
-          Here, favourites are compared with popularity, adjusted for sample-size confidence, and converted to a percentile so very
-          small audiences do not unfairly dominate.
+          Fan Rank measures fan engagement using AniList favourites relative to popularity, similar to comparing likes with views
+          on a YouTube video. It adjusts for titles with low popularity so limited data does not produce an unfairly high rank. A
+          Fan Rank of 90% means stronger fan engagement than 90% of titles.
         </LearnItem>
         <LearnItem title="Dates and history">
           Release and completion windows use confirmed dates only; estimated dates never qualify. Growth values compare available
