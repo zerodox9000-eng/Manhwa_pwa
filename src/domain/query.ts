@@ -223,12 +223,37 @@ export function runFeedQuery(args: {
   history: HistoryMap;
   labels: UserLabel[];
   settings: AppSettings;
+  catalogById?: ReadonlyMap<number, SeriesCatalog>;
   metaHistoryFirst?: string | null;
   metaHistoryLast?: string | null;
 }): QueryResult {
   const { feed, series, tags, history, labels, settings, metaHistoryFirst, metaHistoryLast } = args;
-  const filters = feed.filters;
   const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
+  if (feed.kind === "custom") {
+    const seriesById = args.catalogById ?? new Map(series.map((item) => [item.id, item]));
+    const customItems = feed.customTitleIds
+      .map((id) => seriesById.get(id))
+      .filter((item): item is SeriesCatalog => Boolean(item && hasDetailTags(item, tagsById)));
+    const queried = runFeedQuery({
+      ...args,
+      series: customItems,
+      settings: { ...settings, nonAniListPlacement: feed.customNonAniListPlacement },
+      feed: {
+        ...feed,
+        kind: "logic",
+        filters: {
+          ...feed.filters,
+          sourceMode: "mixed",
+          sourceModes: ["anilist", "non-anilist"],
+          query: "",
+        },
+      },
+    });
+    if (!feed.customOrder && feed.sort.length > 0) return queried;
+    const visibleIds = new Set(queried.items.map((item) => item.id));
+    return { ...queried, items: customItems.filter((item) => visibleIds.has(item.id)) };
+  }
+  const filters = feed.filters;
   const includeTagGroups = filters.includeTagIds.map((id) => [id]);
   const includeTagIds = [...new Set(filters.includeTagIds)];
   const excludeTagIds = filters.excludeTagIds;

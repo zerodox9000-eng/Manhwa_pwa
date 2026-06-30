@@ -263,6 +263,7 @@ const sortRuleSchema = z
 const feedSchema = z
   .object({
     id: z.string(),
+    kind: z.enum(["logic", "custom"]).optional(),
     name: z.string().optional(),
     description: z.string().optional(),
     showDescription: z.boolean().optional(),
@@ -272,6 +273,10 @@ const feedSchema = z
     sort: z.array(sortRuleSchema).optional(),
     view: feedViewSettingsSchema.optional(),
     coverTitleIds: z.array(z.number()).optional(),
+    customTitleIds: z.array(z.number()).max(500).optional(),
+    customOrder: z.boolean().optional(),
+    customInsertion: z.enum(["top", "bottom"]).optional(),
+    customNonAniListPlacement: z.enum(["top", "bottom"]).optional(),
   })
   .passthrough();
 

@@ -53,6 +53,7 @@ const THREE_COLUMN_FEEDS_MIGRATION_KEY = "manhwa-three-column-feeds-v1";
 const PROFILE_WRITE_DELAY_MS = 180;
 const PROFILE_RUNTIME_CACHE_KEY = "manhwa-profile-runtime-v1";
 export const MAX_PROFILES = 5;
+export const MAX_CUSTOM_FEED_TITLES = 500;
 
 function persistInBackground(promise: Promise<unknown>) {
   void promise.catch((error) => console.error("Profile persistence failed", error));
@@ -80,6 +81,7 @@ interface StoreState {
   ready: boolean;
   profileReady: boolean;
   catalog: SeriesCatalog[];
+  catalogById: ReadonlyMap<number, SeriesCatalog>;
   tags: TagNode[];
   history: HistoryMap;
   recommendationFeatures: RecommendationFeature[];
@@ -93,6 +95,8 @@ interface StoreState {
   labels: UserLabel[];
   settings: AppSettings;
   activeFeedId: string | null;
+  selectedTitleIds: number[];
+  reorderFeedId: string | null;
   syncStatus: string;
   switchProfile: (id: string) => Promise<void>;
   createProfile: (name: string, mode: ProfileSeedMode) => Promise<Profile>;
@@ -102,6 +106,9 @@ interface StoreState {
   updateProfileSession: (patch: Partial<ProfileSessionState>) => void;
   setSearchHistory: (history: string[]) => void;
   setOpenedTitleIds: (ids: number[]) => void;
+  setSelectedTitleIds: (ids: number[]) => void;
+  toggleSelectedTitleId: (id: number) => void;
+  setReorderFeedId: (id: string | null) => void;
   exportActiveProfile: () => ProfileState;
   exportAllProfiles: () => Promise<ProfilesBackup>;
   setActiveFeedId: (id: string | null) => void;
@@ -253,6 +260,7 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
   ).slice(0, 3);
   const normalized: Feed = {
     ...feed,
+    kind: feed.kind === "custom" ? "custom" : "logic",
     description: feed.description ?? "",
     showDescription: feed.showDescription ?? false,
     filters: {
@@ -274,6 +282,10 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
       query: "",
     },
     sort: feed.sort?.length ? feed.sort : [],
+    customTitleIds: [...new Set(feed.customTitleIds ?? [])].slice(0, MAX_CUSTOM_FEED_TITLES),
+    customOrder: feed.kind === "custom" ? (feed.customOrder ?? true) : false,
+    customInsertion: feed.customInsertion === "bottom" ? "bottom" : "top",
+    customNonAniListPlacement: feed.customNonAniListPlacement === "top" ? "top" : "bottom",
     view: {
       ...DEFAULT_SETTINGS.defaultFeedView,
       ...feed.view,
@@ -313,12 +325,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [dataReady, setDataReady] = useState(false);
   const [profileReady, setProfileReady] = useState(false);
   const [catalog, setCatalog] = useState<SeriesCatalog[]>([]);
+  const catalogById = useMemo(() => new Map(catalog.map((item) => [item.id, item])), [catalog]);
   const [tags, setTags] = useState<TagNode[]>([]);
   const [history, setHistory] = useState<HistoryMap>({});
   const [recommendationFeatures, setRecommendationFeatures] = useState<RecommendationFeature[]>([]);
   const [syncMeta, setSyncMeta] = useState<SyncMeta | null>(null);
   const defaultFeeds = useMemo(
-    () => (defaultFeedsJson as Feed[]).map((feed) => {
+    () => (defaultFeedsJson as unknown as Feed[]).map((feed) => {
       const normalized = normalizeFeed(feed);
       return { ...normalized, view: { ...normalized.view, gridColumns: 3 as const } };
     }),
@@ -347,6 +360,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
   const [settings, setSettings] = useState<AppSettings>(mergeSettings(parseSettings(local.settings) ?? local.settings));
   const [activeFeedId, setActiveFeedId] = useState<string | null>(local.activeFeedId ?? null);
+  const [selectedTitleIds, setSelectedTitleIds] = useState<number[]>([]);
+  const toggleSelectedTitleId = useCallback((id: number) => {
+    setSelectedTitleIds((current) => current.includes(id)
+      ? current.filter((titleId) => titleId !== id)
+      : [...current, id]);
+  }, []);
+  const [reorderFeedId, setReorderFeedId] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState("");
   const writeTimerRef = useRef<number | null>(null);
   const runtimeCacheTimerRef = useRef<number | null>(null);
@@ -382,6 +402,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setLabels(state.labels ?? []);
     setSettings(mergeSettings(state.settings));
     setActiveFeedId(state.activeFeedId ?? null);
+    setSelectedTitleIds([]);
+    setReorderFeedId(null);
     setProfileSession({
       lastRoute: state.session?.lastRoute || "#/",
       scroll: { ...(state.session?.scroll ?? {}) },
@@ -1037,6 +1059,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       ready: dataReady && profileReady,
       profileReady,
       catalog,
+      catalogById,
       tags,
       history,
       recommendationFeatures,
@@ -1050,6 +1073,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       labels,
       settings,
       activeFeedId,
+      selectedTitleIds,
+      reorderFeedId,
       syncStatus,
       switchProfile,
       createProfile,
@@ -1059,6 +1084,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       updateProfileSession,
       setSearchHistory,
       setOpenedTitleIds,
+      setSelectedTitleIds,
+      toggleSelectedTitleId,
+      setReorderFeedId,
       exportActiveProfile: buildCurrentProfileState,
       exportAllProfiles,
       setActiveFeedId,
@@ -1084,6 +1112,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       dataReady,
       profileReady,
       catalog,
+      catalogById,
       tags,
       history,
       recommendationFeatures,
@@ -1097,6 +1126,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       labels,
       settings,
       activeFeedId,
+      selectedTitleIds,
+      reorderFeedId,
       syncStatus,
       switchProfile,
       createProfile,
@@ -1106,6 +1137,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       updateProfileSession,
       setSearchHistory,
       setOpenedTitleIds,
+      toggleSelectedTitleId,
       buildCurrentProfileState,
       exportAllProfiles,
       setActiveFeedId,

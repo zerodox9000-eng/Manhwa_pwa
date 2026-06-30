@@ -9,6 +9,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragMoveEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
@@ -49,7 +50,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { appDebugLog } from "./lib/debug";
 import ReactMarkdown from "react-markdown";
 import {
@@ -65,7 +66,7 @@ import {
 } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
+import { createCustomFeed, createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
 import { resolveRollingWindow } from "./domain/dates";
 import {
   canGroupFoldersInNewParent,
@@ -101,7 +102,7 @@ import type {
   TagNode,
 } from "./domain/types";
 import { fetchSeriesDetail } from "./services/dataService";
-import { AppStoreProvider, MAX_PROFILES, useAppStore } from "./store/useAppStore";
+import { AppStoreProvider, MAX_CUSTOM_FEED_TITLES, MAX_PROFILES, useAppStore } from "./store/useAppStore";
 import { ACTIVE_PROFILE_KEY } from "./store/profilePersistence";
 
 const NAV_ITEMS = [
@@ -118,13 +119,15 @@ const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.
 const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
 const SEARCH_DEBOUNCE_MS = 140;
-const HOME_FEED_RENDER_RADIUS = 4;
+const HOME_FEED_RENDER_RADIUS = 2;
 const HOME_FEED_PREVIEW_TITLES = 18;
 const FEED_TITLE_EXPANDED_MAX = 140;
 const FEED_DESCRIPTION_EXPANDED_MAX = 260;
 const PWA_CHROME_THEME_COLOR = "#11131a";
 
 const HOME_SCROLL_PREFIX = "manhwa-home-scroll";
+const homeScrollMemory = new Map<string, number>();
+const homeScrollWriteTimers = new Map<string, number>();
 const HOME_RETURNING_FROM_TITLE_KEY = "manhwa-home-returning-from-title";
 const HOME_RETURN_FEED_KEY = "manhwa-home-return-feed";
 const FEEDS_SCROLL_KEY = "manhwa-feeds-scroll";
@@ -253,12 +256,29 @@ function getHomeScrollContainer(feed: Feed | null) {
   return document.querySelector<HTMLElement>(`[data-home-scroll-key="${homeScrollKey(feed)}"]`);
 }
 
+function readHomeScroll(feed: Feed | null) {
+  if (!feed) return 0;
+  const key = homeScrollKey(feed);
+  const cached = homeScrollMemory.get(key);
+  if (cached != null) return cached;
+  const stored = Number(localStorage.getItem(key));
+  const value = Number.isFinite(stored) && stored > 0 ? stored : 0;
+  homeScrollMemory.set(key, value);
+  return value;
+}
+
 function saveHomeScroll(feed: Feed | null) {
   if (!feed) return;
   try {
     const key = homeScrollKey(feed);
     const scrollTop = getHomeScrollContainer(feed)?.scrollTop ?? 0;
-    localStorage.setItem(key, String(scrollTop));
+    homeScrollMemory.set(key, scrollTop);
+    const pending = homeScrollWriteTimers.get(key);
+    if (pending != null) window.clearTimeout(pending);
+    homeScrollWriteTimers.set(key, window.setTimeout(() => {
+      localStorage.setItem(key, String(homeScrollMemory.get(key) ?? 0));
+      homeScrollWriteTimers.delete(key);
+    }, 120));
   } catch {
     // Best effort only.
   }
@@ -278,7 +298,7 @@ function prepareHomeTitleNavigation(feed: Feed | null) {
 function restoreHomeScroll(feed: Feed | null) {
   if (!feed) return;
   const key = homeScrollKey(feed);
-  const target = Number(localStorage.getItem(key));
+  const target = readHomeScroll(feed);
   appDebugLog("home-scroll", "restore lookup", { feedId: feed?.id ?? null, key, target });
   if (!Number.isFinite(target) || target <= 0) return;
   const container = getHomeScrollContainer(feed);
@@ -286,7 +306,7 @@ function restoreHomeScroll(feed: Feed | null) {
     requestAnimationFrame(() => restoreHomeScroll(feed));
     return;
   }
-  container.scrollTo({ top: target, behavior: "auto" });
+  container.scrollTo({ top: target, behavior: "instant" });
 }
 
 function formatStatusLabel(value: string | null | undefined) {
@@ -326,7 +346,15 @@ function AppFrame() {
   const showingHome = location.pathname === "/";
   const showingTitle = location.pathname.startsWith("/title/");
   const keepHomeMounted = showingHome || showingTitle;
+  const { reorderFeedId, setReorderFeedId } = store;
   const lastHomeTapAtRef = useRef(0);
+  const [bulkAddOpen, setBulkAddOpen] = useState(false);
+  const activeCustomFeed = showingHome
+    ? store.feeds.find((feed) => feed.id === store.activeFeedId && feed.kind === "custom") ?? null
+    : null;
+  useEffect(() => {
+    if (!showingHome && reorderFeedId) setReorderFeedId(null);
+  }, [showingHome, reorderFeedId, setReorderFeedId]);
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", store.settings.accentColor);
     document.title = store.settings.appName || "Manhwa Lib";
@@ -402,6 +430,58 @@ function AppFrame() {
         )}
       </main>
 
+      {store.selectedTitleIds.length > 0 ? (
+        <div className="title-selection-dock" role="toolbar" aria-label="Selected titles">
+          <strong>{store.selectedTitleIds.length}</strong>
+          <button type="button" onClick={() => setBulkAddOpen(true)}>
+            <Plus size={18} /> Add
+          </button>
+          {activeCustomFeed ? (
+            <button
+              type="button"
+              onClick={() => {
+                store.setReorderFeedId(activeCustomFeed.id);
+                store.setSelectedTitleIds([]);
+              }}
+            >
+              <GripVertical size={18} /> Reorder
+            </button>
+          ) : null}
+          {activeCustomFeed ? (
+            <button
+              className="danger-text"
+              type="button"
+              onClick={() => {
+                const selected = new Set(store.selectedTitleIds);
+                store.upsertFeed({
+                  ...activeCustomFeed,
+                  customTitleIds: activeCustomFeed.customTitleIds.filter((id) => !selected.has(id)),
+                });
+                store.setSelectedTitleIds([]);
+              }}
+            >
+              <Trash2 size={18} /> Remove
+            </button>
+          ) : null}
+          <button type="button" onClick={() => store.setSelectedTitleIds([])}>
+            <Check size={18} /> Done
+          </button>
+        </div>
+      ) : null}
+      {showingHome && store.reorderFeedId ? (
+        <div className="title-selection-dock" role="toolbar" aria-label="Reorder titles">
+          <GripVertical size={18} />
+          <strong className="reorder-dock-label">Drag titles to reorder</strong>
+          <button type="button" onClick={() => store.setReorderFeedId(null)}>
+            <Check size={18} /> Done
+          </button>
+        </div>
+      ) : null}
+      <AddTitlesToCustomFeedsDrawer
+        titleIds={store.selectedTitleIds}
+        open={bulkAddOpen}
+        onOpenChange={setBulkAddOpen}
+      />
       <nav className="bottom-nav" aria-label="Main navigation">
         {nav.map((item) => {
           const Icon = item.icon;
@@ -577,6 +657,7 @@ function HomePage() {
   const location = useLocation();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingFeed, setEditingFeed] = useState<Feed | null>(null);
+  const [editingCustomTitlesFeed, setEditingCustomTitlesFeed] = useState<Feed | null>(null);
   const [renderCenterIndex, setRenderCenterIndex] = useState(-1);
   const [returningFromTitle, setReturningFromTitle] = useState(
     () => sessionStorage.getItem(profileStorageKey(HOME_RETURNING_FROM_TITLE_KEY)) === "1",
@@ -627,6 +708,18 @@ function HomePage() {
   }, [activeFeedIndex]);
 
   useLayoutEffect(() => {
+    if (renderCenterIndex < 0) return;
+    const nearbyFeeds = feeds.slice(
+      Math.max(0, renderCenterIndex - HOME_FEED_RENDER_RADIUS),
+      Math.min(feeds.length, renderCenterIndex + HOME_FEED_RENDER_RADIUS + 1),
+    );
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(() => nearbyFeeds.forEach((feed) => restoreHomeScroll(feed)));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [feeds, renderCenterIndex]);
+
+  useLayoutEffect(() => {
     const enteredHome = previousHomePathRef.current !== "/" && location.pathname === "/";
     previousHomePathRef.current = location.pathname;
     if (!store.ready || !activeFeed || location.pathname !== "/") return;
@@ -670,7 +763,6 @@ function HomePage() {
       renderCenterIndexRef.current = nearestIndex;
       startTransition(() => setRenderCenterIndex(nearestIndex));
     }
-
     if (feedSettleTimerRef.current !== null) window.clearTimeout(feedSettleTimerRef.current);
     feedSettleTimerRef.current = window.setTimeout(() => {
       feedSettleTimerRef.current = null;
@@ -729,7 +821,12 @@ function HomePage() {
           </button>
         </div>
       ) : (
-        <div className="feed-pager" ref={pagerRef} aria-label="Home feeds" onScroll={warmFeedsAroundScrollPosition}>
+        <div
+          className={`feed-pager ${store.reorderFeedId ? "title-reorder-mode" : ""}`}
+          ref={pagerRef}
+          aria-label="Home feeds"
+          onScroll={warmFeedsAroundScrollPosition}
+        >
           <div className="feed-pager-track">
             {feeds.map((feed, index) => {
               const isActive = index === activeFeedIndex;
@@ -737,6 +834,7 @@ function HomePage() {
               const renderRadius = returningFromTitle ? 0 : HOME_FEED_RENDER_RADIUS;
               const isNearby = renderOriginIndex >= 0 && Math.abs(index - renderOriginIndex) <= renderRadius;
               const shouldRenderFeed = isActive || isNearby;
+              const retainedScrollTop = readHomeScroll(feed);
               return (
                 <div
                   key={feed.id}
@@ -752,11 +850,21 @@ function HomePage() {
                     data-home-scroll-key={homeScrollKey(feed)}
                     onScroll={() => handleFeedPaneScroll(feed)}
                   >
-                    {shouldRenderFeed ? (
-                      <FeedView feed={feed} preview={!isActive} onEdit={() => setEditingFeed(feed)} />
-                    ) : (
-                      <HomeFeedPaneSkeleton feed={feed} />
-                    )}
+                    <div
+                      className="feed-pane-content"
+                      style={retainedScrollTop > 0 ? { minHeight: `calc(${retainedScrollTop}px + 100dvh)` } : undefined}
+                    >
+                      {shouldRenderFeed ? (
+                        <FeedView
+                          feed={feed}
+                          preview={!isActive}
+                          onEdit={() => setEditingFeed(feed)}
+                          onManageTitles={() => setEditingCustomTitlesFeed(feed)}
+                        />
+                      ) : (
+                        <HomeFeedPaneSkeleton feed={feed} />
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -776,12 +884,41 @@ function HomePage() {
       </BottomDrawer>
       <BottomDrawer title="Edit Feed" open={Boolean(editingFeed)} onOpenChange={(open) => !open && setEditingFeed(null)}>
         {editingFeed ? (
-          <FeedEditor
-            feed={editingFeed}
-            onCancel={() => setEditingFeed(null)}
+          editingFeed.kind === "custom" ? (
+            <CustomFeedEditor
+              feed={editingFeed}
+              mode="settings"
+              onCancel={() => setEditingFeed(null)}
+              onSave={(feed) => {
+                store.upsertFeed(feed);
+                setEditingFeed(null);
+              }}
+            />
+          ) : (
+            <FeedEditor
+              feed={editingFeed}
+              onCancel={() => setEditingFeed(null)}
+              onSave={(feed) => {
+                store.upsertFeed(feed);
+                setEditingFeed(null);
+              }}
+            />
+          )
+        ) : null}
+      </BottomDrawer>
+      <BottomDrawer
+        title={`Titles - ${editingCustomTitlesFeed?.name ?? ""}`}
+        open={Boolean(editingCustomTitlesFeed)}
+        onOpenChange={(open) => !open && setEditingCustomTitlesFeed(null)}
+      >
+        {editingCustomTitlesFeed ? (
+          <CustomFeedEditor
+            feed={editingCustomTitlesFeed}
+            mode="titles"
+            onCancel={() => setEditingCustomTitlesFeed(null)}
             onSave={(feed) => {
               store.upsertFeed(feed);
-              setEditingFeed(null);
+              setEditingCustomTitlesFeed(null);
             }}
           />
         ) : null}
@@ -790,18 +927,33 @@ function HomePage() {
   );
 }
 
-function FeedView({ feed, preview = false, onEdit }: { feed: Feed; preview?: boolean; onEdit?: () => void }) {
+function FeedView({
+  feed,
+  preview = false,
+  onEdit,
+  onManageTitles,
+}: {
+  feed: Feed;
+  preview?: boolean;
+  onEdit?: () => void;
+  onManageTitles?: () => void;
+}) {
   const store = useAppStore();
   const [titleExpanded, setTitleExpanded] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [descriptionOverflows, setDescriptionOverflows] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [feedSearchOpen, setFeedSearchOpen] = useState(false);
+  const [feedSearchText, setFeedSearchText] = useState("");
   const titleTapTimerRef = useRef<number | null>(null);
+  const lastHeaderTapRef = useRef(0);
   const descriptionRef = useRef<HTMLSpanElement | null>(null);
   const query = useMemo(
     () =>
       runFeedQuery({
         feed,
         series: store.catalog,
+        catalogById: store.catalogById,
         tags: store.tags,
         history: store.history,
         labels: store.labels,
@@ -809,9 +961,38 @@ function FeedView({ feed, preview = false, onEdit }: { feed: Feed; preview?: boo
         metaHistoryFirst: store.syncMeta?.historyFirstDate,
         metaHistoryLast: store.syncMeta?.historyLastDate,
       }),
-    [feed, store.catalog, store.history, store.labels, store.settings, store.syncMeta, store.tags],
+    [feed, store.catalog, store.catalogById, store.history, store.labels, store.settings, store.syncMeta, store.tags],
   );
   const hasDescription = feed.showDescription && Boolean(feed.description.trim());
+  const deferredFeedSearch = useDeferredValue(feedSearchText.trim().toLocaleLowerCase());
+  const rankById = useMemo(
+    () => new Map(query.items.map((series, index) => [series.id, index + 1])),
+    [query.items],
+  );
+  const visibleItems = useMemo(() => {
+    if (!deferredFeedSearch) return query.items;
+    return query.items.filter((series) => [
+      visibleTitle(series),
+      series.native_title,
+      series.romanized_title,
+      ...(series.authors ?? []),
+      ...(series.artists ?? []),
+    ].filter(Boolean).join(" ").toLocaleLowerCase().includes(deferredFeedSearch));
+  }, [deferredFeedSearch, query.items]);
+  const handleHeaderTap = (event: React.PointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest(".feed-title-button")) return;
+    const now = performance.now();
+    if (now - lastHeaderTapRef.current <= 320) {
+      lastHeaderTapRef.current = 0;
+      if (titleTapTimerRef.current != null) {
+        window.clearTimeout(titleTapTimerRef.current);
+        titleTapTimerRef.current = null;
+      }
+      setActionsOpen(true);
+      return;
+    }
+    lastHeaderTapRef.current = now;
+  };
   const titleCanExpand = feed.name.trim().length > 34;
   const descriptionCanExpand = hasDescription && descriptionOverflows;
   const descriptionText = hasDescription ? cappedText(feed.description, FEED_DESCRIPTION_EXPANDED_MAX) : "";
@@ -833,7 +1014,10 @@ function FeedView({ feed, preview = false, onEdit }: { feed: Feed; preview?: boo
   return (
     <>
       <section className="section feed-summary-section">
-        <div className={`feed-summary-card ${titleExpanded || descriptionExpanded ? "expanded" : ""}`}>
+        <div
+          className={`feed-summary-card ${titleExpanded || descriptionExpanded ? "expanded" : ""}`}
+          onPointerUp={handleHeaderTap}
+        >
           <FeedBarCoverWash items={query.items.slice(0, 3)} />
           <div className="feed-summary-content">
             <button
@@ -854,7 +1038,7 @@ function FeedView({ feed, preview = false, onEdit }: { feed: Feed; preview?: boo
                 onEdit?.();
               }}
               aria-expanded={titleCanExpand ? titleExpanded : undefined}
-              aria-label={`${feed.name}. Double tap to edit feed.`}
+              aria-label={`${feed.name}. Double tap for feed settings.`}
             >
               <FitSingleLineTitle text={feed.name} expanded={titleExpanded} maxChars={FEED_TITLE_EXPANDED_MAX} />
             </button>
@@ -874,13 +1058,52 @@ function FeedView({ feed, preview = false, onEdit }: { feed: Feed; preview?: boo
           </div>
         </div>
       </section>
+      {feedSearchOpen ? (
+        <div className="feed-inline-search">
+          <Search size={18} />
+          <input
+            className="input"
+            type="search"
+            value={feedSearchText}
+            onChange={(event) => setFeedSearchText(event.target.value)}
+            placeholder={`Search ${feed.name}`}
+            autoComplete="off"
+            autoFocus
+          />
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Close feed search"
+            onClick={() => { setFeedSearchOpen(false); setFeedSearchText(""); }}
+          >
+            <X size={18} />
+          </button>
+        </div>
+      ) : null}
       <TitleCollection
-        items={query.items}
+        items={visibleItems}
         feed={feed}
         history={store.history}
         latestDate={store.syncMeta?.historyLastDate}
         preview={preview}
+        rankById={rankById}
       />
+      <BottomDrawer title={feed.name} open={actionsOpen} onOpenChange={setActionsOpen}>
+        <div className="detail-action-list">
+          <button type="button" onClick={() => { setActionsOpen(false); setFeedSearchOpen(true); }}>
+            <Search size={18} /><span><strong>Search Inside Feed</strong></span><ChevronRight size={18} />
+          </button>
+          {feed.kind === "custom" ? (
+            <button type="button" onClick={() => { setActionsOpen(false); onManageTitles?.(); }}>
+              <Plus size={18} /><span><strong>Add or Remove Titles</strong></span><ChevronRight size={18} />
+            </button>
+          ) : null}
+          <button type="button" onClick={() => { setActionsOpen(false); onEdit?.(); }}>
+            <SlidersHorizontal size={18} /><span><strong>Feed Settings</strong></span><ChevronRight size={18} />
+          </button>
+          <SharePanelButton payload={{ kind: "feed", version: 2, feed }} label="Share Feed" />
+        </div>
+      </BottomDrawer>
     </>
   );
 }
@@ -1019,6 +1242,8 @@ function TitleCollection({
   onTitleOpen?: (series: SeriesCatalog) => void;
   rankById?: Map<number, number>;
 }) {
+  const store = useAppStore();
+  const { selectedTitleIds, toggleSelectedTitleId } = store;
   const pageSize = feed.view.gridColumns >= 5 ? 60 : feed.view.gridColumns === 4 ? 72 : 120;
   const countKey = profileStorageKey(`manhwa-visible-count:${feed.id}:${feed.view.gridColumns}`);
   const [visibleCount, setVisibleCount] = useState(() => Number(sessionStorage.getItem(countKey)) || pageSize);
@@ -1030,7 +1255,70 @@ function TitleCollection({
     sessionStorage.setItem(countKey, String(visibleCount));
   }, [countKey, visibleCount]);
   const visibleItems = items.slice(0, preview ? Math.min(visibleCount, HOME_FEED_PREVIEW_TITLES) : visibleCount);
+  const selectedIdSet = useMemo(() => new Set(selectedTitleIds), [selectedTitleIds]);
+  const toggleSelection = toggleSelectedTitleId;
   const metricWindow = useMemo(() => resolveRollingWindow(feed.filters.rolling, latestDate), [feed.filters.rolling, latestDate]);
+  const reorderEnabled = feed.kind === "custom" && store.reorderFeedId === feed.id;
+  const [draggedTitleId, setDraggedTitleId] = useState<number | null>(null);
+  const dragScrollVelocityRef = useRef(0);
+  const dragScrollFrameRef = useRef<number | null>(null);
+  const reorderSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const stopDragScroll = useCallback(() => {
+    dragScrollVelocityRef.current = 0;
+    if (dragScrollFrameRef.current != null) cancelAnimationFrame(dragScrollFrameRef.current);
+    dragScrollFrameRef.current = null;
+  }, []);
+  const runDragScroll = useCallback(() => {
+    const velocity = dragScrollVelocityRef.current;
+    if (!velocity) {
+      dragScrollFrameRef.current = null;
+      return;
+    }
+    const scroller = getHomeScrollContainer(feed);
+    if (scroller) scroller.scrollTop += velocity;
+    dragScrollFrameRef.current = requestAnimationFrame(runDragScroll);
+  }, [feed]);
+  const handleResultDragMove = useCallback((event: DragMoveEvent) => {
+    const rect = event.active.rect.current.translated;
+    if (!rect) return;
+    const centerY = rect.top + rect.height / 2;
+    const edge = 112;
+    const usableBottom = window.innerHeight - 92;
+    const velocity = centerY < edge
+      ? -Math.min(14, Math.max(3, (edge - centerY) / 7))
+      : centerY > usableBottom - edge
+        ? Math.min(14, Math.max(3, (centerY - (usableBottom - edge)) / 7))
+        : 0;
+    dragScrollVelocityRef.current = velocity;
+    if (velocity && dragScrollFrameRef.current == null) {
+      dragScrollFrameRef.current = requestAnimationFrame(runDragScroll);
+    }
+  }, [runDragScroll]);
+  useEffect(() => stopDragScroll, [stopDragScroll]);
+  const handleResultReorder = useCallback((event: DragEndEvent) => {
+    stopDragScroll();
+    setDraggedTitleId(null);
+    const activeId = Number(String(event.active.id).replace("result-title:", ""));
+    const overId = event.over ? Number(String(event.over.id).replace("result-title:", "")) : NaN;
+    if (!Number.isFinite(activeId) || !Number.isFinite(overId) || activeId === overId || feed.kind !== "custom") return;
+    const displayedIds = items.map((item) => item.id);
+    const sourceIndex = displayedIds.indexOf(activeId);
+    const targetIndex = displayedIds.indexOf(overId);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    const reordered = [...displayedIds];
+    const [moved] = reordered.splice(sourceIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+    const displayedSet = new Set(displayedIds);
+    store.upsertFeed({
+      ...feed,
+      customTitleIds: [...reordered, ...feed.customTitleIds.filter((id) => !displayedSet.has(id))],
+      customOrder: true,
+      sort: [],
+    });
+  }, [feed, items, stopDragScroll, store]);
 
   if (loading) {
     return <TitleCollectionSkeleton columns={feed.view.gridColumns} />;
@@ -1045,26 +1333,64 @@ function TitleCollection({
       </div>
     );
   }
+  const cards = visibleItems.map((series, index) => {
+    const card = (
+      <MemoTitleCard
+        key={series.id}
+        series={series}
+        rank={rankById?.get(series.id) ?? index + 1}
+        view={feed.view}
+        feed={feed}
+        history={history}
+        latestDate={latestDate}
+        metricWindow={metricWindow}
+        onOpen={onTitleOpen}
+        selected={selectedIdSet.has(series.id)}
+        selectionActive={selectedTitleIds.length > 0}
+        onToggleSelection={toggleSelection}
+        reorderActive={reorderEnabled}
+      />
+    );
+    return reorderEnabled
+      ? <SortableResultTitleCard key={series.id} titleId={series.id}>{card}</SortableResultTitleCard>
+      : card;
+  });
+  const grid = (
+    <div
+      className={`title-grid columns-${feed.view.gridColumns} density-${feed.view.gridDensity} ${reorderEnabled ? "result-reorder-active" : ""}`}
+      style={{ "--grid-columns": feed.view.gridColumns } as React.CSSProperties}
+    >
+      {cards}
+    </div>
+  );
   return (
     <>
-      <div
-        className={`title-grid columns-${feed.view.gridColumns} density-${feed.view.gridDensity}`}
-        style={{ "--grid-columns": feed.view.gridColumns } as React.CSSProperties}
-      >
-        {visibleItems.map((series, index) => (
-          <MemoTitleCard
-            key={series.id}
-            series={series}
-            rank={rankById?.get(series.id) ?? index + 1}
-            view={feed.view}
-            feed={feed}
-            history={history}
-            latestDate={latestDate}
-            metricWindow={metricWindow}
-            onOpen={onTitleOpen}
-          />
-        ))}
-      </div>
+      {reorderEnabled ? (
+        <DndContext
+          sensors={reorderSensors}
+          collisionDetection={closestCenter}
+          autoScroll={false}
+          onDragStart={(event) => setDraggedTitleId(Number(String(event.active.id).replace("result-title:", "")))}
+          onDragMove={handleResultDragMove}
+          onDragCancel={() => {
+            stopDragScroll();
+            setDraggedTitleId(null);
+          }}
+          onDragEnd={handleResultReorder}
+        >
+          <SortableContext
+            items={visibleItems.map((series) => `result-title:${series.id}`)}
+            strategy={rectSortingStrategy}
+          >
+            {grid}
+          </SortableContext>
+          <DragOverlay dropAnimation={null}>
+            {draggedTitleId != null ? (
+              <TitleDragPreview series={store.catalogById.get(draggedTitleId)} />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      ) : grid}
       {preview ? null : (
         <LoadMore visibleCount={visibleCount} total={items.length} onMore={() => setVisibleCount((count) => count + pageSize)} />
       )}
@@ -1099,6 +1425,7 @@ function Cover({ series, priority = false }: { series: SeriesCatalog; priority?:
           className="loading-cover-image"
           src={series.cover}
           alt=""
+          draggable={false}
           loading={priority ? "eager" : "lazy"}
           decoding="async"
           fetchPriority={priority ? "high" : "auto"}
@@ -1160,6 +1487,10 @@ function TitleCard({
   latestDate,
   metricWindow,
   onOpen,
+  selected,
+  selectionActive,
+  onToggleSelection,
+  reorderActive = false,
 }: {
   series: SeriesCatalog;
   rank: number;
@@ -1169,27 +1500,62 @@ function TitleCard({
   latestDate?: string | null;
   metricWindow?: { from: string; to: string } | null;
   onOpen?: (series: SeriesCatalog) => void;
+  selected: boolean;
+  selectionActive: boolean;
+  onToggleSelection: (titleId: number) => void;
+  reorderActive?: boolean;
 }) {
   const title = visibleTitle(series);
   const navigate = useNavigate();
   const detailPath = `/title/${series.id}`;
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressedRef = useRef(false);
+  const clearLongPress = () => {
+    if (longPressTimerRef.current != null) window.clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
+  };
+  useEffect(() => () => {
+    if (longPressTimerRef.current != null) window.clearTimeout(longPressTimerRef.current);
+  }, []);
   return (
-    <div className="title-card-wrap">
+    <div className={`title-card-wrap ${selected ? "title-selected" : ""}`}>
       <Link
         to={detailPath}
         className="title-card"
         data-testid="title-card"
         onClick={(event) => {
           if (!isPlainNavigationClick(event)) return;
+          if (selectionActive || longPressedRef.current) {
+            event.preventDefault();
+            if (!longPressedRef.current) onToggleSelection(series.id);
+            longPressedRef.current = false;
+            return;
+          }
           event.preventDefault();
           onOpen?.(series);
           prepareHomeTitleNavigation(feed);
           scheduleRouteChange("detail", () => navigate(detailPath));
         }}
+        onPointerDown={() => {
+          if (reorderActive) return;
+          longPressedRef.current = false;
+          clearLongPress();
+          longPressTimerRef.current = window.setTimeout(() => {
+            longPressTimerRef.current = null;
+            longPressedRef.current = true;
+            onToggleSelection(series.id);
+          }, 430);
+        }}
+        onPointerUp={clearLongPress}
+        onPointerCancel={clearLongPress}
+        onPointerLeave={clearLongPress}
+        onContextMenu={(event) => event.preventDefault()}
+        aria-pressed={selectionActive ? selected : undefined}
       >
         <div className="poster-shell">
           <Cover series={series} priority={rank <= 18} />
           {view.visible.rank && <span className="rank">{rank}</span>}
+          {selected ? <span className="title-selection-check"><Check size={16} /></span> : null}
           <div className="poster-metrics">
             <MemoTitleMetrics series={series} view={view} compact history={history} latestDate={latestDate} metricWindow={metricWindow} />
           </div>
@@ -1212,6 +1578,10 @@ const MemoTitleCard = memo(TitleCard, (prev, next) =>
   prev.history === next.history &&
   prev.latestDate === next.latestDate &&
   prev.onOpen === next.onOpen &&
+  prev.selected === next.selected &&
+  prev.selectionActive === next.selectionActive &&
+  prev.onToggleSelection === next.onToggleSelection &&
+  prev.reorderActive === next.reorderActive &&
   prev.metricWindow?.from === next.metricWindow?.from &&
   prev.metricWindow?.to === next.metricWindow?.to
 );
@@ -1327,8 +1697,11 @@ const MemoTitleMetrics = memo(TitleMetrics, (prev, next) =>
 
 function FeedsPage() {
   const store = useAppStore();
+  const navigate = useNavigate();
   const [folderSearchParams, setFolderSearchParams] = useSearchParams();
+  const [librarySearch, setLibrarySearch] = useState("");
   const [editorFeed, setEditorFeed] = useState<Feed | null>(null);
+  const [editorMode, setEditorMode] = useState<"create" | "settings" | "titles">("settings");
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(
     () => folderSearchParams.get("folder") || sessionStorage.getItem(profileStorageKey("manhwa-feeds-folder")) || null,
   );
@@ -1354,6 +1727,19 @@ function FeedsPage() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const selectedFolder = selectedFolderId ? store.folders.find((folder) => folder.id === selectedFolderId) ?? null : null;
+  const librarySearchQuery = librarySearch.trim().toLocaleLowerCase();
+  const matchingFolders = useMemo(
+    () => librarySearchQuery
+      ? store.folders.filter((folder) => folder.name.toLocaleLowerCase().includes(librarySearchQuery))
+      : [],
+    [librarySearchQuery, store.folders],
+  );
+  const matchingFeeds = useMemo(
+    () => librarySearchQuery
+      ? store.feeds.filter((feed) => feed.name.toLocaleLowerCase().includes(librarySearchQuery))
+      : [],
+    [librarySearchQuery, store.feeds],
+  );
   const feedById = useMemo(() => new Map(store.feeds.map((feed) => [feed.id, feed])), [store.feeds]);
   const visibleFolders = useMemo(
     () => store.folders
@@ -1442,6 +1828,7 @@ function FeedsPage() {
           runFeedQuery({
             feed,
             series: store.catalog,
+            catalogById: store.catalogById,
             tags: store.tags,
             history: store.history,
             labels: store.labels,
@@ -1464,7 +1851,7 @@ function FeedsPage() {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [organizing, store.catalog, store.feeds, store.history, store.labels, store.settings, store.syncMeta, store.tags]);
+  }, [organizing, store.catalog, store.catalogById, store.feeds, store.history, store.labels, store.settings, store.syncMeta, store.tags]);
 
   const openFolder = useCallback((folderId: string | null) => {
     setFolderSearchParams(folderId ? { folder: folderId } : {});
@@ -1642,7 +2029,50 @@ function FeedsPage() {
           <Plus size={18} />
         </button>
       </div>
-      {organizing ? (
+      <label className="feeds-library-search">
+        <Search size={18} />
+        <input
+          type="search"
+          value={librarySearch}
+          onChange={(event) => setLibrarySearch(event.target.value)}
+          placeholder="Search feed and folder names"
+          autoComplete="off"
+        />
+        {librarySearch ? (
+          <button type="button" aria-label="Clear library search" onClick={() => setLibrarySearch("")}>
+            <X size={17} />
+          </button>
+        ) : null}
+      </label>
+      {librarySearchQuery ? (
+        <section className="library-name-results" aria-label="Feed and folder name results">
+          {matchingFolders.map((folder) => (
+            <button type="button" key={folder.id} onClick={() => { setLibrarySearch(""); openFolder(folder.id); }}>
+              <FolderIcon size={20} />
+              <span><strong>{folder.name}</strong><small>Folder</small></span>
+              <ChevronRight size={18} />
+            </button>
+          ))}
+          {matchingFeeds.map((feed) => (
+            <button
+              type="button"
+              key={feed.id}
+              onClick={() => {
+                store.setActiveFeedId(feed.id);
+                navigate("/");
+              }}
+            >
+              <Library size={20} />
+              <span><strong>{feed.name}</strong><small>{feed.kind === "custom" ? "Custom feed" : "Logic feed"}</small></span>
+              <ChevronRight size={18} />
+            </button>
+          ))}
+          {matchingFolders.length === 0 && matchingFeeds.length === 0 ? (
+            <div className="empty-state compact-empty"><Search size={24} /><strong>No matching feed or folder</strong></div>
+          ) : null}
+        </section>
+      ) : null}
+      {organizing && !librarySearchQuery ? (
         <div className="organize-mode-bar">
           <p className="muted tiny">
             {selectionMode ? "Select feeds or folders of one type." : "Drag handles reorder this level."}
@@ -1659,7 +2089,7 @@ function FeedsPage() {
           </button>
         </div>
       ) : null}
-      {visibleFolders.length > 0 ? (
+      {!librarySearchQuery && visibleFolders.length > 0 ? (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -1714,7 +2144,7 @@ function FeedsPage() {
           </DragOverlay>
         </DndContext>
       ) : null}
-      <DndContext
+      {!librarySearchQuery ? <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
@@ -1738,7 +2168,10 @@ function FeedsPage() {
                     selectionDisabled={selectionKind !== null && selectionKind !== "feed"}
                     onOpen={() => openFeed(feed.id)}
                     onToggleSelection={() => toggleLibrarySelection("feed", feed.id)}
-                    onEdit={() => setEditorFeed(feed)}
+                    onEdit={() => {
+                      setEditorMode(feed.kind === "custom" ? "titles" : "settings");
+                      setEditorFeed(feed);
+                    }}
                     onMove={() => setMoveItem({ type: "feed", id: feed.id })}
                     onDuplicate={() => store.duplicateFeed(feed.id)}
                     onDelete={() => store.deleteFeed(feed.id)}
@@ -1764,7 +2197,7 @@ function FeedsPage() {
             </div>
           ) : null}
         </DragOverlay>
-      </DndContext>
+      </DndContext> : null}
       {selectionMode && selectedLibraryItems.length > 0 ? (
         <div className="library-selection-dock" role="toolbar" aria-label="Selected library items">
           <strong>{selectedLibraryItems.length}</strong>
@@ -1793,16 +2226,30 @@ function FeedsPage() {
       ) : null}
       <BottomDrawer title={editorFeed?.name ?? "Feed"} open={Boolean(editorFeed)} onOpenChange={(open) => !open && setEditorFeed(null)}>
         {editorFeed && (
-          <FeedEditor
-            feed={editorFeed}
-            onCancel={() => setEditorFeed(null)}
-            onSave={(feed) => {
-              const isNew = !store.feeds.some((item) => item.id === feed.id);
-              store.upsertFeed(feed);
-              if (isNew && selectedFolderId) store.moveFeedToFolder(feed.id, selectedFolderId);
-              setEditorFeed(null);
-            }}
-          />
+          editorFeed.kind === "custom" ? (
+            <CustomFeedEditor
+              feed={editorFeed}
+              mode={editorMode}
+              onCancel={() => setEditorFeed(null)}
+              onSave={(feed) => {
+                const isNew = !store.feeds.some((item) => item.id === feed.id);
+                store.upsertFeed(feed);
+                if (isNew && selectedFolderId) store.moveFeedToFolder(feed.id, selectedFolderId);
+                setEditorFeed(null);
+              }}
+            />
+          ) : (
+            <FeedEditor
+              feed={editorFeed}
+              onCancel={() => setEditorFeed(null)}
+              onSave={(feed) => {
+                const isNew = !store.feeds.some((item) => item.id === feed.id);
+                store.upsertFeed(feed);
+                if (isNew && selectedFolderId) store.moveFeedToFolder(feed.id, selectedFolderId);
+                setEditorFeed(null);
+              }}
+            />
+          )
         )}
       </BottomDrawer>
       <CreateLibraryDrawer
@@ -1812,7 +2259,13 @@ function FeedsPage() {
         folderLimitReached={store.folders.length >= MAX_FOLDERS_PER_PROFILE}
         onCreateFeed={() => {
           setCreateOpen(false);
+          setEditorMode("create");
           setEditorFeed(createFeed("New Feed"));
+        }}
+        onCreateCustomFeed={() => {
+          setCreateOpen(false);
+          setEditorMode("create");
+          setEditorFeed(createCustomFeed("New Custom Feed"));
         }}
         onCreateFolder={(name, migrateFeeds) => {
           store.createFolder(name, selectedFolderId, migrateFeeds);
@@ -1845,6 +2298,40 @@ function FeedsPage() {
         onOpenChange={setBulkDeleteOpen}
         onDeleted={clearLibrarySelection}
       />
+    </div>
+  );
+}
+
+function SortableResultTitleCard({ titleId, children }: { titleId: number; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `result-title:${titleId}`,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`sortable-result-title ${isDragging ? "sortable-dragging" : ""}`}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+    >
+      {children}
+      <button
+        className="title-drag-handle"
+        type="button"
+        aria-label="Drag to reorder title"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical size={17} />
+      </button>
+    </div>
+  );
+}
+
+function TitleDragPreview({ series }: { series?: SeriesCatalog }) {
+  if (!series) return null;
+  return (
+    <div className="title-drag-preview" aria-hidden="true">
+      {series.cover ? <img src={series.cover} alt="" draggable={false} /> : <div className="cover-fallback" />}
+      <span>{visibleTitle(series)}</span>
     </div>
   );
 }
@@ -2030,6 +2517,7 @@ function CreateLibraryDrawer({
   parentFolder,
   folderLimitReached,
   onCreateFeed,
+  onCreateCustomFeed,
   onCreateFolder,
 }: {
   open: boolean;
@@ -2037,6 +2525,7 @@ function CreateLibraryDrawer({
   parentFolder: FeedFolder | null;
   folderLimitReached: boolean;
   onCreateFeed: () => void;
+  onCreateCustomFeed: () => void;
   onCreateFolder: (name: string, migrateFeeds: boolean) => void;
 }) {
   const [folderName, setFolderName] = useState("");
@@ -2072,6 +2561,11 @@ function CreateLibraryDrawer({
         <button className="library-create-row" type="button" onClick={onCreateFeed}>
           <Plus size={20} />
           <span><strong>Logic Feed</strong><small>Build from filters and live catalog data.</small></span>
+          <ChevronRight size={18} />
+        </button>
+        <button className="library-create-row" type="button" onClick={onCreateCustomFeed}>
+          <Library size={20} />
+          <span><strong>Custom Feed</strong><small>Choose and arrange up to 500 titles.</small></span>
           <ChevronRight size={18} />
         </button>
         <div className="library-folder-create">
@@ -2481,7 +2975,6 @@ function FeedCoverCard({
   onDelete: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
   return (
     <article
@@ -2528,100 +3021,572 @@ function FeedCoverCard({
       )}
       {!selectionMode && menuOpen && (
         <div className="popover-menu card-menu">
-          <button type="button" onClick={() => { onEdit(); setMenuOpen(false); }}><SlidersHorizontal size={16} /> Edit</button>
+          <button type="button" onClick={() => { onEdit(); setMenuOpen(false); }}>
+            <SlidersHorizontal size={16} /> {feed.kind === "custom" ? "Add or remove titles" : "Edit"}
+          </button>
           <button type="button" onClick={() => { onMove(); setMenuOpen(false); }}><FolderOpen size={16} /> Move</button>
           <button type="button" onClick={() => { onDuplicate(); setMenuOpen(false); }}><Copy size={16} /> Duplicate</button>
-          <button type="button" onClick={() => { setSearchOpen(true); setMenuOpen(false); }}><Search size={16} /> Search titles</button>
           <SharePanelButton payload={{ kind: "feed", version: 2, feed }} label="Share" />
           <button className="danger-text" type="button" onClick={() => { onDelete(); setMenuOpen(false); }}><Trash2 size={16} /> Delete</button>
         </div>
       )}
-      {searchOpen ? <FeedContentSearchDrawer feed={feed} open onOpenChange={setSearchOpen} /> : null}
     </article>
   );
 }
 
-function FeedContentSearchDrawer({
+function CustomFeedEditor({
   feed,
-  open,
-  onOpenChange,
+  mode = "settings",
+  onSave,
+  onCancel,
 }: {
   feed: Feed;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  mode?: "create" | "settings" | "titles";
+  onSave: (feed: Feed) => void;
+  onCancel: () => void;
 }) {
   const store = useAppStore();
+  const [draft, setDraft] = useState<Feed>(() => structuredClone(feed));
   const [searchText, setSearchText] = useState("");
-  const feedItems = useMemo(
-    () => runFeedQuery({
-      feed,
-      series: store.catalog,
-      tags: store.tags,
-      history: store.history,
-      labels: store.labels,
-      settings: store.settings,
-      metaHistoryFirst: store.syncMeta?.historyFirstDate,
-      metaHistoryLast: store.syncMeta?.historyLastDate,
-    }).items,
-    [feed, store.catalog, store.history, store.labels, store.settings, store.syncMeta, store.tags],
-  );
-  const rankById = useMemo(
-    () => new Map(feedItems.map((series, index) => [series.id, index + 1])),
-    [feedItems],
-  );
-  const matches = useMemo(() => {
-    const needle = searchText.trim().toLocaleLowerCase();
-    if (!needle) return [];
-    return feedItems.filter((series) => [
-      visibleTitle(series),
-      series.native_title,
-      series.romanized_title,
-      ...(series.authors ?? []),
-      ...(series.artists ?? []),
-    ].filter(Boolean).join(" ").toLocaleLowerCase().includes(needle));
-  }, [feedItems, searchText]);
+  const [status, setStatus] = useState("");
+  const [editorTab, setEditorTab] = useState<"titles" | "settings">(() => mode === "settings" ? "settings" : "titles");
+  const [tagSearch, setTagSearch] = useState("");
+  const [showAllTags, setShowAllTags] = useState(false);
+  const [showMoreParameters, setShowMoreParameters] = useState(false);
+  const deferredSearch = useDeferredValue(searchText.trim().toLocaleLowerCase());
+  const tagsById = useMemo(() => new Map(store.tags.map((tag) => [tag.id, tag])), [store.tags]);
+  const sensitiveTagIds = useMemo(() => buildSensitiveTagGroups(store.tags), [store.tags]);
+  const selectedIds = useMemo(() => new Set(draft.customTitleIds), [draft.customTitleIds]);
+  const filteredTags = useMemo(() => {
+    const query = tagSearch.trim().toLocaleLowerCase();
+    return query
+      ? store.tags.filter((tag) => `${tag.name} ${tag.path}`.toLocaleLowerCase().includes(query))
+      : store.tags;
+  }, [store.tags, tagSearch]);
+  const candidates = useMemo(() => {
+    if (!deferredSearch) {
+      return draft.customTitleIds.flatMap((id) => {
+        const item = store.catalogById.get(id);
+        return item && hasDetailTags(item, tagsById) ? [item] : [];
+      });
+    }
+    const matches: SeriesCatalog[] = [];
+    for (const item of store.catalog) {
+      if (!hasDetailTags(item, tagsById) || !isSearchVisible(item, store.settings, sensitiveTagIds)) continue;
+      const searchable = [
+        visibleTitle(item),
+        item.native_title,
+        item.romanized_title,
+        ...(item.titles?.map((title) => title.title) ?? []),
+        ...(item.authors ?? []),
+        ...(item.artists ?? []),
+      ].filter(Boolean).join(" ").toLocaleLowerCase();
+      if (searchable.includes(deferredSearch)) matches.push(item);
+      if (matches.length >= 120) break;
+    }
+    return matches;
+  }, [
+    deferredSearch,
+    draft.customTitleIds,
+    sensitiveTagIds,
+    store.catalogById,
+    store.catalog,
+    store.settings,
+    tagsById,
+  ]);
 
   useEffect(() => {
-    if (!open) setSearchText("");
-  }, [open]);
+    setDraft(structuredClone(feed));
+    setSearchText("");
+    setStatus("");
+    setEditorTab(mode === "settings" ? "settings" : "titles");
+    setTagSearch("");
+    setShowAllTags(false);
+    setShowMoreParameters(false);
+  }, [feed, mode]);
 
+  const toggleTitle = (titleId: number) => {
+    setDraft((current) => {
+      const exists = current.customTitleIds.includes(titleId);
+      if (exists) {
+        setStatus("");
+        return { ...current, customTitleIds: current.customTitleIds.filter((id) => id !== titleId) };
+      }
+      if (current.customTitleIds.length >= MAX_CUSTOM_FEED_TITLES) {
+        setStatus(`This custom feed already has ${MAX_CUSTOM_FEED_TITLES} titles.`);
+        return current;
+      }
+      setStatus("");
+      return {
+        ...current,
+        customTitleIds: current.customInsertion === "top"
+          ? [titleId, ...current.customTitleIds]
+          : [...current.customTitleIds, titleId],
+      };
+    });
+  };
+  const cycleTag = (tagId: number) => {
+    setDraft((current) => {
+      const include = current.filters.includeTagIds.includes(tagId);
+      const exclude = current.filters.excludeTagIds.includes(tagId);
+      return {
+        ...current,
+        filters: {
+          ...current.filters,
+          includeTagIds: include ? current.filters.includeTagIds.filter((id) => id !== tagId) : exclude ? current.filters.includeTagIds : [...current.filters.includeTagIds, tagId],
+          excludeTagIds: include
+            ? [...current.filters.excludeTagIds, tagId]
+            : exclude
+              ? current.filters.excludeTagIds.filter((id) => id !== tagId)
+              : current.filters.excludeTagIds,
+        },
+      };
+    });
+  };
   return (
-    <BottomDrawer title={`Search ${feed.name}`} open={open} onOpenChange={onOpenChange}>
-      <div className="feed-content-search">
+    <div className="custom-feed-editor">
+      {mode !== "titles" ? <div className="custom-feed-fields">
         <label className="field">
-          <span>Titles in this feed</span>
+          <span>Feed name</span>
           <input
             className="input"
-            type="search"
-            value={searchText}
-            onChange={(event) => setSearchText(event.target.value)}
-            placeholder="Search title or creator"
+            value={draft.name}
+            maxLength={80}
             autoComplete="off"
-            enterKeyHint="search"
+            onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
           />
         </label>
-        {searchText.trim() ? (
-          matches.length > 0 ? (
-            <TitleCollection
-              items={matches}
-              feed={feed}
-              history={store.history}
-              latestDate={store.syncMeta?.historyLastDate}
-              rankById={rankById}
+        <ToggleRow
+          label="Description"
+          description="Show a short description on Home."
+          value={draft.showDescription}
+          onChange={(showDescription) => setDraft((current) => ({ ...current, showDescription }))}
+        />
+        {draft.showDescription ? (
+          <label className="field">
+            <span>Description</span>
+            <textarea
+              className="textarea"
+              value={draft.description}
+              maxLength={260}
+              onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
             />
+          </label>
+        ) : null}
+        <div className="field">
+          <span>New titles go to</span>
+          <div className="segmented compact-segments" role="group" aria-label="New title position">
+            {(["top", "bottom"] as const).map((position) => (
+              <button
+                className={`segment ${draft.customInsertion === position ? "active" : ""}`}
+                type="button"
+                key={position}
+                aria-pressed={draft.customInsertion === position}
+                onClick={() => setDraft((current) => ({ ...current, customInsertion: position }))}
+              >
+                {position === "top" ? "Top" : "Bottom"}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div> : null}
+
+      {mode === "create" ? <div className="segmented compact-segments custom-feed-tabs" role="tablist" aria-label="Custom feed editor">
+        <button className={`segment ${editorTab === "titles" ? "active" : ""}`} type="button" onClick={() => setEditorTab("titles")}>
+          Titles
+        </button>
+        <button className={`segment ${editorTab === "settings" ? "active" : ""}`} type="button" onClick={() => setEditorTab("settings")}>
+          Settings
+        </button>
+      </div> : null}
+
+      {mode !== "settings" && editorTab === "titles" ? (
+        <>
+          <div className="custom-feed-picker-heading">
+            <strong>{draft.customTitleIds.length.toLocaleString()} / {MAX_CUSTOM_FEED_TITLES}</strong>
+            <span className="muted">Selected titles</span>
+          </div>
+          <label className="field custom-feed-search">
+            <span>Find titles</span>
+            <input
+              className="input"
+              type="search"
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder="Search title or creator"
+              autoComplete="off"
+              enterKeyHint="search"
+            />
+          </label>
+          {status ? <p className="form-status">{status}</p> : null}
+
+          {candidates.length > 0 ? (
+            <div className="custom-title-picker-grid">
+              {candidates.map((series) => {
+                const selected = selectedIds.has(series.id);
+                return (
+                  <button
+                    className={`custom-title-picker-card ${selected ? "selected" : ""}`}
+                    type="button"
+                    key={series.id}
+                    onClick={() => toggleTitle(series.id)}
+                    aria-pressed={selected}
+                    aria-label={`${selected ? "Remove" : "Add"} ${visibleTitle(series)}`}
+                  >
+                    <Cover series={series} />
+                    <span className="custom-title-picker-name">{visibleTitle(series)}</span>
+                    <span className="custom-title-picker-check">{selected ? <Check size={15} /> : <Plus size={15} />}</span>
+                  </button>
+                );
+              })}
+            </div>
           ) : (
             <div className="empty-state compact-empty">
               <Search size={26} />
-              <strong>No title found in this feed</strong>
+              <strong>{deferredSearch ? "No matching titles" : "Search to add titles"}</strong>
+              <span className="muted">
+                {deferredSearch ? "Try another title or creator." : "Your selected titles will stay visible here."}
+              </span>
             </div>
-          )
-        ) : (
-          <div className="empty-state compact-empty">
-            <Search size={26} />
-            <strong>Search this feed locally</strong>
-            <span className="muted">{feedItems.length.toLocaleString()} titles available</span>
+          )}
+        </>
+      ) : mode !== "titles" ? (
+        <div className="custom-feed-settings">
+          <h2 className="section-title">Title View</h2>
+          <div className="field">
+            <span>Grid columns</span>
+            <div className="segmented compact-segments">
+              {[1, 2, 3, 4, 5].map((value) => (
+                <button
+                  className={`segment ${draft.view.gridColumns === value ? "active" : ""}`}
+                  type="button"
+                  key={value}
+                  onClick={() => setDraft((current) => ({
+                    ...current,
+                    view: { ...current.view, gridColumns: value as FeedViewSettings["gridColumns"] },
+                  }))}
+                >
+                  {value}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+          <MetricSlotPicker
+            slots={draft.view.metricSlots ?? []}
+            onChange={(metricSlots) => setDraft((current) => ({
+              ...current,
+              view: { ...current.view, metricSlots },
+            }))}
+          />
+          <ToggleRow
+            label="Show rank"
+            description="Keep the custom feed position visible on covers."
+            value={draft.view.visible.rank}
+            onChange={(rank) => setDraft((current) => ({
+              ...current,
+              view: { ...current.view, visible: { ...current.view.visible, rank } },
+            }))}
+          />
+
+          <div className="field">
+            <span>Order</span>
+            <div className="segmented compact-segments">
+              <button
+                className={`segment ${draft.customOrder ? "active" : ""}`}
+                type="button"
+                onClick={() => setDraft((current) => ({ ...current, customOrder: true, sort: [] }))}
+              >
+                Manual
+              </button>
+              <button
+                className={`segment ${!draft.customOrder ? "active" : ""}`}
+                type="button"
+                onClick={() => setDraft((current) => ({
+                  ...current,
+                  customOrder: false,
+                  sort: current.sort.length ? current.sort : [{ ...DEFAULT_SORT[0], id: makeId() }],
+                }))}
+              >
+                Stats
+              </button>
+            </div>
+          </div>
+          {!draft.customOrder ? (
+            <>
+            <div className="field">
+              <span>Titles without AniList stats</span>
+              <div className="segmented compact-segments">
+                {(["top", "bottom"] as const).map((placement) => (
+                  <button
+                    className={`segment ${draft.customNonAniListPlacement === placement ? "active" : ""}`}
+                    type="button"
+                    key={placement}
+                    onClick={() => setDraft((current) => ({ ...current, customNonAniListPlacement: placement }))}
+                  >
+                    {placement === "top" ? "Above" : "Below"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="settings-list">
+              {draft.sort.map((rule, index) => (
+                <div className="setting-row" key={rule.id}>
+                  <div className="sort-editor">
+                    <div className="metric-choice">
+                      {SORT_OPTIONS.map((option) => (
+                        <button
+                          className={`metric-option ${rule.metric === option ? "active" : ""}`}
+                          type="button"
+                          key={option}
+                          onClick={() => setDraft((current) => ({
+                            ...current,
+                            sort: current.sort.map((item) => item.id === rule.id ? { ...item, metric: option } : item),
+                          }))}
+                          title={metricDefinition(option).help}
+                        >
+                          {metricDefinition(option).shortLabel}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="segmented compact-segments">
+                      {(["desc", "asc"] as const).map((direction) => (
+                        <button
+                          className={`segment ${rule.direction === direction ? "active" : ""}`}
+                          type="button"
+                          key={direction}
+                          onClick={() => setDraft((current) => ({
+                            ...current,
+                            sort: current.sort.map((item) => item.id === rule.id ? { ...item, direction } : item),
+                          }))}
+                        >
+                          {direction === "desc" ? "High first" : "Low first"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label={`Remove sort ${index + 1}`}
+                    onClick={() => setDraft((current) => ({ ...current, sort: current.sort.filter((item) => item.id !== rule.id) }))}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+              <button
+                className="button"
+                type="button"
+                onClick={() => setDraft((current) => ({
+                  ...current,
+                  sort: [...current.sort, { ...DEFAULT_SORT[0], id: makeId() }],
+                }))}
+              >
+                <Plus size={16} /> Add sort
+              </button>
+            </div>
+            </>
+          ) : null}
+
+          <h2 className="section-title">Parameters</h2>
+          <div className="field-grid">
+            <NumberField label="Min chapters" value={draft.filters.minChapters} onChange={(value) => setDraft((current) => ({ ...current, filters: { ...current.filters, minChapters: value } }))} />
+            <NumberField label="Max chapters" value={draft.filters.maxChapters} onChange={(value) => setDraft((current) => ({ ...current, filters: { ...current.filters, maxChapters: value } }))} />
+            <NumberField label="Min year" value={draft.filters.minYear} onChange={(value) => setDraft((current) => ({ ...current, filters: { ...current.filters, minYear: value } }))} />
+            <NumberField label="Max year" value={draft.filters.maxYear} onChange={(value) => setDraft((current) => ({ ...current, filters: { ...current.filters, maxYear: value } }))} />
+            {showMoreParameters ? (
+              <>
+                <NumberField label="Min popularity" value={draft.filters.minPopularity} onChange={(value) => setDraft((current) => ({ ...current, filters: { ...current.filters, minPopularity: value } }))} />
+                <NumberField label="Max popularity" value={draft.filters.maxPopularity} onChange={(value) => setDraft((current) => ({ ...current, filters: { ...current.filters, maxPopularity: value } }))} />
+                <NumberField label="Min favourites" value={draft.filters.minFavourites} onChange={(value) => setDraft((current) => ({ ...current, filters: { ...current.filters, minFavourites: value } }))} />
+                <NumberField label="Max favourites" value={draft.filters.maxFavourites} onChange={(value) => setDraft((current) => ({ ...current, filters: { ...current.filters, maxFavourites: value } }))} />
+              </>
+            ) : null}
+          </div>
+          <button className="button compact-button" type="button" onClick={() => setShowMoreParameters((value) => !value)}>
+            {showMoreParameters ? "Show fewer parameters" : "Add parameters"}
+          </button>
+          {showMoreParameters ? (
+            <MetricRangeEditor
+              ranges={draft.filters.metricRanges ?? []}
+              onChange={(metricRanges) => setDraft((current) => ({ ...current, filters: { ...current.filters, metricRanges } }))}
+            />
+          ) : null}
+
+          <h2 className="section-title">Tags</h2>
+          <label className="field">
+            <span>Tag search</span>
+            <input className="input" value={tagSearch} onChange={(event) => setTagSearch(event.target.value)} placeholder="Genres, themes, tropes" />
+          </label>
+          <div className="field">
+            <span>Tag match</span>
+            <button
+              className={`switch-row ${draft.filters.tagMatch === "any" ? "" : "on"}`}
+              type="button"
+              onClick={() => setDraft((current) => ({
+                ...current,
+                filters: { ...current.filters, tagMatch: current.filters.tagMatch === "any" ? "all" : "any" },
+              }))}
+            >
+              <span>{draft.filters.tagMatch === "any" ? "Match ANY included tag" : "Match ALL included tags"}</span>
+              <span className="switch-dot" />
+            </button>
+          </div>
+          {tagSearch.trim() || showAllTags ? (
+            <TagChipCloud tags={filteredTags} feed={draft} onTagClick={cycleTag} />
+          ) : (
+            <CompactTagRow tags={filteredTags} feed={draft} onTagClick={cycleTag} />
+          )}
+          {!tagSearch.trim() && filteredTags.length > 0 ? (
+            <button className="button compact-button" type="button" onClick={() => setShowAllTags((value) => !value)}>
+              {showAllTags ? "Show less" : "Show more tags"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="toolbar custom-feed-editor-actions">
+        <button className="button" type="button" onClick={onCancel}>Cancel</button>
+        <span className="spacer" />
+        <button className="button primary" type="button" disabled={!draft.name.trim()} onClick={() => onSave(draft)}>
+          <Check size={16} /> {mode === "titles" ? "Save Titles" : "Save Custom Feed"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AddTitlesToCustomFeedsDrawer({
+  titleIds,
+  open,
+  onOpenChange,
+  allowRemoval = false,
+}: {
+  titleIds: number[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  allowRemoval?: boolean;
+}) {
+  const store = useAppStore();
+  const customFeeds = useMemo(() => store.feeds.filter((feed) => feed.kind === "custom"), [store.feeds]);
+  const [selectedFeedIds, setSelectedFeedIds] = useState<Set<string>>(() => new Set());
+  const [newFeedName, setNewFeedName] = useState("");
+  const initializedOpenRef = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      initializedOpenRef.current = false;
+      return;
+    }
+    if (initializedOpenRef.current) return;
+    initializedOpenRef.current = true;
+    setNewFeedName("");
+    setSelectedFeedIds(new Set(
+      allowRemoval
+        ? customFeeds.filter((feed) => titleIds.every((titleId) => feed.customTitleIds.includes(titleId))).map((feed) => feed.id)
+        : [],
+    ));
+  }, [allowRemoval, customFeeds, open, titleIds]);
+  const groups = useMemo(() => {
+    const feedById = new Map(customFeeds.map((feed) => [feed.id, feed]));
+    const folderGroups = orderedFolderTree(store.folders).flatMap((folder) => {
+      const feeds = folder.feedIds.flatMap((id) => {
+        const feed = feedById.get(id);
+        return feed ? [feed] : [];
+      });
+      return feeds.length ? [{ id: folder.id, name: folder.name, feeds }] : [];
+    });
+    const unfiled = unfiledFeeds(customFeeds, store.folders);
+    return [
+      ...folderGroups,
+      ...(unfiled.length ? [{ id: "unfiled", name: "Unfiled Feeds", feeds: unfiled }] : []),
+    ];
+  }, [customFeeds, store.folders]);
+  const apply = () => {
+    if (titleIds.length === 0) return;
+    const selectedTitles = new Set(titleIds);
+    customFeeds.forEach((feed) => {
+      const selected = selectedFeedIds.has(feed.id);
+      if (!selected && !allowRemoval) return;
+      const additions = titleIds.filter((titleId) => !feed.customTitleIds.includes(titleId));
+      const customTitleIds = selected
+        ? feed.customInsertion === "top"
+          ? [...additions, ...feed.customTitleIds].slice(0, MAX_CUSTOM_FEED_TITLES)
+          : [...feed.customTitleIds, ...additions].slice(0, MAX_CUSTOM_FEED_TITLES)
+        : feed.customTitleIds.filter((id) => !selectedTitles.has(id));
+      if (customTitleIds.length === feed.customTitleIds.length && customTitleIds.every((id, index) => id === feed.customTitleIds[index])) return;
+      store.upsertFeed({ ...feed, customTitleIds });
+    });
+    onOpenChange(false);
+  };
+
+  return (
+    <BottomDrawer title="Add to Custom Feeds" open={open} onOpenChange={onOpenChange}>
+      <div className="custom-destination-create">
+        <input
+          className="input"
+          value={newFeedName}
+          maxLength={80}
+          autoComplete="off"
+          placeholder="New custom feed"
+          onChange={(event) => setNewFeedName(event.target.value)}
+        />
+        <button
+          className="button"
+          type="button"
+          disabled={!newFeedName.trim() || titleIds.length > MAX_CUSTOM_FEED_TITLES}
+          onClick={() => {
+            const feed = createCustomFeed(newFeedName.trim());
+            store.upsertFeed(feed);
+            setNewFeedName("");
+          }}
+        >
+          <Plus size={16} /> Create
+        </button>
+      </div>
+      {groups.length > 0 ? (
+        <div className="custom-feed-destinations">
+          {groups.map((group) => (
+            <section key={group.id}>
+              <h3>{group.name}</h3>
+              {group.feeds.map((feed) => {
+                const selected = selectedFeedIds.has(feed.id);
+                const missingCount = titleIds.filter((titleId) => !feed.customTitleIds.includes(titleId)).length;
+                const full = feed.customTitleIds.length + missingCount > MAX_CUSTOM_FEED_TITLES;
+                return (
+                  <button
+                    className={`destination-row ${selected ? "selected" : ""}`}
+                    type="button"
+                    key={feed.id}
+                    disabled={full}
+                    aria-pressed={selected}
+                    onClick={() => setSelectedFeedIds((current) => {
+                      const next = new Set(current);
+                      if (next.has(feed.id)) next.delete(feed.id);
+                      else next.add(feed.id);
+                      return next;
+                    })}
+                  >
+                    <Library size={18} />
+                    <span><strong>{feed.name}</strong><small>{feed.customTitleIds.length} / {MAX_CUSTOM_FEED_TITLES}</small></span>
+                    {selected ? <Check size={18} /> : null}
+                  </button>
+                );
+              })}
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state compact-empty">
+          <Library size={28} />
+          <strong>No custom feeds yet</strong>
+        </div>
+      )}
+      <div className="toolbar">
+        <button className="button" type="button" onClick={() => onOpenChange(false)}>Cancel</button>
+        <span className="spacer" />
+        <button className="button primary" type="button" disabled={titleIds.length === 0} onClick={apply}>
+          <Check size={16} /> Apply
+        </button>
       </div>
     </BottomDrawer>
   );
@@ -2631,6 +3596,8 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
   const store = useAppStore();
   const [draft, setDraft] = useState<Feed>(() => structuredClone(feed));
   const [tagSearch, setTagSearch] = useState("");
+  const [showAllTags, setShowAllTags] = useState(false);
+  const [showMoreParameters, setShowMoreParameters] = useState(false);
   const [rollingAmountText, setRollingAmountText] = useState(() => String(feed.filters.rolling.amount));
   const statusOptions = useMemo(
     () => [...new Set(store.catalog.map((item) => item.status).filter(Boolean) as string[])].sort(),
@@ -2686,7 +3653,7 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
   };
 
   return (
-    <div>
+    <div className="feed-editor">
       <div className="field">
         <label htmlFor="feed-name">Feed name</label>
         <input id="feed-name" className="input" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
@@ -2706,6 +3673,36 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
         description="Show the description directly below the feed name."
         value={draft.showDescription}
         onChange={(showDescription) => setDraft({ ...draft, showDescription })}
+      />
+
+      <h2 className="section-title">Title View</h2>
+      <div className="field">
+        <label>Grid columns</label>
+        <div className="segmented compact-segments">
+          {[1, 2, 3, 4, 5].map((value) => (
+            <button
+              className={`segment ${draft.view.gridColumns === value ? "active" : ""}`}
+              type="button"
+              key={value}
+              onClick={() => updateView({ gridColumns: value as FeedViewSettings["gridColumns"] })}
+            >
+              {value}
+            </button>
+          ))}
+        </div>
+      </div>
+      <MetricSlotPicker
+        slots={draft.view.metricSlots ?? []}
+        onChange={(metricSlots) => updateView({ metricSlots })}
+      />
+      <ToggleRow
+        label="Show rank"
+        description="Show the feed position on each cover."
+        value={draft.view.visible.rank}
+        onChange={(rank) => setDraft((current) => ({
+          ...current,
+          view: { ...current.view, visible: { ...current.view.visible, rank } },
+        }))}
       />
 
       <h2 className="section-title">Filters</h2>
@@ -2767,18 +3764,26 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
         <NumberField label="Max chapters" value={draft.filters.maxChapters} onChange={(value) => updateFilters({ maxChapters: value })} />
         <NumberField label="Min year" value={draft.filters.minYear} onChange={(value) => updateFilters({ minYear: value })} />
         <NumberField label="Max year" value={draft.filters.maxYear} onChange={(value) => updateFilters({ maxYear: value })} />
-        <NumberField label="Min popularity" value={draft.filters.minPopularity} onChange={(value) => updateFilters({ minPopularity: value })} />
-        <NumberField label="Max popularity" value={draft.filters.maxPopularity} onChange={(value) => updateFilters({ maxPopularity: value })} />
-        <NumberField label="Min favourites" value={draft.filters.minFavourites} onChange={(value) => updateFilters({ minFavourites: value })} />
-        <NumberField label="Max favourites" value={draft.filters.maxFavourites} onChange={(value) => updateFilters({ maxFavourites: value })} />
-        <NumberField label="Min mean score" value={draft.filters.minMeanScore} onChange={(value) => updateFilters({ minMeanScore: value })} />
-        <NumberField label="Max mean score" value={draft.filters.maxMeanScore} onChange={(value) => updateFilters({ maxMeanScore: value })} />
+        {showMoreParameters ? (
+          <>
+            <NumberField label="Min popularity" value={draft.filters.minPopularity} onChange={(value) => updateFilters({ minPopularity: value })} />
+            <NumberField label="Max popularity" value={draft.filters.maxPopularity} onChange={(value) => updateFilters({ maxPopularity: value })} />
+            <NumberField label="Min favourites" value={draft.filters.minFavourites} onChange={(value) => updateFilters({ minFavourites: value })} />
+            <NumberField label="Max favourites" value={draft.filters.maxFavourites} onChange={(value) => updateFilters({ maxFavourites: value })} />
+            <NumberField label="Min mean score" value={draft.filters.minMeanScore} onChange={(value) => updateFilters({ minMeanScore: value })} />
+            <NumberField label="Max mean score" value={draft.filters.maxMeanScore} onChange={(value) => updateFilters({ maxMeanScore: value })} />
+          </>
+        ) : null}
       </div>
-
-      <MetricRangeEditor
-        ranges={draft.filters.metricRanges ?? []}
-        onChange={(metricRanges) => updateFilters({ metricRanges })}
-      />
+      <button className="button compact-button" type="button" onClick={() => setShowMoreParameters((value) => !value)}>
+        {showMoreParameters ? "Show fewer parameters" : "Add parameters"}
+      </button>
+      {showMoreParameters ? (
+        <MetricRangeEditor
+          ranges={draft.filters.metricRanges ?? []}
+          onChange={(metricRanges) => updateFilters({ metricRanges })}
+        />
+      ) : null}
 
       <h2 className="section-title">Rolling Dates</h2>
       <div className="field-grid">
@@ -2889,7 +3894,16 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
           <span className="switch-dot" />
         </button>
       </div>
-      <TagChipCloud tags={filteredTags} feed={draft} onTagClick={cycleTag} />
+      {tagSearch.trim() || showAllTags ? (
+        <TagChipCloud tags={filteredTags} feed={draft} onTagClick={cycleTag} />
+      ) : (
+        <CompactTagRow tags={filteredTags} feed={draft} onTagClick={cycleTag} />
+      )}
+      {!tagSearch.trim() && filteredTags.length > 0 ? (
+        <button className="button compact-button" type="button" onClick={() => setShowAllTags((value) => !value)}>
+          {showAllTags ? "Show less" : "Show more tags"}
+        </button>
+      ) : null}
 
       <h2 className="section-title">Sort</h2>
       <div className="settings-list">
@@ -2950,40 +3964,6 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
           <Plus size={16} /> Add sort
         </button>
       </div>
-
-      <h2 className="section-title">Title View</h2>
-      <div className="field-grid">
-        <div className="field">
-          <label>Grid columns</label>
-          <div className="segmented compact-segments">
-            {[1, 2, 3, 4, 5].map((value) => (
-              <button
-                className={`segment ${draft.view.gridColumns === value ? "active" : ""}`}
-                type="button"
-                key={value}
-                onClick={() => updateView({ gridColumns: value as FeedViewSettings["gridColumns"] })}
-              >
-                {value}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-      <MetricSlotPicker
-        slots={draft.view.metricSlots ?? []}
-        onChange={(metricSlots) => updateView({ metricSlots })}
-      />
-      <ToggleRow
-        label="Show rank"
-        description="Places the rank inside the cover stat strip."
-        value={draft.view.visible.rank}
-        onChange={(rank) =>
-          setDraft((current) => ({
-            ...current,
-            view: { ...current.view, visible: { ...current.view.visible, rank } },
-          }))
-        }
-      />
 
       <div className="toolbar">
         <button className="button" type="button" onClick={onCancel}>
@@ -3123,6 +4103,27 @@ function MetricSlotPicker({ slots, onChange }: { slots: MetricId[]; onChange: (s
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function CompactTagRow({ tags, feed, onTagClick }: { tags: TagNode[]; feed: Feed; onTagClick: (id: number) => void }) {
+  return (
+    <div className="chips compact-tag-row">
+      {tags.slice(0, 20).map((tag) => {
+        const included = feed.filters.includeTagIds.includes(tag.id);
+        const excluded = feed.filters.excludeTagIds.includes(tag.id);
+        return (
+          <button
+            className={`chip chipbutton ${included ? "active" : ""} ${excluded ? "exclude" : ""}`}
+            type="button"
+            key={tag.id}
+            onClick={() => onTagClick(tag.id)}
+          >
+            {tag.name}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -4177,7 +5178,9 @@ function TitleDetailPage() {
   const [detail, setDetail] = useState<SeriesDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("Loading detail");
+  const [actionsOpen, setActionsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [addToCustomOpen, setAddToCustomOpen] = useState(false);
   const [showAllRecommendations, setShowAllRecommendations] = useState(false);
   const [showRecommendations, setShowRecommendations] = useState(false);
   const detailLayoutKey = profileStorageKey(`manhwa-detail-layout:${store.activeFeedId ?? "default"}`);
@@ -4260,6 +5263,13 @@ function TitleDetailPage() {
 
   const loadingDetail = !invalidRoute && (loading || Boolean(detail && detail.id !== id));
   const showError = invalidRoute || (!loading && !detail && status && status !== "Loading detail");
+  const detailTitleIds = useMemo(() => series ? [series.id] : [], [series]);
+  const shareTitle = async () => {
+    const url = window.location.href;
+    const title = series?.display_title ?? "Manhwa title";
+    if (navigator.share) await navigator.share({ title, url });
+    else await navigator.clipboard.writeText(url);
+  };
 
   useEffect(() => {
     if (loadingDetail || showError || !series || !visible.recommendations) {
@@ -4286,7 +5296,7 @@ function TitleDetailPage() {
           <ArrowLeft size={22} />
         </button>
         <span className="spacer" />
-        <button className="icon-button" type="button" onClick={() => setSettingsOpen(true)} aria-label="Detail settings">
+        <button className="icon-button" type="button" onClick={() => setActionsOpen(true)} aria-label="Title actions">
           <EllipsisVertical size={20} />
         </button>
       </div>
@@ -4394,6 +5404,25 @@ function TitleDetailPage() {
       ) : (
         <DetailSkeleton series={null} showRecommendations={visible.recommendations} />
       )}
+      <BottomDrawer title="Title Actions" open={actionsOpen} onOpenChange={setActionsOpen}>
+        <div className="detail-action-list">
+          <button type="button" onClick={() => { setActionsOpen(false); setAddToCustomOpen(true); }}>
+            <Plus size={18} /><span><strong>Add to Custom Feeds</strong></span><ChevronRight size={18} />
+          </button>
+          <button type="button" onClick={() => void shareTitle()}>
+            <Share2 size={18} /><span><strong>Share Title</strong></span><ChevronRight size={18} />
+          </button>
+          <button type="button" onClick={() => { setActionsOpen(false); setSettingsOpen(true); }}>
+            <SlidersHorizontal size={18} /><span><strong>Customize Details</strong></span><ChevronRight size={18} />
+          </button>
+        </div>
+      </BottomDrawer>
+      <AddTitlesToCustomFeedsDrawer
+        titleIds={detailTitleIds}
+        open={addToCustomOpen}
+        onOpenChange={setAddToCustomOpen}
+        allowRemoval
+      />
       <BottomDrawer title="Detail Settings" open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DetailSettingsDrawer visible={visible} onChange={setVisible} />
       </BottomDrawer>
@@ -4631,9 +5660,10 @@ function LearnPage() {
           for mapped titles. These values provide audience-size and engagement context; they are not available for every title.
         </LearnItem>
         <LearnItem title="Fan Rank">
-          Fan Rank measures fan engagement using AniList favourites relative to popularity, similar to comparing likes with views
-          on a YouTube video. It adjusts for titles with low popularity so limited data does not produce an unfairly high rank. A
-          Fan Rank of 90% means stronger fan engagement than 90% of titles.
+          Think of AniList popularity like YouTube views and favourites like likes. Fan Rank measures how strongly readers favourite
+          a title for the size of its audience, while correcting for very small audiences. It ranks that score across the entire
+          AniList-mapped manhwa catalog with the required stats. A Fan Rank of 90% means the title scored higher than 90% of that
+          full catalog.
         </LearnItem>
         <LearnItem title="Dates and history">
           Release and completion windows use confirmed dates only; estimated dates never qualify. Growth values compare available

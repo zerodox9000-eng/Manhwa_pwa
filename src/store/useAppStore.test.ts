@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createFeed } from "../domain/defaults";
-import { normalizeFeed } from "./useAppStore";
+import { createCustomFeed, createFeed } from "../domain/defaults";
+import { MAX_CUSTOM_FEED_TITLES, normalizeFeed } from "./useAppStore";
 
 describe("normalizeFeed", () => {
   it("removes latest-added rank from visible cover stats", () => {
@@ -24,5 +24,16 @@ describe("normalizeFeed", () => {
     const normalized = normalizeFeed(feed, { preserveMetricSlots: true });
 
     expect(normalized.view.metricSlots).toEqual(["mangabakaLatestRank", "popularity", "favourites"]);
+  });
+
+  it("deduplicates and caps custom feed membership", () => {
+    const feed = createCustomFeed("Saved custom feed");
+    feed.customTitleIds = [1, 1, ...Array.from({ length: MAX_CUSTOM_FEED_TITLES + 10 }, (_, index) => index + 2)];
+
+    const normalized = normalizeFeed(feed);
+
+    expect(normalized.kind).toBe("custom");
+    expect(normalized.customTitleIds).toHaveLength(MAX_CUSTOM_FEED_TITLES);
+    expect(normalized.customTitleIds.slice(0, 3)).toEqual([1, 2, 3]);
   });
 });

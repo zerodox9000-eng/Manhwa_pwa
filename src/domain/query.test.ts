@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, createFeed } from "./defaults";
+import { DEFAULT_SETTINGS, createCustomFeed, createFeed } from "./defaults";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch } from "./query";
 import type { HistoryMap, SeriesCatalog, TagNode } from "./types";
 
@@ -546,5 +546,58 @@ describe("runFeedQuery", () => {
       metaHistoryLast: "2024-05-10",
     });
     expect(result.items.map((item) => item.id)).toEqual([71, 70]);
+  });
+
+  it("keeps custom feed membership in manual order and omits unknown or untagged titles", () => {
+    const feed = createCustomFeed("Hand picked");
+    feed.customTitleIds = [2, 1, 999, 50];
+    const result = runFeedQuery({
+      feed,
+      series: [
+        ...baseSeries,
+        { ...baseSeries[0], id: 50, display_title: "No recognized tags", tag_ids: [] },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+    });
+
+    expect(result.items.map((item) => item.id)).toEqual([2, 1]);
+  });
+
+  it("stat-sorts custom membership", () => {
+    const feed = createCustomFeed("Ranked picks");
+    feed.customTitleIds = [1, 2];
+    feed.customOrder = false;
+    feed.sort = [{ id: "pop", metric: "popularity", direction: "desc" }];
+    const result = runFeedQuery({
+      feed,
+      series: baseSeries,
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+    });
+
+    expect(result.items.map((item) => item.id)).toEqual([2, 1]);
+  });
+
+  it("applies custom-feed tag controls without changing stored membership", () => {
+    const feed = createCustomFeed("Tagged picks");
+    feed.customTitleIds = [1, 2];
+    feed.customOrder = false;
+    feed.filters.includeTagIds = [1];
+    const result = runFeedQuery({
+      feed,
+      series: baseSeries,
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+    });
+
+    expect(result.items.map((item) => item.id)).toEqual([1]);
+    expect(feed.customTitleIds).toEqual([1, 2]);
   });
 });

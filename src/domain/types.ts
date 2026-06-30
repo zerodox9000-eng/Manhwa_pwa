@@ -227,6 +227,7 @@ export interface FeedViewSettings {
 
 export interface Feed {
   id: string;
+  kind: "logic" | "custom";
   name: string;
   description: string;
   showDescription: boolean;
@@ -236,6 +237,10 @@ export interface Feed {
   sort: SortRule[];
   view: FeedViewSettings;
   coverTitleIds: number[];
+  customTitleIds: number[];
+  customOrder: boolean;
+  customInsertion: "top" | "bottom";
+  customNonAniListPlacement: "top" | "bottom";
 }
 
 export interface Folder {
