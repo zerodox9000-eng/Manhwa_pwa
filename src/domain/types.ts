@@ -248,6 +248,23 @@ export interface Folder {
   updatedAt: string;
 }
 
+export interface FeedFolder {
+  id: string;
+  name: string;
+  parentId: string | null;
+  childFolderIds: string[];
+  feedIds: string[];
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface HomeSource {
+  kind: "unfiled" | "folder";
+  folderId: string | null;
+  continuous: boolean;
+}
+
 export interface RecommendationShelf {
   id: string;
   name: string;
@@ -332,7 +349,8 @@ export interface SyncMeta {
 
 export interface AppStateSnapshot {
   feeds: Feed[];
-  folders?: Folder[];
+  folders?: FeedFolder[];
+  homeSource?: HomeSource;
   labels?: UserLabel[];
   settings: AppSettings;
   activeFeedId: string | null;
@@ -360,9 +378,10 @@ export interface ProfileSessionState {
 
 export interface ProfileState {
   profileId: string;
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   feeds: Feed[];
-  folders: Folder[];
+  folders: FeedFolder[];
+  homeSource: HomeSource;
   labels: UserLabel[];
   settings: AppSettings;
   activeFeedId: string | null;

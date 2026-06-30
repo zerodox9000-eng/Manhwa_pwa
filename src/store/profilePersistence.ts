@@ -2,7 +2,8 @@ import type {
   AppSettings,
   AppStateSnapshot,
   Feed,
-  Folder,
+  FeedFolder,
+  HomeSource,
   Profile,
   ProfileSessionState,
   ProfileState,
@@ -10,10 +11,11 @@ import type {
   UserLabel,
 } from "../domain/types";
 import { profileDb } from "../db/appDb";
+import { DEFAULT_HOME_SOURCE, normalizeFeedFolders } from "../domain/feedLibrary";
 
 export const LEGACY_STATE_KEY = "manhwa-library-state-v1";
 export const ACTIVE_PROFILE_KEY = "manhwa-active-profile-v1";
-export const PROFILE_SCHEMA_VERSION = 1 as const;
+export const PROFILE_SCHEMA_VERSION = 2 as const;
 
 export function createProfileId() {
   return globalThis.crypto?.randomUUID?.() ?? `profile-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -44,7 +46,8 @@ export function createProfileState(
   profileId: string,
   input: {
     feeds: Feed[];
-    folders?: Folder[];
+    folders?: FeedFolder[];
+    homeSource?: HomeSource;
     labels?: UserLabel[];
     settings: AppSettings;
     activeFeedId?: string | null;
@@ -52,11 +55,15 @@ export function createProfileState(
     lastRoute?: string;
   },
 ): ProfileState {
+  const homeSource: HomeSource = input.homeSource?.kind === "folder" && input.homeSource.folderId
+    ? { kind: "folder", folderId: input.homeSource.folderId, continuous: Boolean(input.homeSource.continuous) }
+    : { ...DEFAULT_HOME_SOURCE, continuous: Boolean(input.homeSource?.continuous) };
   return {
     profileId,
     schemaVersion: PROFILE_SCHEMA_VERSION,
     feeds: input.feeds,
-    folders: input.folders ?? [],
+    folders: normalizeFeedFolders(input.folders, new Set(input.feeds.map((feed) => feed.id))),
+    homeSource,
     labels: input.labels ?? [],
     settings: input.settings,
     activeFeedId: input.activeFeedId ?? null,
@@ -77,7 +84,8 @@ export function profileStateFromLegacy(
 ): ProfileState {
   return createProfileState(profileId, {
     feeds: snapshot.feeds ?? fallback.feeds,
-    folders: snapshot.folders,
+    folders: normalizeFeedFolders(snapshot.folders, new Set((snapshot.feeds ?? fallback.feeds).map((feed) => feed.id))),
+    homeSource: snapshot.homeSource,
     labels: snapshot.labels,
     settings: snapshot.settings ?? fallback.settings,
     activeFeedId: snapshot.activeFeedId,

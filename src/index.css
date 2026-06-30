@@ -3862,6 +3862,369 @@ body:has(.title-detail-page)::-webkit-scrollbar {
   font-size: 12px;
 }
 
+.profile-count {
+  color: rgba(226, 232, 244, 0.58);
+  font-size: 11px;
+  font-weight: 750;
+  text-align: right;
+}
+
+/* Feed library: folder rows and feed mosaics share the existing glass language. */
+.feeds-library-page {
+  width: min(760px, 100%);
+}
+
+.feeds-library-header {
+  min-height: 48px;
+  margin-bottom: 18px;
+}
+
+.feeds-library-header > div {
+  min-width: 0;
+}
+
+.feeds-library-header h1 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1.08;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feeds-library-header .icon-button.active {
+  border-color: color-mix(in srgb, var(--accent) 54%, rgba(255, 255, 255, 0.16));
+  background: color-mix(in srgb, var(--accent) 20%, rgba(25, 27, 36, 0.82));
+}
+
+.organize-hint {
+  margin: -8px 2px 14px;
+}
+
+.feed-folder-section,
+.unfiled-feed-section {
+  margin: 0 0 22px;
+}
+
+.feed-library-label {
+  margin: 0 0 10px 3px;
+  color: rgba(224, 229, 241, 0.62);
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.feed-folder-list {
+  display: grid;
+  gap: 9px;
+}
+
+.feed-folder-row {
+  position: relative;
+  min-height: 72px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  background:
+    linear-gradient(
+      104deg,
+      rgb(var(--folder-color-1) / 0.58),
+      rgb(var(--folder-color-2) / 0.46) 54%,
+      rgb(var(--folder-color-3) / 0.54)
+    ),
+    rgba(20, 22, 30, 0.78);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.16),
+    0 12px 26px rgba(0, 0, 0, 0.22);
+  transition: opacity 140ms ease, transform 160ms ease;
+}
+
+.feed-folder-row::before {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(12, 14, 20, 0.22);
+  content: "";
+  pointer-events: none;
+}
+
+.feed-folder-main {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 20px;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  min-height: 70px;
+  padding: 10px 48px 10px 14px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.feed-folder-main > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.feed-folder-main strong {
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 850;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-folder-main small {
+  color: rgba(247, 248, 253, 0.74);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.feed-folder-menu,
+.feed-folder-drag {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(14, 16, 22, 0.38);
+  color: #fff;
+  transform: translateY(-50%);
+  backdrop-filter: blur(12px) saturate(1.12);
+}
+
+.feed-folder-menu {
+  right: 8px;
+}
+
+.feed-folder-drag {
+  right: 42px;
+  touch-action: none;
+  cursor: grab;
+}
+
+.feeds-library-page.drag-active .feed-folder-row {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.feeds-library-page.drag-active .feed-folder-menu,
+.feeds-library-page.drag-active .feed-folder-drag {
+  backdrop-filter: none;
+}
+
+.folder-drag-overlay,
+.feed-drag-overlay {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 20px;
+  gap: 10px;
+  align-items: center;
+  width: min(380px, calc(100vw - 32px));
+  min-height: 62px;
+  padding: 10px 14px;
+  color: #fff;
+  background: rgba(48, 51, 64, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.3);
+  contain: layout paint;
+  will-change: transform;
+}
+
+.folder-drag-overlay strong,
+.feed-drag-overlay strong {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-drag-overlay {
+  grid-template-columns: minmax(0, 1fr) 20px;
+  min-height: 52px;
+}
+
+.feed-folder-row:has(.feed-folder-drag) .feed-folder-main {
+  padding-right: 82px;
+}
+
+.folder-row-menu {
+  top: calc(50% + 22px);
+  right: 8px;
+  z-index: 20;
+}
+
+.sortable-dragging {
+  z-index: 50;
+  opacity: 0.18;
+}
+
+.compact-empty {
+  min-height: 180px;
+}
+
+.create-library-options,
+.home-source-list,
+.delete-folder-summary {
+  display: grid;
+  gap: 9px;
+}
+
+.library-create-row,
+.destination-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 20px;
+  gap: 11px;
+  align-items: center;
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--accent) 6%, transparent), transparent 54%),
+    rgba(255, 255, 255, 0.045);
+  color: var(--text);
+  text-align: left;
+}
+
+.library-create-row > span,
+.destination-row > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.library-create-row strong,
+.destination-row strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-create-row small,
+.destination-row small {
+  color: rgba(226, 232, 244, 0.58);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.destination-row.selected {
+  border-color: color-mix(in srgb, var(--accent) 42%, rgba(255, 255, 255, 0.13));
+  background:
+    linear-gradient(100deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
+    rgba(255, 255, 255, 0.055);
+}
+
+.destination-row:disabled {
+  opacity: 0.64;
+}
+
+.library-folder-create {
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.library-folder-create .field {
+  margin: 0;
+}
+
+.folder-migration-confirmation {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  color: var(--text);
+  background: rgba(24, 25, 31, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 8px;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.folder-migration-confirmation > strong {
+  font-size: 18px;
+}
+
+.folder-migration-confirmation p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.folder-migration-confirmation b {
+  color: var(--text);
+}
+
+.folder-migration-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+
+.delete-folder-summary > strong {
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.delete-folder-summary > p {
+  margin: 0 0 6px;
+}
+
+.drawer-content:has(.create-library-options),
+.drawer-content:has(.home-source-list),
+.drawer-content:has(.delete-folder-summary) {
+  background:
+    linear-gradient(125deg, color-mix(in srgb, var(--accent) 6%, transparent), transparent 56%),
+    rgba(18, 20, 28, 0.84);
+  backdrop-filter: blur(24px) saturate(1.2);
+}
+
+@media (max-width: 430px) {
+  .feeds-library-header {
+    gap: 7px;
+  }
+
+  .feeds-library-header h1 {
+    font-size: 27px;
+  }
+
+  .feeds-library-header .icon-button {
+    width: 36px;
+    height: 36px;
+  }
+
+  .feed-folder-row {
+    min-height: 68px;
+  }
+
+  .feed-folder-main {
+    min-height: 66px;
+  }
+}
+
 .recommendations-page {
   position: relative;
   isolation: isolate;

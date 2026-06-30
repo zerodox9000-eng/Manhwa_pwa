@@ -279,9 +279,10 @@ const folderSchema = z
   .object({
     id: z.string(),
     name: z.string().optional(),
-    kind: z.enum(["manual", "smart"]).optional(),
-    titleIds: z.array(z.number()).optional(),
-    feedId: z.string().optional(),
+    parentId: z.string().nullable().optional(),
+    childFolderIds: z.array(z.string()).optional(),
+    feedIds: z.array(z.string()).optional(),
+    order: z.number().optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
   })
@@ -358,6 +359,11 @@ const appStateSnapshotSchema = z
   .object({
     feeds: z.array(feedSchema).optional(),
     folders: z.array(folderSchema).optional(),
+    homeSource: z.object({
+      kind: z.enum(["unfiled", "folder"]),
+      folderId: z.string().nullable().optional(),
+      continuous: z.boolean().optional(),
+    }).optional(),
     labels: z.array(labelSchema).optional(),
     settings: appSettingsSchema.optional(),
     activeFeedId: z.string().nullable().optional(),
