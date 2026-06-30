@@ -1,6 +1,7 @@
 import type { Feed, FeedFolder, HomeSource } from "./types";
 
 export const MAX_FOLDER_DEPTH = 3;
+export const MAX_FOLDERS_PER_PROFILE = 30;
 export const DEFAULT_HOME_SOURCE: HomeSource = {
   kind: "unfiled",
   folderId: null,
@@ -118,6 +119,40 @@ export function feedLocation(feedId: string, folders: FeedFolder[]) {
   return folders.find((folder) => folder.feedIds.includes(feedId))?.id ?? null;
 }
 
+export function moveFeedReference(
+  folders: FeedFolder[],
+  feedId: string,
+  destinationId: string | null,
+  targetIndex?: number,
+) {
+  return folders.map((folder) => {
+    const without = folder.feedIds.filter((id) => id !== feedId);
+    if (folder.id !== destinationId) {
+      return without.length === folder.feedIds.length ? folder : { ...folder, feedIds: without };
+    }
+    const index = Math.max(0, Math.min(targetIndex ?? without.length, without.length));
+    const feedIds = [...without];
+    feedIds.splice(index, 0, feedId);
+    return { ...folder, feedIds, updatedAt: new Date().toISOString() };
+  });
+}
+
+export function removeFolderSubtree(folders: FeedFolder[], folderId: string) {
+  const removedFolderIds = new Set([folderId, ...descendantFolderIds(folderId, folders)]);
+  const candidateFeedIds = new Set(
+    folders.filter((folder) => removedFolderIds.has(folder.id)).flatMap((folder) => folder.feedIds),
+  );
+  const remainingFolders = folders
+    .filter((folder) => !removedFolderIds.has(folder.id))
+    .map((folder) => ({
+      ...folder,
+      childFolderIds: folder.childFolderIds.filter((childId) => !removedFolderIds.has(childId)),
+    }));
+  const retainedFeedIds = new Set(remainingFolders.flatMap((folder) => folder.feedIds));
+  const orphanedFeedIds = [...candidateFeedIds].filter((id) => !retainedFeedIds.has(id));
+  return { remainingFolders, removedFolderIds, orphanedFeedIds };
+}
+
 export function unfiledFeeds(feeds: Feed[], folders: FeedFolder[]) {
   const filed = new Set(folders.flatMap((folder) => folder.feedIds));
   return feeds.filter((feed) => !filed.has(feed.id));
@@ -134,17 +169,16 @@ export function resolveHomeFeeds(feeds: Feed[], folders: FeedFolder[], source: H
   const branchFeedIds = branchLeaves.flatMap((folder) => folder.feedIds);
   if (!source.continuous) return feedsByIds(feeds, branchFeedIds);
 
-  const branchIndexes = branchLeaves.map((folder) => orderedLeaves.findIndex((item) => item.id === folder.id));
-  const firstBranchIndex = Math.min(...branchIndexes);
-  const lastBranchIndex = Math.max(...branchIndexes);
-  const laterFeedIds = orderedLeaves.slice(lastBranchIndex + 1).flatMap((folder) => folder.feedIds);
-  const earlierFeedIds = orderedLeaves.slice(0, firstBranchIndex).flatMap((folder) => folder.feedIds);
   return feedsByIds(feeds, [
-    ...branchFeedIds,
-    ...laterFeedIds,
-    ...earlierFeedIds,
+    ...orderedLeaves.flatMap((folder) => folder.feedIds),
     ...unfiledFeeds(feeds, folders).map((feed) => feed.id),
   ]);
+}
+
+export function resolveHomeStartFeed(feeds: Feed[], folders: FeedFolder[], source: HomeSource) {
+  return resolveHomeFeeds(feeds, folders, { ...source, continuous: false })[0]
+    ?? resolveHomeFeeds(feeds, folders, source)[0]
+    ?? null;
 }
 
 export function validateFolderTree(folders: FeedFolder[]) {

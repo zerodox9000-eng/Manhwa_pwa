@@ -3,8 +3,11 @@ import { createFeed } from "./defaults";
 import {
   canMoveFolder,
   folderDepth,
+  moveFeedReference,
   orderedFolderTree,
+  removeFolderSubtree,
   resolveHomeFeeds,
+  resolveHomeStartFeed,
   validateFolderTree,
 } from "./feedLibrary";
 import type { FeedFolder } from "./types";
@@ -38,7 +41,9 @@ describe("feed folder tree", () => {
     expect(resolveHomeFeeds(feeds, folders, { kind: "folder", folderId: "first", continuous: true }).map((feed) => feed.id))
       .toEqual(["a", "b", "c", "d"]);
     expect(resolveHomeFeeds(feeds, folders, { kind: "folder", folderId: "second", continuous: true }).map((feed) => feed.id))
-      .toEqual(["c", "a", "b", "d"]);
+      .toEqual(["a", "b", "c", "d"]);
+    expect(resolveHomeStartFeed(feeds, folders, { kind: "folder", folderId: "second", continuous: true })?.id)
+      .toBe("c");
   });
 
   it("flattens nested folders in visual tree order", () => {
@@ -53,5 +58,18 @@ describe("feed folder tree", () => {
       "child-a2",
       "root-b",
     ]);
+  });
+
+  it("moves a feed atomically and does not delete it with its old folder", () => {
+    const oldFolder = folder("old", null, [], ["feed-a"]);
+    const newFolder = folder("new", null, [], []);
+    const moved = moveFeedReference([oldFolder, newFolder], "feed-a", "new");
+
+    expect(moved.find((item) => item.id === "old")?.feedIds).toEqual([]);
+    expect(moved.find((item) => item.id === "new")?.feedIds).toEqual(["feed-a"]);
+
+    const deleted = removeFolderSubtree(moved, "old");
+    expect(deleted.orphanedFeedIds).toEqual([]);
+    expect(deleted.remainingFolders.find((item) => item.id === "new")?.feedIds).toEqual(["feed-a"]);
   });
 });

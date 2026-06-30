@@ -3,12 +3,15 @@ import { DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS } from "../domain/d
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import {
   DEFAULT_HOME_SOURCE,
+  MAX_FOLDERS_PER_PROFILE,
   canMoveFeedToFolder,
   canMoveFolder,
   createFeedFolder,
-  descendantFolderIds,
   feedLocation,
+  moveFeedReference,
   normalizeFeedFolders,
+  removeFolderSubtree,
+  resolveHomeStartFeed,
 } from "../domain/feedLibrary";
 import { feedUsesAniListOnlyParameters } from "../domain/query";
 import { parseAppStateSnapshot, parseSettings } from "../domain/validation";
@@ -336,6 +339,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   });
   const [feeds, setFeeds] = useState<Feed[]>(initialFeeds);
   const [folders, setFolders] = useState<FeedFolder[]>(() => normalizeFeedFolders(local.folders, new Set(initialFeeds.map((feed) => feed.id))));
+  const foldersRef = useRef(folders);
   const [homeSource, setHomeSource] = useState<HomeSource>(local.homeSource ?? DEFAULT_HOME_SOURCE);
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
   const [settings, setSettings] = useState<AppSettings>(mergeSettings(parseSettings(local.settings) ?? local.settings));
@@ -350,6 +354,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const profileCacheRef = useRef(new Map<string, Profile>());
   const profileStateCacheRef = useRef(new Map<string, ProfileState>());
   const switchingProfileRef = useRef(false);
+
+  useEffect(() => {
+    foldersRef.current = folders;
+  }, [folders]);
 
   const applyProfileState = useCallback((profile: Profile, state: ProfileState) => {
     setActiveProfile(profile);
@@ -641,6 +649,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const createFolder = useCallback((name: string, parentId: string | null, migrateParentFeeds = false) => {
     const cleanName = name.trim();
     if (!cleanName) throw new Error("Folder name is required.");
+    if (foldersRef.current.length >= MAX_FOLDERS_PER_PROFILE) {
+      throw new Error(`Each profile can keep up to ${MAX_FOLDERS_PER_PROFILE} folders.`);
+    }
     const parent = parentId ? folders.find((folder) => folder.id === parentId) : null;
     if (parentId && !parent) throw new Error("Parent folder not found.");
     if (parent?.feedIds.length && !migrateParentFeeds) {
@@ -683,15 +694,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const moveFeedToFolder = useCallback((feedId: string, folderId: string | null, targetIndex?: number) => {
-    if (!canMoveFeedToFolder(folderId, folders)) throw new Error("A folder with subfolders cannot also contain feeds.");
-    setFolders((current) => current.map((folder) => {
-      const without = folder.feedIds.filter((id) => id !== feedId);
-      if (folder.id !== folderId) return without.length === folder.feedIds.length ? folder : { ...folder, feedIds: without };
-      const index = Math.max(0, Math.min(targetIndex ?? without.length, without.length));
-      const next = [...without];
-      next.splice(index, 0, feedId);
-      return { ...folder, feedIds: next, updatedAt: new Date().toISOString() };
-    }));
+    if (!canMoveFeedToFolder(folderId, foldersRef.current)) throw new Error("A folder with subfolders cannot also contain feeds.");
+    const nextFolders = moveFeedReference(foldersRef.current, feedId, folderId, targetIndex);
+    foldersRef.current = nextFolders;
+    setFolders(nextFolders);
     if (!folderId) {
       setFeeds((current) => {
         const sourceIndex = current.findIndex((feed) => feed.id === feedId);
@@ -703,7 +709,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return next;
       });
     }
-  }, [folders]);
+  }, []);
 
   const moveFolder = useCallback((folderId: string, parentId: string | null, targetIndex?: number) => {
     if (!canMoveFolder(folderId, parentId, folders)) throw new Error("That move would create a cycle or exceed three folder levels.");
@@ -757,27 +763,30 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, [feeds, folders]);
 
   const deleteFolder = useCallback((id: string, preserveFeeds: boolean) => {
-    const removedIds = new Set([id, ...descendantFolderIds(id, folders)]);
-    const removedFeedIds = folders.filter((folder) => removedIds.has(folder.id)).flatMap((folder) => folder.feedIds);
-    setFolders((current) => current
-      .filter((folder) => !removedIds.has(folder.id))
-      .map((folder) => ({ ...folder, childFolderIds: folder.childFolderIds.filter((childId) => !removedIds.has(childId)) })));
-    if (!preserveFeeds) {
-      const feedIds = new Set(removedFeedIds);
-      setFeeds((current) => current.filter((feed) => !feedIds.has(feed.id)));
-      setActiveFeedId((current) => (current && feedIds.has(current) ? null : current));
+    const result = removeFolderSubtree(foldersRef.current, id);
+    foldersRef.current = result.remainingFolders;
+    setFolders(result.remainingFolders);
+    if (!preserveFeeds && result.orphanedFeedIds.length > 0) {
+      const orphaned = new Set(result.orphanedFeedIds);
+      setFeeds((currentFeeds) => currentFeeds.filter((feed) => !orphaned.has(feed.id)));
+      setActiveFeedId((currentFeedId) => (
+        currentFeedId && orphaned.has(currentFeedId) ? null : currentFeedId
+      ));
     }
-    setHomeSource((current) => (
-      current.folderId && removedIds.has(current.folderId) ? DEFAULT_HOME_SOURCE : current
+    setHomeSource((currentSource) => (
+      currentSource.folderId && result.removedFolderIds.has(currentSource.folderId)
+        ? DEFAULT_HOME_SOURCE
+        : currentSource
     ));
-  }, [folders]);
+  }, []);
 
   const updateHomeSource = useCallback((source: HomeSource) => {
     if (source.kind === "folder" && !folders.some((folder) => folder.id === source.folderId)) {
       throw new Error("Home source folder not found.");
     }
+    setActiveFeedId(resolveHomeStartFeed(feeds, folders, source)?.id ?? null);
     setHomeSource(source);
-  }, [folders]);
+  }, [feeds, folders]);
 
   const upsertLabel = useCallback((label: UserLabel) => {
     setLabels((current) => {

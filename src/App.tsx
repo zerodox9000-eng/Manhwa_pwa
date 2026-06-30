@@ -71,8 +71,10 @@ import {
   canMoveFolder,
   descendantFolderIds,
   feedLocation,
+  MAX_FOLDERS_PER_PROFILE,
   orderedFolderTree,
   resolveHomeFeeds,
+  resolveHomeStartFeed,
   unfiledFeeds,
 } from "./domain/feedLibrary";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, hasAniList, hasDetailTags, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
@@ -123,6 +125,7 @@ const PWA_CHROME_THEME_COLOR = "#11131a";
 
 const HOME_SCROLL_PREFIX = "manhwa-home-scroll";
 const HOME_RETURNING_FROM_TITLE_KEY = "manhwa-home-returning-from-title";
+const HOME_RETURN_FEED_KEY = "manhwa-home-return-feed";
 const FEEDS_SCROLL_KEY = "manhwa-feeds-scroll";
 const SEARCH_OPENED_HISTORY_LIMIT = 99;
 const ACCENT_COLORS = [
@@ -265,6 +268,7 @@ function prepareHomeTitleNavigation(feed: Feed | null) {
   saveHomeScroll(feed);
   try {
     sessionStorage.setItem(profileStorageKey(HOME_RETURNING_FROM_TITLE_KEY), "1");
+    if (feed) sessionStorage.setItem(profileStorageKey(HOME_RETURN_FEED_KEY), feed.id);
   } catch {
     // Best effort only.
   }
@@ -405,7 +409,16 @@ function AppFrame() {
               to={item.to}
               className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
               onClick={(event) => {
-                if (!isPlainNavigationClick(event) || location.pathname === item.to) return;
+                if (!isPlainNavigationClick(event)) return;
+                if (item.id === "home") {
+                  event.preventDefault();
+                  sessionStorage.removeItem(profileStorageKey(HOME_RETURNING_FROM_TITLE_KEY));
+                  sessionStorage.removeItem(profileStorageKey(HOME_RETURN_FEED_KEY));
+                  store.setActiveFeedId(resolveHomeStartFeed(store.feeds, store.folders, store.homeSource)?.id ?? null);
+                  if (location.pathname !== "/") scheduleRouteChange("page", () => navigate("/"));
+                  return;
+                }
+                if (location.pathname === item.to) return;
                 event.preventDefault();
                 scheduleRouteChange("page", () => navigate(item.to));
               }}
@@ -554,6 +567,7 @@ function BottomDrawer({
 
 function HomePage() {
   const store = useAppStore();
+  const location = useLocation();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingFeed, setEditingFeed] = useState<Feed | null>(null);
   const [renderCenterIndex, setRenderCenterIndex] = useState(-1);
@@ -566,6 +580,8 @@ function HomePage() {
   const pendingFeedIndexRef = useRef(-1);
   const feedSettleTimerRef = useRef<number | null>(null);
   const didInitialPagerAlignRef = useRef(false);
+  const previousHomePathRef = useRef(location.pathname);
+  const lastAlignedFeedIdRef = useRef("");
   const feeds = useMemo(
     () => resolveHomeFeeds(store.feeds, store.folders, store.homeSource),
     [store.feeds, store.folders, store.homeSource],
@@ -578,6 +594,16 @@ function HomePage() {
   useEffect(() => {
     activeFeedIdRef.current = activeFeedId;
   }, [activeFeedId]);
+
+  useEffect(() => {
+    if (location.pathname !== "/") return;
+    if (sessionStorage.getItem(profileStorageKey(HOME_RETURNING_FROM_TITLE_KEY)) !== "1") return;
+    const returnFeedId = sessionStorage.getItem(profileStorageKey(HOME_RETURN_FEED_KEY));
+    if (returnFeedId && feeds.some((feed) => feed.id === returnFeedId)) {
+      setActiveFeedId(returnFeedId);
+    }
+    setReturningFromTitle(true);
+  }, [feeds, location.pathname, setActiveFeedId]);
 
   useEffect(() => {
     if (feeds.length === 0) {
@@ -594,15 +620,24 @@ function HomePage() {
   }, [activeFeedIndex]);
 
   useLayoutEffect(() => {
-    if (!store.ready || !activeFeed) return;
+    const enteredHome = previousHomePathRef.current !== "/" && location.pathname === "/";
+    previousHomePathRef.current = location.pathname;
+    if (!store.ready || !activeFeed || location.pathname !== "/") return;
     const pane = paneRefs.current.get(activeFeed.id);
     if (!pane) return;
+    const needsAlignment = enteredHome
+      || returningFromTitle
+      || !didInitialPagerAlignRef.current
+      || lastAlignedFeedIdRef.current !== activeFeed.id;
+    if (!needsAlignment) return;
+    pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
+    lastAlignedFeedIdRef.current = activeFeed.id;
     if (returningFromTitle) {
-      pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
       restoreHomeScroll(activeFeed);
       setReturningFromTitle(false);
       try {
         sessionStorage.removeItem(profileStorageKey(HOME_RETURNING_FROM_TITLE_KEY));
+        sessionStorage.removeItem(profileStorageKey(HOME_RETURN_FEED_KEY));
       } catch {
         // Best effort only.
       }
@@ -610,10 +645,9 @@ function HomePage() {
     }
     if (!didInitialPagerAlignRef.current) {
       didInitialPagerAlignRef.current = true;
-      pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
       restoreHomeScroll(activeFeed);
     }
-  }, [activeFeed, returningFromTitle, store.ready]);
+  }, [activeFeed, location.pathname, returningFromTitle, store.ready]);
 
   const warmFeedsAroundScrollPosition = useCallback(() => {
     const pager = pagerRef.current;
@@ -1284,10 +1318,12 @@ const MemoTitleMetrics = memo(TitleMetrics, (prev, next) =>
 
 function FeedsPage() {
   const store = useAppStore();
+  const [folderSearchParams, setFolderSearchParams] = useSearchParams();
   const [editorFeed, setEditorFeed] = useState<Feed | null>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(
-    () => sessionStorage.getItem(profileStorageKey("manhwa-feeds-folder")) || null,
+    () => folderSearchParams.get("folder") || sessionStorage.getItem(profileStorageKey("manhwa-feeds-folder")) || null,
   );
+  const initializedFolderRouteRef = useRef(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [homeSourceOpen, setHomeSourceOpen] = useState(false);
   const [organizing, setOrganizing] = useState(false);
@@ -1296,6 +1332,7 @@ function FeedsPage() {
   const [renamingFolder, setRenamingFolder] = useState<FeedFolder | null>(null);
   const [deletingFolder, setDeletingFolder] = useState<FeedFolder | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [activeFolderDragStyle, setActiveFolderDragStyle] = useState<React.CSSProperties>();
   const [coverMap, setCoverMap] = useState<Map<string, SeriesCatalog[]>>(new Map());
   const [coversLoading, setCoversLoading] = useState(true);
   const sensors = useSensors(
@@ -1349,13 +1386,29 @@ function FeedsPage() {
   }, []);
 
   useEffect(() => {
+    const routeFolderId = folderSearchParams.get("folder");
+    if (!initializedFolderRouteRef.current) {
+      initializedFolderRouteRef.current = true;
+      if (!routeFolderId && selectedFolderId) {
+        setFolderSearchParams({ folder: selectedFolderId }, { replace: true });
+        return;
+      }
+    }
+    setSelectedFolderId(routeFolderId);
+    if (routeFolderId) sessionStorage.setItem(profileStorageKey("manhwa-feeds-folder"), routeFolderId);
+    else sessionStorage.removeItem(profileStorageKey("manhwa-feeds-folder"));
+  }, [folderSearchParams, selectedFolderId, setFolderSearchParams]);
+
+  useEffect(() => {
     if (selectedFolderId && !store.folders.some((folder) => folder.id === selectedFolderId)) {
       setSelectedFolderId(null);
       sessionStorage.removeItem(profileStorageKey("manhwa-feeds-folder"));
+      setFolderSearchParams({}, { replace: true });
     }
-  }, [selectedFolderId, store.folders]);
+  }, [selectedFolderId, setFolderSearchParams, store.folders]);
 
   useEffect(() => {
+    if (organizing) return;
     let cancelled = false;
     setCoversLoading(true);
     let index = 0;
@@ -1392,37 +1445,52 @@ function FeedsPage() {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [store.catalog, store.feeds, store.history, store.labels, store.settings, store.syncMeta, store.tags]);
+  }, [organizing, store.catalog, store.feeds, store.history, store.labels, store.settings, store.syncMeta, store.tags]);
 
   const openFolder = useCallback((folderId: string | null) => {
-    setSelectedFolderId(folderId);
-    if (folderId) sessionStorage.setItem(profileStorageKey("manhwa-feeds-folder"), folderId);
-    else sessionStorage.removeItem(profileStorageKey("manhwa-feeds-folder"));
+    setFolderSearchParams(folderId ? { folder: folderId } : {});
     window.scrollTo({ top: 0, behavior: "auto" });
-  }, []);
+  }, [setFolderSearchParams]);
 
-  const handleDragEnd = useCallback((event: DragEndEvent) => {
+  const clearActiveDrag = useCallback(() => {
     setActiveDragId(null);
+    setActiveFolderDragStyle(undefined);
+  }, []);
+  const handleFeedDragEnd = useCallback((event: DragEndEvent) => {
+    clearActiveDrag();
     const activeId = String(event.active.id);
     const overId = event.over ? String(event.over.id) : "";
     if (!overId || activeId === overId) return;
-    if (activeId.startsWith("feed:") && overId.startsWith("feed:")) {
-      const feedId = activeId.slice(5);
-      const targetId = overId.slice(5);
-      const targetIndex = visibleFeeds.findIndex((feed) => feed.id === targetId);
-      store.moveFeedToFolder(feedId, selectedFolderId, targetIndex);
-      return;
-    }
-    if (activeId.startsWith("folder:") && overId.startsWith("folder:")) {
-      const folderId = activeId.slice(7);
-      const targetId = overId.slice(7);
-      const targetIndex = visibleFolders.findIndex((folder) => folder.id === targetId);
-      store.moveFolder(folderId, selectedFolderId, targetIndex);
-    }
-  }, [selectedFolderId, store, visibleFeeds, visibleFolders]);
+    const feedId = activeId.slice(5);
+    const targetId = overId.slice(5);
+    const targetIndex = visibleFeeds.findIndex((feed) => feed.id === targetId);
+    store.moveFeedToFolder(feedId, selectedFolderId, targetIndex);
+  }, [clearActiveDrag, selectedFolderId, store, visibleFeeds]);
+  const handleFolderDragEnd = useCallback((event: DragEndEvent) => {
+    clearActiveDrag();
+    const activeId = String(event.active.id);
+    const overId = event.over ? String(event.over.id) : "";
+    if (!overId || activeId === overId) return;
+    const folderId = activeId.slice(7);
+    const targetId = overId.slice(7);
+    const targetIndex = visibleFolders.findIndex((folder) => folder.id === targetId);
+    store.moveFolder(folderId, selectedFolderId, targetIndex);
+  }, [clearActiveDrag, selectedFolderId, store, visibleFolders]);
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setFolderMenuId(null);
-    setActiveDragId(String(event.active.id));
+    const id = String(event.active.id);
+    setActiveDragId(id);
+    if (id.startsWith("folder:")) {
+      const node = document.querySelector<HTMLElement>(`[data-folder-id="${id.slice(7)}"]`);
+      if (node) {
+        const style = getComputedStyle(node);
+        setActiveFolderDragStyle({
+          "--folder-color-1": style.getPropertyValue("--folder-color-1"),
+          "--folder-color-2": style.getPropertyValue("--folder-color-2"),
+          "--folder-color-3": style.getPropertyValue("--folder-color-3"),
+        } as React.CSSProperties);
+      }
+    }
   }, []);
 
   const folderSortableIds = useMemo(
@@ -1478,14 +1546,20 @@ function FeedsPage() {
         </button>
       </div>
       {organizing ? <p className="muted tiny organize-hint">Drag handles reorder this level. Use each menu to move across folders.</p> : null}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragCancel={() => setActiveDragId(null)}
-        onDragEnd={handleDragEnd}
-      >
-        {visibleFolders.length > 0 ? (
+      {visibleFolders.length > 0 ? (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          autoScroll={visibleFolders.length > 7 ? {
+            acceleration: 4,
+            interval: 16,
+            layoutShiftCompensation: false,
+            threshold: { x: 0.15, y: 0.12 },
+          } : false}
+          onDragStart={handleDragStart}
+          onDragCancel={clearActiveDrag}
+          onDragEnd={handleFolderDragEnd}
+        >
           <SortableContext items={folderSortableIds} strategy={verticalListSortingStrategy}>
             <section className="feed-folder-section">
               {!selectedFolder ? <h2 className="feed-library-label">Folders</h2> : null}
@@ -1512,7 +1586,24 @@ function FeedsPage() {
               </div>
             </section>
           </SortableContext>
-        ) : null}
+          <DragOverlay dropAnimation={null}>
+            {activeDragId?.startsWith("folder:") ? (
+              <div className="folder-drag-overlay" style={activeFolderDragStyle}>
+                <FolderIcon size={22} />
+                <strong>{store.folders.find((folder) => folder.id === activeDragId.slice(7))?.name ?? "Folder"}</strong>
+                <GripVertical size={18} />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      ) : null}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
+        onDragCancel={clearActiveDrag}
+        onDragEnd={handleFeedDragEnd}
+      >
         <SortableContext items={feedSortableIds} strategy={rectSortingStrategy}>
           <section className="unfiled-feed-section">
             {!selectedFolder ? <h2 className="feed-library-label">Unfiled Feeds</h2> : null}
@@ -1545,16 +1636,10 @@ function FeedsPage() {
           </section>
         </SortableContext>
         <DragOverlay dropAnimation={null}>
-          {activeDragId?.startsWith("folder:") ? (
-            <div className="folder-drag-overlay">
-              <FolderIcon size={22} />
-              <strong>{store.folders.find((folder) => folder.id === activeDragId.slice(7))?.name ?? "Folder"}</strong>
-              <GripVertical size={18} />
-            </div>
-          ) : activeDragId?.startsWith("feed:") ? (
-            <div className="feed-drag-overlay">
+          {activeDragId?.startsWith("feed:") ? (
+            <div className="feed-card-drag-overlay">
+              <MosaicCover items={coverMap.get(activeDragId.slice(5)) ?? []} title={feedById.get(activeDragId.slice(5))?.name ?? "Feed"} />
               <strong>{feedById.get(activeDragId.slice(5))?.name ?? "Feed"}</strong>
-              <GripVertical size={18} />
             </div>
           ) : null}
         </DragOverlay>
@@ -1577,6 +1662,7 @@ function FeedsPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         parentFolder={selectedFolder}
+        folderLimitReached={store.folders.length >= MAX_FOLDERS_PER_PROFILE}
         onCreateFeed={() => {
           setCreateOpen(false);
           setEditorFeed(createFeed("New Feed"));
@@ -1680,6 +1766,7 @@ function SortableFolderRow({
   } = useSortable({ id: `folder:${folder.id}`, disabled: !organizing });
   const [palette, setPalette] = useState<RgbColor[]>(DEFAULT_FEED_PALETTE);
   useEffect(() => {
+    if (organizing) return;
     let cancelled = false;
     void Promise.all(
       covers.slice(0, 3).map((cover, index) => cover.cover
@@ -1689,7 +1776,7 @@ function SortableFolderRow({
       if (!cancelled && colors.length > 0) setPalette(colors);
     });
     return () => { cancelled = true; };
-  }, [covers]);
+  }, [covers, organizing]);
   const descendants = descendantFolderIds(folder.id, folders).length;
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -1699,7 +1786,12 @@ function SortableFolderRow({
     "--folder-color-3": (palette[2] ?? palette[0] ?? DEFAULT_FEED_PALETTE[2]).join(" "),
   } as React.CSSProperties;
   return (
-    <div ref={setNodeRef} className={`feed-folder-row ${isDragging ? "sortable-dragging" : ""}`} style={style}>
+    <div
+      ref={setNodeRef}
+      data-folder-id={folder.id}
+      className={`feed-folder-row ${organizing ? "organizing" : ""} ${isDragging ? "sortable-dragging" : ""}`}
+      style={style}
+    >
       <button className="feed-folder-main" type="button" onClick={onOpen}>
         <FolderIcon size={24} />
         <span>
@@ -1734,12 +1826,14 @@ function CreateLibraryDrawer({
   open,
   onOpenChange,
   parentFolder,
+  folderLimitReached,
   onCreateFeed,
   onCreateFolder,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   parentFolder: FeedFolder | null;
+  folderLimitReached: boolean;
   onCreateFeed: () => void;
   onCreateFolder: (name: string, migrateFeeds: boolean) => void;
 }) {
@@ -1787,10 +1881,19 @@ function CreateLibraryDrawer({
               type="text"
               value={folderName}
               maxLength={60}
-              autoComplete="off"
+              autoComplete="one-time-code"
               autoCapitalize="words"
+              autoCorrect="on"
               enterKeyHint="done"
+              inputMode="text"
               spellCheck
+              data-1p-ignore="true"
+              data-lpignore="true"
+              data-form-type="other"
+              onFocus={(event) => {
+                const input = event.currentTarget;
+                window.setTimeout(() => input.scrollIntoView({ block: "center", behavior: "auto" }), 280);
+              }}
               onChange={(event) => setFolderName(event.target.value)}
               placeholder={parentFolder ? `Inside ${parentFolder.name}` : "New folder"}
             />
@@ -1798,10 +1901,10 @@ function CreateLibraryDrawer({
           <button
             className="button primary"
             type="button"
-            disabled={!folderName.trim()}
+            disabled={!folderName.trim() || folderLimitReached}
             onClick={() => needsMigration ? setPendingMigration(true) : onCreateFolder(folderName, false)}
           >
-            <FolderIcon size={17} /> Create Folder
+            <FolderIcon size={17} /> {folderLimitReached ? "30 folder limit reached" : "Create Folder"}
           </button>
         </div>
           </>

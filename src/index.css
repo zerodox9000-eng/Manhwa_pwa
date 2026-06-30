@@ -4025,8 +4025,7 @@ body:has(.title-detail-page)::-webkit-scrollbar {
   backdrop-filter: none;
 }
 
-.folder-drag-overlay,
-.feed-drag-overlay {
+.folder-drag-overlay {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) 20px;
   gap: 10px;
@@ -4035,7 +4034,14 @@ body:has(.title-detail-page)::-webkit-scrollbar {
   min-height: 62px;
   padding: 10px 14px;
   color: #fff;
-  background: rgba(48, 51, 64, 0.98);
+  background:
+    linear-gradient(
+      104deg,
+      rgb(var(--folder-color-1) / 0.72),
+      rgb(var(--folder-color-2) / 0.64) 54%,
+      rgb(var(--folder-color-3) / 0.7)
+    ),
+    rgba(20, 22, 30, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.3);
@@ -4043,8 +4049,7 @@ body:has(.title-detail-page)::-webkit-scrollbar {
   will-change: transform;
 }
 
-.folder-drag-overlay strong,
-.feed-drag-overlay strong {
+.folder-drag-overlay strong {
   overflow: hidden;
   font-size: 15px;
   font-weight: 850;
@@ -4052,12 +4057,39 @@ body:has(.title-detail-page)::-webkit-scrollbar {
   white-space: nowrap;
 }
 
-.feed-drag-overlay {
-  grid-template-columns: minmax(0, 1fr) 20px;
-  min-height: 52px;
+.feed-card-drag-overlay {
+  width: clamp(104px, 29vw, 150px);
+  color: #fff;
+  contain: layout paint;
+  filter: drop-shadow(0 14px 24px rgba(0, 0, 0, 0.5));
+  will-change: transform;
 }
 
-.feed-folder-row:has(.feed-folder-drag) .feed-folder-main {
+.feed-card-drag-overlay .mosaic-cover {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  width: 100%;
+  aspect-ratio: 0.72;
+  overflow: hidden;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.feed-card-drag-overlay .mosaic-cover img:first-child {
+  grid-row: auto;
+}
+
+.feed-card-drag-overlay > strong {
+  display: block;
+  margin-top: 7px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-folder-row.organizing .feed-folder-main {
   padding-right: 82px;
 }
 
