@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS } from "../domain/defaults";
+import { DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS, makeId } from "../domain/defaults";
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import {
   DEFAULT_HOME_SOURCE,
@@ -7,7 +7,8 @@ import {
   canMoveFeedToFolder,
   canMoveFolder,
   createFeedFolder,
-  feedLocation,
+  duplicateFeedRecord,
+  duplicateFolderSubtree,
   moveFeedReference,
   normalizeFeedFolders,
   removeFolderSubtree,
@@ -112,6 +113,7 @@ interface StoreState {
   moveFeedToFolder: (feedId: string, folderId: string | null, targetIndex?: number) => void;
   moveFolder: (folderId: string, parentId: string | null, targetIndex?: number) => void;
   duplicateFeed: (feedId: string, folderId?: string | null) => Feed | null;
+  duplicateFolder: (folderId: string) => FeedFolder | null;
   deleteFolder: (id: string, preserveFeeds: boolean) => void;
   updateHomeSource: (source: HomeSource) => void;
   upsertLabel: (label: UserLabel) => void;
@@ -338,6 +340,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     searchQuery: "",
   });
   const [feeds, setFeeds] = useState<Feed[]>(initialFeeds);
+  const feedsRef = useRef(feeds);
   const [folders, setFolders] = useState<FeedFolder[]>(() => normalizeFeedFolders(local.folders, new Set(initialFeeds.map((feed) => feed.id))));
   const foldersRef = useRef(folders);
   const [homeSource, setHomeSource] = useState<HomeSource>(local.homeSource ?? DEFAULT_HOME_SOURCE);
@@ -356,13 +359,20 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const switchingProfileRef = useRef(false);
 
   useEffect(() => {
+    feedsRef.current = feeds;
+  }, [feeds]);
+
+  useEffect(() => {
     foldersRef.current = folders;
   }, [folders]);
 
   const applyProfileState = useCallback((profile: Profile, state: ProfileState) => {
+    const normalizedFeeds = state.feeds.map((feed) => normalizeFeed(feed, { preserveMetricSlots: true }));
     setActiveProfile(profile);
-    setFeeds(state.feeds.map((feed) => normalizeFeed(feed, { preserveMetricSlots: true })));
+    feedsRef.current = normalizedFeeds;
+    setFeeds(normalizedFeeds);
     const normalizedFolders = normalizeFeedFolders(state.folders, new Set(state.feeds.map((feed) => feed.id)));
+    foldersRef.current = normalizedFolders;
     setFolders(normalizedFolders);
     setHomeSource(
       state.homeSource?.kind === "folder" && !normalizedFolders.some((folder) => folder.id === state.homeSource.folderId)
@@ -622,28 +632,38 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const upsertFeed = useCallback((feed: Feed) => {
     const updated = normalizeFeed({ ...feed, updatedAt: new Date().toISOString() });
-    setFeeds((current) => {
-      const exists = current.some((item) => item.id === feed.id);
-      return exists ? current.map((item) => (item.id === feed.id ? updated : item)) : [...current, updated];
-    });
+    const exists = feedsRef.current.some((item) => item.id === feed.id);
+    const nextFeeds = exists
+      ? feedsRef.current.map((item) => (item.id === feed.id ? updated : item))
+      : [...feedsRef.current, updated];
+    feedsRef.current = nextFeeds;
+    setFeeds(nextFeeds);
     setActiveFeedId((current) => current ?? updated.id);
   }, []);
 
   const deleteFeed = useCallback((id: string) => {
-    setFeeds((current) => current.filter((feed) => feed.id !== id));
+    const nextFeeds = feedsRef.current.filter((feed) => feed.id !== id);
+    const nextFolders = foldersRef.current.map((folder) => (
+      folder.feedIds.includes(id)
+        ? { ...folder, feedIds: folder.feedIds.filter((feedId) => feedId !== id), updatedAt: new Date().toISOString() }
+        : folder
+    ));
+    feedsRef.current = nextFeeds;
+    foldersRef.current = nextFolders;
+    setFeeds(nextFeeds);
+    setFolders(nextFolders);
     setActiveFeedId((current) => (current === id ? null : current));
   }, []);
 
   const moveFeed = useCallback((id: string, targetId: string) => {
-    setFeeds((current) => {
-      const index = current.findIndex((feed) => feed.id === id);
-      const targetIndex = current.findIndex((feed) => feed.id === targetId);
-      if (index < 0 || targetIndex < 0 || index === targetIndex) return current;
-      const copy = [...current];
-      const [moved] = copy.splice(index, 1);
-      copy.splice(targetIndex, 0, moved);
-      return copy;
-    });
+    const index = feedsRef.current.findIndex((feed) => feed.id === id);
+    const targetIndex = feedsRef.current.findIndex((feed) => feed.id === targetId);
+    if (index < 0 || targetIndex < 0 || index === targetIndex) return;
+    const nextFeeds = [...feedsRef.current];
+    const [moved] = nextFeeds.splice(index, 1);
+    nextFeeds.splice(targetIndex, 0, moved);
+    feedsRef.current = nextFeeds;
+    setFeeds(nextFeeds);
   }, []);
 
   const createFolder = useCallback((name: string, parentId: string | null, migrateParentFeeds = false) => {
@@ -652,15 +672,16 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (foldersRef.current.length >= MAX_FOLDERS_PER_PROFILE) {
       throw new Error(`Each profile can keep up to ${MAX_FOLDERS_PER_PROFILE} folders.`);
     }
-    const parent = parentId ? folders.find((folder) => folder.id === parentId) : null;
+    const currentFolders = foldersRef.current;
+    const parent = parentId ? currentFolders.find((folder) => folder.id === parentId) : null;
     if (parentId && !parent) throw new Error("Parent folder not found.");
     if (parent?.feedIds.length && !migrateParentFeeds) {
       throw new Error("Move the parent folder feeds into its first subfolder.");
     }
-    const siblingCount = folders.filter((folder) => folder.parentId === parentId).length;
+    const siblingCount = currentFolders.filter((folder) => folder.parentId === parentId).length;
     const folder = createFeedFolder(cleanName, parentId, siblingCount);
     const prospectiveFolders = [
-      ...folders.map((item) => (
+      ...currentFolders.map((item) => (
         item.id === parentId && migrateParentFeeds
           ? { ...item, feedIds: [], childFolderIds: [...item.childFolderIds, folder.id] }
           : item
@@ -670,8 +691,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (!canMoveFolder(folder.id, parentId, prospectiveFolders)) {
       throw new Error("Folders can be at most three levels deep.");
     }
-    setFolders((current) => {
-      const next = current.map((item) => {
+    const nextFolders = [
+      ...currentFolders.map((item) => {
         if (item.id !== parentId) return item;
         return {
           ...item,
@@ -679,18 +700,22 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           feedIds: migrateParentFeeds ? [] : item.feedIds,
           updatedAt: new Date().toISOString(),
         };
-      });
-      return [...next, { ...folder, feedIds: migrateParentFeeds ? [...(parent?.feedIds ?? [])] : [] }];
-    });
+      }),
+      { ...folder, feedIds: migrateParentFeeds ? [...(parent?.feedIds ?? [])] : [] },
+    ];
+    foldersRef.current = nextFolders;
+    setFolders(nextFolders);
     return folder;
-  }, [folders]);
+  }, []);
 
   const renameFolder = useCallback((id: string, name: string) => {
     const cleanName = name.trim();
     if (!cleanName) throw new Error("Folder name is required.");
-    setFolders((current) => current.map((folder) => (
+    const nextFolders = foldersRef.current.map((folder) => (
       folder.id === id ? { ...folder, name: cleanName, updatedAt: new Date().toISOString() } : folder
-    )));
+    ));
+    foldersRef.current = nextFolders;
+    setFolders(nextFolders);
   }, []);
 
   const moveFeedToFolder = useCallback((feedId: string, folderId: string | null, targetIndex?: number) => {
@@ -699,68 +724,66 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     foldersRef.current = nextFolders;
     setFolders(nextFolders);
     if (!folderId) {
-      setFeeds((current) => {
-        const sourceIndex = current.findIndex((feed) => feed.id === feedId);
-        if (sourceIndex < 0) return current;
-        const next = [...current];
-        const [moved] = next.splice(sourceIndex, 1);
-        const index = Math.max(0, Math.min(targetIndex ?? next.length, next.length));
-        next.splice(index, 0, moved);
-        return next;
-      });
+      const sourceIndex = feedsRef.current.findIndex((feed) => feed.id === feedId);
+      if (sourceIndex < 0) return;
+      const nextFeeds = [...feedsRef.current];
+      const [moved] = nextFeeds.splice(sourceIndex, 1);
+      const index = Math.max(0, Math.min(targetIndex ?? nextFeeds.length, nextFeeds.length));
+      nextFeeds.splice(index, 0, moved);
+      feedsRef.current = nextFeeds;
+      setFeeds(nextFeeds);
     }
   }, []);
 
   const moveFolder = useCallback((folderId: string, parentId: string | null, targetIndex?: number) => {
-    if (!canMoveFolder(folderId, parentId, folders)) throw new Error("That move would create a cycle or exceed three folder levels.");
+    const currentFolders = foldersRef.current;
+    if (!canMoveFolder(folderId, parentId, currentFolders)) throw new Error("That move would create a cycle or exceed three folder levels.");
     const now = new Date().toISOString();
-    setFolders((current) => {
-      const siblings = current
-        .filter((folder) => folder.parentId === parentId && folder.id !== folderId)
-        .sort((left, right) => left.order - right.order);
-      const index = Math.max(0, Math.min(targetIndex ?? siblings.length, siblings.length));
-      const ordered = [...siblings];
-      const moved = current.find((folder) => folder.id === folderId);
-      if (!moved) return current;
-      ordered.splice(index, 0, { ...moved, parentId });
-      const orderById = new Map(ordered.map((folder, order) => [folder.id, order]));
-      return current.map((folder) => {
-        if (folder.id === folderId) return { ...folder, parentId, order: orderById.get(folder.id) ?? folder.order, updatedAt: now };
-        if (orderById.has(folder.id)) return { ...folder, order: orderById.get(folder.id)! };
-        const childFolderIds = folder.childFolderIds.filter((id) => id !== folderId);
-        if (folder.id === parentId) childFolderIds.push(folderId);
-        return childFolderIds.length === folder.childFolderIds.length && folder.id !== parentId
-          ? folder
-          : { ...folder, childFolderIds, updatedAt: now };
-      });
+    const siblings = currentFolders
+      .filter((folder) => folder.parentId === parentId && folder.id !== folderId)
+      .sort((left, right) => left.order - right.order);
+    const index = Math.max(0, Math.min(targetIndex ?? siblings.length, siblings.length));
+    const ordered = [...siblings];
+    const moved = currentFolders.find((folder) => folder.id === folderId);
+    if (!moved) return;
+    ordered.splice(index, 0, { ...moved, parentId });
+    const orderById = new Map(ordered.map((folder, order) => [folder.id, order]));
+    const nextFolders = currentFolders.map((folder) => {
+      if (folder.id === folderId) return { ...folder, parentId, order: orderById.get(folder.id) ?? folder.order, updatedAt: now };
+      if (orderById.has(folder.id)) return { ...folder, order: orderById.get(folder.id)! };
+      const childFolderIds = folder.childFolderIds.filter((id) => id !== folderId);
+      if (folder.id === parentId) childFolderIds.push(folderId);
+      return childFolderIds.length === folder.childFolderIds.length && folder.id !== parentId
+        ? folder
+        : { ...folder, childFolderIds, updatedAt: now };
     });
-  }, [folders]);
+    foldersRef.current = nextFolders;
+    setFolders(nextFolders);
+  }, []);
 
   const duplicateFeed = useCallback((feedId: string, requestedFolderId?: string | null) => {
-    const source = feeds.find((feed) => feed.id === feedId);
-    if (!source) return null;
-    const now = new Date().toISOString();
-    const copy = {
-      ...structuredClone(source),
-      id: globalThis.crypto?.randomUUID?.() ?? `feed-${Date.now()}`,
-      name: `${source.name} Copy`,
-      createdAt: now,
-      updatedAt: now,
-    };
-    setFeeds((current) => {
-      const index = current.findIndex((feed) => feed.id === feedId);
-      const next = [...current];
-      next.splice(index + 1, 0, copy);
-      return next;
-    });
-    const location = requestedFolderId === undefined ? feedLocation(feedId, folders) : requestedFolderId;
-    if (location) {
-      setFolders((current) => current.map((folder) => (
-        folder.id === location ? { ...folder, feedIds: [...folder.feedIds, copy.id] } : folder
-      )));
-    }
-    return copy;
-  }, [feeds, folders]);
+    const result = duplicateFeedRecord(
+      feedsRef.current,
+      foldersRef.current,
+      feedId,
+      () => globalThis.crypto?.randomUUID?.() ?? `feed-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      requestedFolderId,
+    );
+    feedsRef.current = result.feeds;
+    foldersRef.current = result.folders;
+    setFeeds(result.feeds);
+    setFolders(result.folders);
+    return result.copy;
+  }, []);
+
+  const duplicateFolder = useCallback((folderId: string) => {
+    const result = duplicateFolderSubtree(feedsRef.current, foldersRef.current, folderId, makeId);
+    feedsRef.current = result.feeds;
+    foldersRef.current = result.folders;
+    setFeeds(result.feeds);
+    setFolders(result.folders);
+    return result.rootFolder;
+  }, []);
 
   const deleteFolder = useCallback((id: string, preserveFeeds: boolean) => {
     const result = removeFolderSubtree(foldersRef.current, id);
@@ -768,7 +791,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setFolders(result.remainingFolders);
     if (!preserveFeeds && result.orphanedFeedIds.length > 0) {
       const orphaned = new Set(result.orphanedFeedIds);
-      setFeeds((currentFeeds) => currentFeeds.filter((feed) => !orphaned.has(feed.id)));
+      const nextFeeds = feedsRef.current.filter((feed) => !orphaned.has(feed.id));
+      feedsRef.current = nextFeeds;
+      setFeeds(nextFeeds);
       setActiveFeedId((currentFeedId) => (
         currentFeedId && orphaned.has(currentFeedId) ? null : currentFeedId
       ));
@@ -781,12 +806,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateHomeSource = useCallback((source: HomeSource) => {
-    if (source.kind === "folder" && !folders.some((folder) => folder.id === source.folderId)) {
+    if (source.kind === "folder" && !foldersRef.current.some((folder) => folder.id === source.folderId)) {
       throw new Error("Home source folder not found.");
     }
-    setActiveFeedId(resolveHomeStartFeed(feeds, folders, source)?.id ?? null);
+    setActiveFeedId(resolveHomeStartFeed(feedsRef.current, foldersRef.current, source)?.id ?? null);
     setHomeSource(source);
-  }, [feeds, folders]);
+  }, []);
 
   const upsertLabel = useCallback((label: UserLabel) => {
     setLabels((current) => {
@@ -922,6 +947,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const resetCurrentProfile = useCallback(async () => {
     const now = new Date().toISOString();
+    feedsRef.current = [];
+    foldersRef.current = [];
     setFeeds([]);
     setFolders([]);
     setHomeSource(DEFAULT_HOME_SOURCE);
@@ -973,6 +1000,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (mode === "replace") {
       const nextFeeds = (safeSnapshot.feeds ?? []).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true }));
       const nextFolders = normalizeFeedFolders(safeSnapshot.folders, new Set(nextFeeds.map((feed) => feed.id)));
+      feedsRef.current = nextFeeds;
+      foldersRef.current = nextFolders;
       setFeeds(nextFeeds);
       setFolders(nextFolders);
       setHomeSource(
@@ -985,19 +1014,23 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setActiveFeedId(safeSnapshot.activeFeedId ?? null);
       return;
     }
-    setFeeds((current) => [
-      ...current,
+    const nextFeeds = [
+      ...feedsRef.current,
       ...(safeSnapshot.feeds ?? []).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true })),
-    ]);
-    setFolders((current) => normalizeFeedFolders(
-      [...current, ...(safeSnapshot.folders ?? [])],
-      new Set([...feeds, ...(safeSnapshot.feeds ?? [])].map((feed) => feed.id)),
-    ));
+    ];
+    const nextFolders = normalizeFeedFolders(
+      [...foldersRef.current, ...(safeSnapshot.folders ?? [])],
+      new Set(nextFeeds.map((feed) => feed.id)),
+    );
+    feedsRef.current = nextFeeds;
+    foldersRef.current = nextFolders;
+    setFeeds(nextFeeds);
+    setFolders(nextFolders);
     setLabels((current) => [...current, ...(safeSnapshot.labels ?? [])]);
     if (safeSnapshot.settings) {
       setSettings((current) => mergeSettings({ ...current, ...(parseSettings(safeSnapshot.settings) ?? safeSnapshot.settings) }));
     }
-  }, [feeds]);
+  }, []);
 
   const value = useMemo<StoreState>(
     () => ({
@@ -1037,6 +1070,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       moveFeedToFolder,
       moveFolder,
       duplicateFeed,
+      duplicateFolder,
       deleteFolder,
       updateHomeSource,
       upsertLabel,
@@ -1083,6 +1117,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       moveFeedToFolder,
       moveFolder,
       duplicateFeed,
+      duplicateFolder,
       deleteFolder,
       updateHomeSource,
       upsertLabel,

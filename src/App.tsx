@@ -68,13 +68,14 @@ import rehypeSanitize from "rehype-sanitize";
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
 import { resolveRollingWindow } from "./domain/dates";
 import {
+  canGroupFoldersInNewParent,
   canMoveFolder,
   descendantFolderIds,
   feedLocation,
   MAX_FOLDERS_PER_PROFILE,
   orderedFolderTree,
-  resolveHomeFeeds,
   resolveHomeStartFeed,
+  resolveHomeViewFeeds,
   unfiledFeeds,
 } from "./domain/feedLibrary";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, hasAniList, hasDetailTags, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
@@ -325,6 +326,7 @@ function AppFrame() {
   const showingHome = location.pathname === "/";
   const showingTitle = location.pathname.startsWith("/title/");
   const keepHomeMounted = showingHome || showingTitle;
+  const lastHomeTapAtRef = useRef(0);
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", store.settings.accentColor);
     document.title = store.settings.appName || "Manhwa Lib";
@@ -412,9 +414,14 @@ function AppFrame() {
                 if (!isPlainNavigationClick(event)) return;
                 if (item.id === "home") {
                   event.preventDefault();
-                  sessionStorage.removeItem(profileStorageKey(HOME_RETURNING_FROM_TITLE_KEY));
-                  sessionStorage.removeItem(profileStorageKey(HOME_RETURN_FEED_KEY));
-                  store.setActiveFeedId(resolveHomeStartFeed(store.feeds, store.folders, store.homeSource)?.id ?? null);
+                  const now = performance.now();
+                  const isDoubleTap = now - lastHomeTapAtRef.current <= 320;
+                  lastHomeTapAtRef.current = isDoubleTap ? 0 : now;
+                  if (isDoubleTap) {
+                    sessionStorage.removeItem(profileStorageKey(HOME_RETURNING_FROM_TITLE_KEY));
+                    sessionStorage.removeItem(profileStorageKey(HOME_RETURN_FEED_KEY));
+                    store.setActiveFeedId(resolveHomeStartFeed(store.feeds, store.folders, store.homeSource)?.id ?? null);
+                  }
                   if (location.pathname !== "/") scheduleRouteChange("page", () => navigate("/"));
                   return;
                 }
@@ -442,8 +449,8 @@ function SessionRestorer() {
   const sessionRef = useRef(store.profileSession);
   const sessionWriteTimer = useRef<number | null>(null);
   const homeFeeds = useMemo(
-    () => resolveHomeFeeds(store.feeds, store.folders, store.homeSource),
-    [store.feeds, store.folders, store.homeSource],
+    () => resolveHomeViewFeeds(store.feeds, store.folders, store.homeSource, store.activeFeedId),
+    [store.activeFeedId, store.feeds, store.folders, store.homeSource],
   );
   const activeFeed = useMemo(
     () => homeFeeds.find((feed) => feed.id === store.activeFeedId) ?? homeFeeds[0] ?? null,
@@ -583,8 +590,8 @@ function HomePage() {
   const previousHomePathRef = useRef(location.pathname);
   const lastAlignedFeedIdRef = useRef("");
   const feeds = useMemo(
-    () => resolveHomeFeeds(store.feeds, store.folders, store.homeSource),
-    [store.feeds, store.folders, store.homeSource],
+    () => resolveHomeViewFeeds(store.feeds, store.folders, store.homeSource, store.activeFeedId),
+    [store.activeFeedId, store.feeds, store.folders, store.homeSource],
   );
   const { activeFeedId, setActiveFeedId } = store;
   const activeFeedIdRef = useRef(activeFeedId);
@@ -1001,6 +1008,7 @@ function TitleCollection({
   loading = false,
   preview = false,
   onTitleOpen,
+  rankById,
 }: {
   items: SeriesCatalog[];
   feed: Feed;
@@ -1009,6 +1017,7 @@ function TitleCollection({
   loading?: boolean;
   preview?: boolean;
   onTitleOpen?: (series: SeriesCatalog) => void;
+  rankById?: Map<number, number>;
 }) {
   const pageSize = feed.view.gridColumns >= 5 ? 60 : feed.view.gridColumns === 4 ? 72 : 120;
   const countKey = profileStorageKey(`manhwa-visible-count:${feed.id}:${feed.view.gridColumns}`);
@@ -1046,7 +1055,7 @@ function TitleCollection({
           <MemoTitleCard
             key={series.id}
             series={series}
-            rank={index + 1}
+            rank={rankById?.get(series.id) ?? index + 1}
             view={feed.view}
             feed={feed}
             history={history}
@@ -1327,6 +1336,11 @@ function FeedsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [homeSourceOpen, setHomeSourceOpen] = useState(false);
   const [organizing, setOrganizing] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedLibraryKeys, setSelectedLibraryKeys] = useState<Set<string>>(() => new Set());
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [bulkNewFolderOpen, setBulkNewFolderOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [moveItem, setMoveItem] = useState<{ type: "feed" | "folder"; id: string } | null>(null);
   const [folderMenuId, setFolderMenuId] = useState<string | null>(null);
   const [renamingFolder, setRenamingFolder] = useState<FeedFolder | null>(null);
@@ -1398,6 +1412,11 @@ function FeedsPage() {
     if (routeFolderId) sessionStorage.setItem(profileStorageKey("manhwa-feeds-folder"), routeFolderId);
     else sessionStorage.removeItem(profileStorageKey("manhwa-feeds-folder"));
   }, [folderSearchParams, selectedFolderId, setFolderSearchParams]);
+
+  useEffect(() => {
+    setSelectionMode(false);
+    setSelectedLibraryKeys(new Set());
+  }, [selectedFolderId]);
 
   useEffect(() => {
     if (selectedFolderId && !store.folders.some((folder) => folder.id === selectedFolderId)) {
@@ -1501,13 +1520,91 @@ function FeedsPage() {
     () => visibleFeeds.map((feed) => `feed:${feed.id}`),
     [visibleFeeds],
   );
-  const openFeed = useCallback((feedId: string) => {
-    const folderId = feedLocation(feedId, store.folders);
-    store.updateHomeSource({
-      ...store.homeSource,
-      kind: folderId ? "folder" : "unfiled",
-      folderId,
+  const selectedLibraryItems = useMemo(
+    () => [...selectedLibraryKeys].map((key) => {
+      const separator = key.indexOf(":");
+      return {
+        type: key.slice(0, separator) as "feed" | "folder",
+        id: key.slice(separator + 1),
+      };
+    }),
+    [selectedLibraryKeys],
+  );
+  const selectionKind = selectedLibraryItems[0]?.type ?? null;
+  const selectedLibraryIds = useMemo(
+    () => selectedLibraryItems.map((item) => item.id),
+    [selectedLibraryItems],
+  );
+  const selectedFolderTreeCount = useMemo(() => {
+    if (selectionKind !== "folder") return 0;
+    const ids = new Set<string>();
+    selectedLibraryIds.forEach((id) => {
+      ids.add(id);
+      descendantFolderIds(id, store.folders).forEach((childId) => ids.add(childId));
     });
+    return ids.size;
+  }, [selectedLibraryIds, selectionKind, store.folders]);
+  const duplicateSelectionDisabled = selectionKind === "folder"
+    && store.folders.length + selectedFolderTreeCount > MAX_FOLDERS_PER_PROFILE;
+  const clearLibrarySelection = useCallback(() => {
+    setSelectedLibraryKeys(new Set());
+  }, []);
+  const toggleLibrarySelection = useCallback((type: "feed" | "folder", id: string) => {
+    const key = `${type}:${id}`;
+    setSelectedLibraryKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+        return next;
+      }
+      const currentKind = next.size > 0 ? [...next][0].split(":")[0] : null;
+      if (currentKind && currentKind !== type) return current;
+      next.add(key);
+      return next;
+    });
+  }, []);
+  const finishOrganizing = useCallback(() => {
+    setOrganizing(false);
+    setSelectionMode(false);
+    clearLibrarySelection();
+  }, [clearLibrarySelection]);
+  const duplicateSelectedItems = useCallback(() => {
+    if (selectionKind === "feed") selectedLibraryIds.forEach((id) => store.duplicateFeed(id));
+    if (selectionKind === "folder") selectedLibraryIds.forEach((id) => store.duplicateFolder(id));
+    clearLibrarySelection();
+  }, [clearLibrarySelection, selectedLibraryIds, selectionKind, store]);
+  const exportSelectedItems = useCallback(() => {
+    const folderIds = new Set<string>();
+    if (selectionKind === "folder") {
+      selectedLibraryIds.forEach((id) => {
+        folderIds.add(id);
+        descendantFolderIds(id, store.folders).forEach((childId) => folderIds.add(childId));
+      });
+    }
+    const feedIds = new Set(
+      selectionKind === "feed"
+        ? selectedLibraryIds
+        : store.folders.filter((folder) => folderIds.has(folder.id)).flatMap((folder) => folder.feedIds),
+    );
+    const exportedFolders = store.folders
+      .filter((folder) => folderIds.has(folder.id))
+      .map((folder) => ({
+        ...folder,
+        parentId: folder.parentId && folderIds.has(folder.parentId) ? folder.parentId : null,
+        childFolderIds: folder.childFolderIds.filter((id) => folderIds.has(id)),
+      }));
+    downloadText(
+      `manhwa-${selectionKind ?? "library"}-selection.json`,
+      JSON.stringify({
+        version: 3,
+        kind: "collection",
+        exportedAt: new Date().toISOString(),
+        folders: exportedFolders,
+        feeds: store.feeds.filter((feed) => feedIds.has(feed.id)),
+      }, null, 2),
+    );
+  }, [selectedLibraryIds, selectionKind, store.feeds, store.folders]);
+  const openFeed = useCallback((feedId: string) => {
     store.setActiveFeedId(feedId);
   }, [store]);
 
@@ -1535,7 +1632,7 @@ function FeedsPage() {
         <button
           className={`icon-button ${organizing ? "active" : ""}`}
           type="button"
-          onClick={() => setOrganizing((current) => !current)}
+          onClick={() => organizing ? finishOrganizing() : setOrganizing(true)}
           aria-label={organizing ? "Finish organizing" : "Organize feeds"}
           aria-pressed={organizing}
         >
@@ -1545,7 +1642,23 @@ function FeedsPage() {
           <Plus size={18} />
         </button>
       </div>
-      {organizing ? <p className="muted tiny organize-hint">Drag handles reorder this level. Use each menu to move across folders.</p> : null}
+      {organizing ? (
+        <div className="organize-mode-bar">
+          <p className="muted tiny">
+            {selectionMode ? "Select feeds or folders of one type." : "Drag handles reorder this level."}
+          </p>
+          <button
+            className={`button compact-button ${selectionMode ? "primary" : ""}`}
+            type="button"
+            onClick={() => {
+              setSelectionMode((current) => !current);
+              clearLibrarySelection();
+            }}
+          >
+            <Check size={15} /> {selectionMode ? "Done selecting" : "Select"}
+          </button>
+        </div>
+      ) : null}
       {visibleFolders.length > 0 ? (
         <DndContext
           sensors={sensors}
@@ -1573,9 +1686,13 @@ function FeedsPage() {
                       folders={store.folders}
                       feedCount={presentation.feedCount}
                       covers={presentation.covers}
-                      organizing={organizing}
+                      organizing={organizing && !selectionMode}
+                      selectionMode={selectionMode}
+                      selected={selectedLibraryKeys.has(`folder:${folder.id}`)}
+                      selectionDisabled={selectionKind !== null && selectionKind !== "folder"}
                       menuOpen={folderMenuId === folder.id}
-                      onOpen={() => openFolder(folder.id)}
+                      onOpen={() => selectionMode ? toggleLibrarySelection("folder", folder.id) : openFolder(folder.id)}
+                      onToggleSelection={() => toggleLibrarySelection("folder", folder.id)}
                       onMenu={() => setFolderMenuId((current) => current === folder.id ? null : folder.id)}
                       onRename={() => { setRenamingFolder(folder); setFolderMenuId(null); }}
                       onMove={() => { setMoveItem({ type: "folder", id: folder.id }); setFolderMenuId(null); }}
@@ -1615,8 +1732,12 @@ function FeedsPage() {
                     feed={feed}
                     covers={coverMap.get(feed.id) ?? []}
                     loading={coversLoading && !(coverMap.get(feed.id)?.length)}
-                    organizing={organizing}
+                    organizing={organizing && !selectionMode}
+                    selectionMode={selectionMode}
+                    selected={selectedLibraryKeys.has(`feed:${feed.id}`)}
+                    selectionDisabled={selectionKind !== null && selectionKind !== "feed"}
                     onOpen={() => openFeed(feed.id)}
+                    onToggleSelection={() => toggleLibrarySelection("feed", feed.id)}
                     onEdit={() => setEditorFeed(feed)}
                     onMove={() => setMoveItem({ type: "feed", id: feed.id })}
                     onDuplicate={() => store.duplicateFeed(feed.id)}
@@ -1644,6 +1765,32 @@ function FeedsPage() {
           ) : null}
         </DragOverlay>
       </DndContext>
+      {selectionMode && selectedLibraryItems.length > 0 ? (
+        <div className="library-selection-dock" role="toolbar" aria-label="Selected library items">
+          <strong>{selectedLibraryItems.length}</strong>
+          <button type="button" aria-label="Move selected" title="Move" onClick={() => setBulkMoveOpen(true)}>
+            <FolderOpen size={19} />
+          </button>
+          <button type="button" aria-label="Move selected to new folder" title="Move to new folder" onClick={() => setBulkNewFolderOpen(true)}>
+            <Plus size={19} />
+          </button>
+          <button
+            type="button"
+            aria-label="Duplicate selected"
+            title={duplicateSelectionDisabled ? "30 folder limit reached" : "Duplicate"}
+            disabled={duplicateSelectionDisabled}
+            onClick={duplicateSelectedItems}
+          >
+            <Copy size={19} />
+          </button>
+          <button type="button" aria-label="Export selected JSON" title="Export JSON" onClick={exportSelectedItems}>
+            <Download size={19} />
+          </button>
+          <button className="danger-text" type="button" aria-label="Delete selected" title="Delete" onClick={() => setBulkDeleteOpen(true)}>
+            <Trash2 size={19} />
+          </button>
+        </div>
+      ) : null}
       <BottomDrawer title={editorFeed?.name ?? "Feed"} open={Boolean(editorFeed)} onOpenChange={(open) => !open && setEditorFeed(null)}>
         {editorFeed && (
           <FeedEditor
@@ -1676,6 +1823,28 @@ function FeedsPage() {
       <MoveLibraryItemDrawer item={moveItem} onOpenChange={(open) => !open && setMoveItem(null)} />
       <RenameFolderDrawer folder={renamingFolder} onOpenChange={(open) => !open && setRenamingFolder(null)} />
       <DeleteFolderDrawer folder={deletingFolder} onOpenChange={(open) => !open && setDeletingFolder(null)} />
+      <BulkMoveDrawer
+        open={bulkMoveOpen}
+        kind={selectionKind}
+        ids={selectedLibraryIds}
+        onOpenChange={setBulkMoveOpen}
+        onMoved={clearLibrarySelection}
+      />
+      <BulkNewFolderDrawer
+        open={bulkNewFolderOpen}
+        kind={selectionKind}
+        ids={selectedLibraryIds}
+        currentFolder={selectedFolder}
+        onOpenChange={setBulkNewFolderOpen}
+        onMoved={clearLibrarySelection}
+      />
+      <BulkDeleteDrawer
+        open={bulkDeleteOpen}
+        kind={selectionKind}
+        ids={selectedLibraryIds}
+        onOpenChange={setBulkDeleteOpen}
+        onDeleted={clearLibrarySelection}
+      />
     </div>
   );
 }
@@ -1685,7 +1854,11 @@ function SortableFeedCoverCard({
   covers,
   loading,
   organizing,
+  selectionMode,
+  selected,
+  selectionDisabled,
   onOpen,
+  onToggleSelection,
   onEdit,
   onMove,
   onDuplicate,
@@ -1695,7 +1868,11 @@ function SortableFeedCoverCard({
   covers: SeriesCatalog[];
   loading: boolean;
   organizing: boolean;
+  selectionMode: boolean;
+  selected: boolean;
+  selectionDisabled: boolean;
   onOpen: () => void;
+  onToggleSelection: () => void;
   onEdit: () => void;
   onMove: () => void;
   onDuplicate: () => void;
@@ -1720,8 +1897,12 @@ function SortableFeedCoverCard({
         covers={covers}
         loading={loading}
         organizing={organizing}
+        selectionMode={selectionMode}
+        selected={selected}
+        selectionDisabled={selectionDisabled}
         dragHandleProps={{ ...attributes, ...listeners }}
         onOpen={onOpen}
+        onToggleSelection={onToggleSelection}
         onEdit={onEdit}
         onMove={onMove}
         onDuplicate={onDuplicate}
@@ -1737,8 +1918,12 @@ function SortableFolderRow({
   feedCount,
   covers,
   organizing,
+  selectionMode,
+  selected,
+  selectionDisabled,
   menuOpen,
   onOpen,
+  onToggleSelection,
   onMenu,
   onRename,
   onMove,
@@ -1749,8 +1934,12 @@ function SortableFolderRow({
   feedCount: number;
   covers: SeriesCatalog[];
   organizing: boolean;
+  selectionMode: boolean;
+  selected: boolean;
+  selectionDisabled: boolean;
   menuOpen: boolean;
   onOpen: () => void;
+  onToggleSelection: () => void;
   onMenu: () => void;
   onRename: () => void;
   onMove: () => void;
@@ -1789,10 +1978,10 @@ function SortableFolderRow({
     <div
       ref={setNodeRef}
       data-folder-id={folder.id}
-      className={`feed-folder-row ${organizing ? "organizing" : ""} ${isDragging ? "sortable-dragging" : ""}`}
+      className={`feed-folder-row ${organizing ? "organizing" : ""} ${selectionMode ? "selecting" : ""} ${selected ? "selected" : ""} ${selectionDisabled ? "selection-disabled" : ""} ${isDragging ? "sortable-dragging" : ""}`}
       style={style}
     >
-      <button className="feed-folder-main" type="button" onClick={onOpen}>
+      <button className="feed-folder-main" type="button" onClick={onOpen} disabled={selectionDisabled}>
         <FolderIcon size={24} />
         <span>
           <strong>{folder.name}</strong>
@@ -1808,10 +1997,23 @@ function SortableFolderRow({
           <GripVertical size={18} />
         </button>
       ) : null}
-      <button className="feed-folder-menu" type="button" onClick={onMenu} aria-label={`${folder.name} menu`}>
-        <EllipsisVertical size={18} />
-      </button>
-      {menuOpen ? (
+      {selectionMode ? (
+        <button
+          className="library-selection-toggle folder-selection-toggle"
+          type="button"
+          onClick={onToggleSelection}
+          disabled={selectionDisabled}
+          aria-label={`${selected ? "Deselect" : "Select"} ${folder.name}`}
+          aria-pressed={selected}
+        >
+          {selected ? <Check size={17} /> : null}
+        </button>
+      ) : (
+        <button className="feed-folder-menu" type="button" onClick={onMenu} aria-label={`${folder.name} menu`}>
+          <EllipsisVertical size={18} />
+        </button>
+      )}
+      {!selectionMode && menuOpen ? (
         <div className="popover-menu folder-row-menu">
           <button type="button" onClick={onRename}><SlidersHorizontal size={16} /> Rename</button>
           <button type="button" onClick={onMove}><FolderOpen size={16} /> Move</button>
@@ -2018,6 +2220,179 @@ function MoveLibraryItemDrawer({
   );
 }
 
+function BulkMoveDrawer({
+  open,
+  kind,
+  ids,
+  onOpenChange,
+  onMoved,
+}: {
+  open: boolean;
+  kind: "feed" | "folder" | null;
+  ids: string[];
+  onOpenChange: (open: boolean) => void;
+  onMoved: () => void;
+}) {
+  const store = useAppStore();
+  const currentParentId = kind === "feed"
+    ? (ids.length > 0 && ids.every((id) => feedLocation(id, store.folders) === feedLocation(ids[0], store.folders))
+      ? feedLocation(ids[0], store.folders)
+      : undefined)
+    : (ids.length > 0 && ids.every((id) => store.folders.find((folder) => folder.id === id)?.parentId === store.folders.find((folder) => folder.id === ids[0])?.parentId)
+      ? store.folders.find((folder) => folder.id === ids[0])?.parentId ?? null
+      : undefined);
+  const destinations = orderedFolderTree(store.folders).filter((folder) => {
+    if (kind === "feed") return folder.childFolderIds.length === 0;
+    if (kind === "folder") return ids.every((id) => canMoveFolder(id, folder.id, store.folders));
+    return false;
+  });
+  const moveTo = (folderId: string | null) => {
+    if (kind === "feed") ids.forEach((id) => store.moveFeedToFolder(id, folderId));
+    if (kind === "folder") ids.forEach((id) => store.moveFolder(id, folderId));
+    onMoved();
+    onOpenChange(false);
+  };
+  return (
+    <BottomDrawer title={`Move ${ids.length} selected`} open={open} onOpenChange={onOpenChange}>
+      <div className="home-source-list">
+        <button
+          className={`destination-row ${currentParentId === null ? "selected" : ""}`}
+          type="button"
+          disabled={currentParentId === null}
+          onClick={() => moveTo(null)}
+        >
+          <Library size={19} />
+          <span><strong>{kind === "feed" ? "Unfiled Feeds" : "Root Folders"}</strong></span>
+          {currentParentId === null ? <Check size={18} /> : null}
+        </button>
+        {destinations.map((folder) => (
+          <button
+            className={`destination-row ${currentParentId === folder.id ? "selected" : ""}`}
+            type="button"
+            key={folder.id}
+            disabled={currentParentId === folder.id}
+            onClick={() => moveTo(folder.id)}
+          >
+            <FolderIcon size={19} />
+            <span><strong>{folder.name}</strong></span>
+            {currentParentId === folder.id ? <Check size={18} /> : null}
+          </button>
+        ))}
+      </div>
+    </BottomDrawer>
+  );
+}
+
+function BulkNewFolderDrawer({
+  open,
+  kind,
+  ids,
+  currentFolder,
+  onOpenChange,
+  onMoved,
+}: {
+  open: boolean;
+  kind: "feed" | "folder" | null;
+  ids: string[];
+  currentFolder: FeedFolder | null;
+  onOpenChange: (open: boolean) => void;
+  onMoved: () => void;
+}) {
+  const store = useAppStore();
+  const [name, setName] = useState("");
+  useEffect(() => {
+    if (!open) setName("");
+  }, [open]);
+  const parentId = kind === "feed" ? currentFolder?.parentId ?? null : currentFolder?.id ?? null;
+  const depthAllowed = kind !== "folder" || canGroupFoldersInNewParent(ids, parentId, store.folders);
+  const canCreate = Boolean(
+    name.trim()
+    && kind
+    && ids.length > 0
+    && depthAllowed
+    && store.folders.length < MAX_FOLDERS_PER_PROFILE,
+  );
+  const createAndMove = () => {
+    if (!canCreate || !kind) return;
+    const folder = store.createFolder(name, parentId);
+    if (kind === "feed") ids.forEach((id) => store.moveFeedToFolder(id, folder.id));
+    else ids.forEach((id) => store.moveFolder(id, folder.id));
+    onMoved();
+    onOpenChange(false);
+  };
+  return (
+    <BottomDrawer title="Move to New Folder" open={open} onOpenChange={onOpenChange}>
+      <div className="profile-form">
+        <label className="field">
+          <span>Folder name</span>
+          <input
+            className="input"
+            type="text"
+            name="bulk-folder-label"
+            value={name}
+            maxLength={60}
+            autoComplete="one-time-code"
+            enterKeyHint="done"
+            inputMode="text"
+            data-form-type="other"
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        {!depthAllowed ? <p className="muted tiny">This group would exceed the three-level folder limit.</p> : null}
+        {store.folders.length >= MAX_FOLDERS_PER_PROFILE ? <p className="muted tiny">This profile already has 30 folders.</p> : null}
+        <div className="toolbar">
+          <button className="button" type="button" onClick={() => onOpenChange(false)}>Cancel</button>
+          <span className="spacer" />
+          <button className="button primary" type="button" disabled={!canCreate} onClick={createAndMove}>
+            <FolderIcon size={17} /> Create and move
+          </button>
+        </div>
+      </div>
+    </BottomDrawer>
+  );
+}
+
+function BulkDeleteDrawer({
+  open,
+  kind,
+  ids,
+  onOpenChange,
+  onDeleted,
+}: {
+  open: boolean;
+  kind: "feed" | "folder" | null;
+  ids: string[];
+  onOpenChange: (open: boolean) => void;
+  onDeleted: () => void;
+}) {
+  const store = useAppStore();
+  const remove = () => {
+    if (kind === "feed") ids.forEach((id) => store.deleteFeed(id));
+    if (kind === "folder") ids.forEach((id) => store.deleteFolder(id, false));
+    onDeleted();
+    onOpenChange(false);
+  };
+  return (
+    <BottomDrawer title="Delete Selected" open={open} onOpenChange={onOpenChange}>
+      <div className="delete-folder-summary">
+        <strong>{ids.length} {kind === "folder" ? "folder" : "feed"}{ids.length === 1 ? "" : "s"}</strong>
+        <p className="muted">
+          {kind === "folder"
+            ? "Selected folder subtrees and feeds contained only inside them will be deleted."
+            : "Selected feeds will be permanently removed from this profile."}
+        </p>
+        <div className="toolbar">
+          <button className="button" type="button" onClick={() => onOpenChange(false)}>Cancel</button>
+          <span className="spacer" />
+          <button className="button danger" type="button" onClick={remove}>
+            <Trash2 size={16} /> Delete
+          </button>
+        </div>
+      </div>
+    </BottomDrawer>
+  );
+}
+
 function RenameFolderDrawer({ folder, onOpenChange }: { folder: FeedFolder | null; onOpenChange: (open: boolean) => void }) {
   const store = useAppStore();
   const [name, setName] = useState(folder?.name ?? "");
@@ -2079,8 +2454,12 @@ function FeedCoverCard({
   covers,
   loading,
   organizing,
+  selectionMode,
+  selected,
+  selectionDisabled,
   dragHandleProps,
   onOpen,
+  onToggleSelection,
   onEdit,
   onMove,
   onDuplicate,
@@ -2090,23 +2469,35 @@ function FeedCoverCard({
   covers: SeriesCatalog[];
   loading: boolean;
   organizing: boolean;
+  selectionMode: boolean;
+  selected: boolean;
+  selectionDisabled: boolean;
   dragHandleProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
   onOpen: () => void;
+  onToggleSelection: () => void;
   onEdit: () => void;
   onMove: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const navigate = useNavigate();
   return (
-    <article className="feed-cover-card" data-feed-id={feed.id}>
+    <article
+      className={`feed-cover-card ${selectionMode ? "selecting" : ""} ${selected ? "selected" : ""} ${selectionDisabled ? "selection-disabled" : ""}`}
+      data-feed-id={feed.id}
+    >
       <Link
         className="feed-cover-link"
         to="/"
         onClick={(event) => {
           if (!isPlainNavigationClick(event)) return;
           event.preventDefault();
+          if (selectionMode) {
+            if (!selectionDisabled) onToggleSelection();
+            return;
+          }
           onOpen();
           scheduleRouteChange("page", () => navigate("/"));
         }}
@@ -2119,19 +2510,120 @@ function FeedCoverCard({
           <GripVertical size={18} />
         </button>
       ) : null}
-      <button className="feed-card-menu-button" type="button" onClick={() => setMenuOpen((open) => !open)} aria-label={`${feed.name} menu`}>
-        <EllipsisVertical size={18} />
-      </button>
-      {menuOpen && (
+      {selectionMode ? (
+        <button
+          className="library-selection-toggle feed-selection-toggle"
+          type="button"
+          disabled={selectionDisabled}
+          onClick={onToggleSelection}
+          aria-label={`${selected ? "Deselect" : "Select"} ${feed.name}`}
+          aria-pressed={selected}
+        >
+          {selected ? <Check size={17} /> : null}
+        </button>
+      ) : (
+        <button className="feed-card-menu-button" type="button" onClick={() => setMenuOpen((open) => !open)} aria-label={`${feed.name} menu`}>
+          <EllipsisVertical size={18} />
+        </button>
+      )}
+      {!selectionMode && menuOpen && (
         <div className="popover-menu card-menu">
           <button type="button" onClick={() => { onEdit(); setMenuOpen(false); }}><SlidersHorizontal size={16} /> Edit</button>
           <button type="button" onClick={() => { onMove(); setMenuOpen(false); }}><FolderOpen size={16} /> Move</button>
           <button type="button" onClick={() => { onDuplicate(); setMenuOpen(false); }}><Copy size={16} /> Duplicate</button>
+          <button type="button" onClick={() => { setSearchOpen(true); setMenuOpen(false); }}><Search size={16} /> Search titles</button>
           <SharePanelButton payload={{ kind: "feed", version: 2, feed }} label="Share" />
           <button className="danger-text" type="button" onClick={() => { onDelete(); setMenuOpen(false); }}><Trash2 size={16} /> Delete</button>
         </div>
       )}
+      {searchOpen ? <FeedContentSearchDrawer feed={feed} open onOpenChange={setSearchOpen} /> : null}
     </article>
+  );
+}
+
+function FeedContentSearchDrawer({
+  feed,
+  open,
+  onOpenChange,
+}: {
+  feed: Feed;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const store = useAppStore();
+  const [searchText, setSearchText] = useState("");
+  const feedItems = useMemo(
+    () => runFeedQuery({
+      feed,
+      series: store.catalog,
+      tags: store.tags,
+      history: store.history,
+      labels: store.labels,
+      settings: store.settings,
+      metaHistoryFirst: store.syncMeta?.historyFirstDate,
+      metaHistoryLast: store.syncMeta?.historyLastDate,
+    }).items,
+    [feed, store.catalog, store.history, store.labels, store.settings, store.syncMeta, store.tags],
+  );
+  const rankById = useMemo(
+    () => new Map(feedItems.map((series, index) => [series.id, index + 1])),
+    [feedItems],
+  );
+  const matches = useMemo(() => {
+    const needle = searchText.trim().toLocaleLowerCase();
+    if (!needle) return [];
+    return feedItems.filter((series) => [
+      visibleTitle(series),
+      series.native_title,
+      series.romanized_title,
+      ...(series.authors ?? []),
+      ...(series.artists ?? []),
+    ].filter(Boolean).join(" ").toLocaleLowerCase().includes(needle));
+  }, [feedItems, searchText]);
+
+  useEffect(() => {
+    if (!open) setSearchText("");
+  }, [open]);
+
+  return (
+    <BottomDrawer title={`Search ${feed.name}`} open={open} onOpenChange={onOpenChange}>
+      <div className="feed-content-search">
+        <label className="field">
+          <span>Titles in this feed</span>
+          <input
+            className="input"
+            type="search"
+            value={searchText}
+            onChange={(event) => setSearchText(event.target.value)}
+            placeholder="Search title or creator"
+            autoComplete="off"
+            enterKeyHint="search"
+          />
+        </label>
+        {searchText.trim() ? (
+          matches.length > 0 ? (
+            <TitleCollection
+              items={matches}
+              feed={feed}
+              history={store.history}
+              latestDate={store.syncMeta?.historyLastDate}
+              rankById={rankById}
+            />
+          ) : (
+            <div className="empty-state compact-empty">
+              <Search size={26} />
+              <strong>No title found in this feed</strong>
+            </div>
+          )
+        ) : (
+          <div className="empty-state compact-empty">
+            <Search size={26} />
+            <strong>Search this feed locally</strong>
+            <span className="muted">{feedItems.length.toLocaleString()} titles available</span>
+          </div>
+        )}
+      </div>
+    </BottomDrawer>
   );
 }
 

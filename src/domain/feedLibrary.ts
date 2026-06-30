@@ -109,6 +109,12 @@ export function canMoveFolder(folderId: string, parentId: string | null, folders
   return folderDepth(parentId, folders) + movingDepth <= MAX_FOLDER_DEPTH;
 }
 
+export function canGroupFoldersInNewParent(folderIds: string[], parentId: string | null, folders: FeedFolder[]) {
+  if (folderIds.length === 0) return false;
+  const newParentDepth = parentId ? folderDepth(parentId, folders) + 1 : 1;
+  return folderIds.every((folderId) => newParentDepth + maxSubtreeDepth(folderId, folders) <= MAX_FOLDER_DEPTH);
+}
+
 export function canMoveFeedToFolder(folderId: string | null, folders: FeedFolder[]) {
   if (!folderId) return true;
   const folder = folders.find((item) => item.id === folderId);
@@ -153,6 +159,101 @@ export function removeFolderSubtree(folders: FeedFolder[], folderId: string) {
   return { remainingFolders, removedFolderIds, orphanedFeedIds };
 }
 
+export function duplicateFolderSubtree(
+  feeds: Feed[],
+  folders: FeedFolder[],
+  folderId: string,
+  createId: () => string,
+  now = new Date().toISOString(),
+) {
+  const source = folders.find((folder) => folder.id === folderId);
+  if (!source) throw new Error("Folder not found.");
+
+  const subtreeIds = [folderId, ...descendantFolderIds(folderId, folders)];
+  if (folders.length + subtreeIds.length > MAX_FOLDERS_PER_PROFILE) {
+    throw new Error(`Duplicating this folder would exceed the ${MAX_FOLDERS_PER_PROFILE}-folder limit.`);
+  }
+
+  const subtreeSet = new Set(subtreeIds);
+  const sourceFeedIds = [...new Set(
+    folders.filter((folder) => subtreeSet.has(folder.id)).flatMap((folder) => folder.feedIds),
+  )];
+  const feedById = new Map(feeds.map((feed) => [feed.id, feed]));
+  const missingFeedId = sourceFeedIds.find((id) => !feedById.has(id));
+  if (missingFeedId) throw new Error("This folder contains a missing feed reference.");
+
+  const folderIdMap = new Map(subtreeIds.map((id) => [id, createId()]));
+  const feedIdMap = new Map(sourceFeedIds.map((id) => [id, createId()]));
+  const copiedFeeds = sourceFeedIds.map((id) => ({
+    ...structuredClone(feedById.get(id)!),
+    id: feedIdMap.get(id)!,
+    createdAt: now,
+    updatedAt: now,
+  }));
+  const copiedFolders = folders
+    .filter((folder) => subtreeSet.has(folder.id))
+    .map((folder) => ({
+      ...structuredClone(folder),
+      id: folderIdMap.get(folder.id)!,
+      name: folder.id === folderId ? `${folder.name} Copy` : folder.name,
+      parentId: folder.id === folderId ? source.parentId : folderIdMap.get(folder.parentId!) ?? null,
+      childFolderIds: folder.childFolderIds.map((id) => folderIdMap.get(id)!).filter(Boolean),
+      feedIds: folder.feedIds.map((id) => feedIdMap.get(id)!).filter(Boolean),
+      order: folder.id === folderId
+        ? folders.filter((item) => item.parentId === source.parentId).length
+        : folder.order,
+      createdAt: now,
+      updatedAt: now,
+    }));
+  const rootFolderId = folderIdMap.get(folderId)!;
+  const nextFolders = [
+    ...folders.map((folder) => (
+      folder.id === source.parentId
+        ? { ...folder, childFolderIds: [...folder.childFolderIds, rootFolderId], updatedAt: now }
+        : folder
+    )),
+    ...copiedFolders,
+  ];
+
+  return {
+    feeds: [...feeds, ...copiedFeeds],
+    folders: nextFolders,
+    rootFolder: copiedFolders.find((folder) => folder.id === rootFolderId)!,
+    copiedFeedIds: new Set(copiedFeeds.map((feed) => feed.id)),
+  };
+}
+
+export function duplicateFeedRecord(
+  feeds: Feed[],
+  folders: FeedFolder[],
+  feedId: string,
+  createId: () => string,
+  requestedFolderId?: string | null,
+  now = new Date().toISOString(),
+) {
+  const sourceIndex = feeds.findIndex((feed) => feed.id === feedId);
+  if (sourceIndex < 0) throw new Error("Feed not found.");
+  const source = feeds[sourceIndex];
+  const copy = {
+    ...structuredClone(source),
+    id: createId(),
+    name: `${source.name} Copy`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const nextFeeds = [...feeds];
+  nextFeeds.splice(sourceIndex + 1, 0, copy);
+  const location = requestedFolderId === undefined ? feedLocation(feedId, folders) : requestedFolderId;
+  const nextFolders = location
+    ? folders.map((folder) => (
+      folder.id === location
+        ? { ...folder, feedIds: [...folder.feedIds, copy.id], updatedAt: now }
+        : folder
+    ))
+    : folders;
+  return { feeds: nextFeeds, folders: nextFolders, copy };
+}
+
 export function unfiledFeeds(feeds: Feed[], folders: FeedFolder[]) {
   const filed = new Set(folders.flatMap((folder) => folder.feedIds));
   return feeds.filter((feed) => !filed.has(feed.id));
@@ -179,6 +280,18 @@ export function resolveHomeStartFeed(feeds: Feed[], folders: FeedFolder[], sourc
   return resolveHomeFeeds(feeds, folders, { ...source, continuous: false })[0]
     ?? resolveHomeFeeds(feeds, folders, source)[0]
     ?? null;
+}
+
+export function resolveHomeViewFeeds(
+  feeds: Feed[],
+  folders: FeedFolder[],
+  source: HomeSource,
+  activeFeedId: string | null,
+) {
+  const configuredFeeds = resolveHomeFeeds(feeds, folders, source);
+  if (!activeFeedId || configuredFeeds.some((feed) => feed.id === activeFeedId)) return configuredFeeds;
+  const activeFeed = feeds.find((feed) => feed.id === activeFeedId);
+  return activeFeed ? [activeFeed, ...configuredFeeds] : configuredFeeds;
 }
 
 export function validateFolderTree(folders: FeedFolder[]) {
