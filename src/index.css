@@ -3194,12 +3194,6 @@ textarea,
   margin-top: 12px;
 }
 
-.feed-pane-content {
-  display: flex;
-  flex-direction: column;
-  flex: 0 0 auto;
-}
-
 .bottom-nav {
   left: 18px;
   right: 18px;
@@ -3965,11 +3959,11 @@ body:has(.title-detail-page)::-webkit-scrollbar {
   background:
     linear-gradient(
       104deg,
-      rgb(var(--folder-color-1) / 0.58),
-      rgb(var(--folder-color-2) / 0.46) 54%,
-      rgb(var(--folder-color-3) / 0.54)
+      rgb(var(--folder-color-1) / 0.78),
+      rgb(var(--folder-color-2) / 0.66) 54%,
+      rgb(var(--folder-color-3) / 0.74)
     ),
-    rgba(20, 22, 30, 0.78);
+    #1a1c25;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.16),
     inset 0 -1px 0 rgba(0, 0, 0, 0.16),
@@ -3981,7 +3975,7 @@ body:has(.title-detail-page)::-webkit-scrollbar {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: rgba(12, 14, 20, 0.22);
+  background: rgba(10, 12, 18, 0.08);
   content: "";
   pointer-events: none;
 }
@@ -4740,10 +4734,30 @@ body:has(.title-detail-page)::-webkit-scrollbar {
 .sortable-result-title {
   position: relative;
   min-width: 0;
+  contain: layout paint style;
 }
 
 .sortable-result-title.sortable-dragging {
   opacity: 0.22;
+}
+
+.reorder-title-card {
+  pointer-events: none;
+}
+
+.reorder-title-card .poster-shell {
+  box-shadow: none;
+}
+
+.reorder-title-card .title-name {
+  display: block;
+  overflow: hidden;
+  margin-top: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .title-drag-handle {
@@ -4828,6 +4842,8 @@ body:has(.title-detail-page)::-webkit-scrollbar {
   background: rgba(24, 26, 35, 0.78);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.42);
   backdrop-filter: blur(18px) saturate(1.2);
+  max-width: calc(100vw - 36px);
+  overflow: hidden;
 }
 
 .title-selection-dock > strong {
@@ -4847,6 +4863,24 @@ body:has(.title-detail-page)::-webkit-scrollbar {
   background: rgba(255, 255, 255, 0.07);
   color: var(--text);
   font-weight: 800;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+@media (max-width: 430px) {
+  .title-selection-dock {
+    justify-content: space-between;
+  }
+
+  .title-selection-dock > button {
+    width: 38px;
+    flex: 0 0 38px;
+    padding-inline: 0;
+  }
+
+  .title-selection-dock > button span {
+    display: none;
+  }
 }
 
 .feed-editor,
@@ -4923,20 +4957,29 @@ body:has(.title-detail-page)::-webkit-scrollbar {
   color: var(--muted);
 }
 
+.library-name-empty {
+  padding: 24px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(28, 30, 39, 0.52);
+  color: var(--muted);
+  text-align: center;
+}
+
 .drawer-content:has(.feed-editor),
 .drawer-content:has(.custom-feed-editor) {
   border-color: rgba(255, 255, 255, 0.13);
-  background: rgba(17, 18, 24, 0.88);
+  background: #15161d;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.07),
     0 -24px 80px rgba(0, 0, 0, 0.58);
-  backdrop-filter: blur(18px) saturate(1.18);
+  backdrop-filter: none;
 }
 
 .drawer-content:has(.feed-editor) .drawer-header,
 .drawer-content:has(.custom-feed-editor) .drawer-header {
-  background: rgba(17, 18, 24, 0.86);
-  backdrop-filter: blur(18px) saturate(1.18);
+  background: #15161d;
+  backdrop-filter: none;
 }
 
 .feed-editor .section-title,

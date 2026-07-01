@@ -119,7 +119,7 @@ const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.
 const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
 const SEARCH_DEBOUNCE_MS = 140;
-const HOME_FEED_RENDER_RADIUS = 2;
+const HOME_FEED_RENDER_RADIUS = 4;
 const HOME_FEED_PREVIEW_TITLES = 18;
 const FEED_TITLE_EXPANDED_MAX = 140;
 const FEED_DESCRIPTION_EXPANDED_MAX = 260;
@@ -434,7 +434,7 @@ function AppFrame() {
         <div className="title-selection-dock" role="toolbar" aria-label="Selected titles">
           <strong>{store.selectedTitleIds.length}</strong>
           <button type="button" onClick={() => setBulkAddOpen(true)}>
-            <Plus size={18} /> Add
+            <Plus size={18} /> <span>Add</span>
           </button>
           {activeCustomFeed ? (
             <button
@@ -444,7 +444,7 @@ function AppFrame() {
                 store.setSelectedTitleIds([]);
               }}
             >
-              <GripVertical size={18} /> Reorder
+              <GripVertical size={18} /> <span>Reorder</span>
             </button>
           ) : null}
           {activeCustomFeed ? (
@@ -460,11 +460,11 @@ function AppFrame() {
                 store.setSelectedTitleIds([]);
               }}
             >
-              <Trash2 size={18} /> Remove
+              <Trash2 size={18} /> <span>Remove</span>
             </button>
           ) : null}
           <button type="button" onClick={() => store.setSelectedTitleIds([])}>
-            <Check size={18} /> Done
+            <Check size={18} /> <span>Done</span>
           </button>
         </div>
       ) : null}
@@ -583,21 +583,7 @@ function SessionRestorer() {
     const key = location.pathname === "/" ? homeScrollKey(activeFeed) : path;
     if (location.pathname.startsWith("/title/")) return;
     if (location.pathname === "/") {
-      const container = getHomeScrollContainer(activeFeed);
-      if (!container) return;
-      const save = () => {
-        localStorage.setItem(key, String(container.scrollTop));
-        if (sessionWriteTimer.current != null) window.clearTimeout(sessionWriteTimer.current);
-        sessionWriteTimer.current = window.setTimeout(() => {
-          updateProfileSession({
-            lastRoute: path,
-            scroll: { ...sessionRef.current.scroll, [path]: container.scrollTop, [key]: container.scrollTop },
-          });
-        }, 120);
-      };
-      save();
-      container.addEventListener("scroll", save, { passive: true });
-      return () => container.removeEventListener("scroll", save);
+      return;
     }
     const save = () => {
       if (sessionWriteTimer.current != null) window.clearTimeout(sessionWriteTimer.current);
@@ -659,6 +645,9 @@ function HomePage() {
   const [editingFeed, setEditingFeed] = useState<Feed | null>(null);
   const [editingCustomTitlesFeed, setEditingCustomTitlesFeed] = useState<Feed | null>(null);
   const [renderCenterIndex, setRenderCenterIndex] = useState(-1);
+  const [fullFeedIds, setFullFeedIds] = useState<Set<string>>(
+    () => new Set(store.activeFeedId ? [store.activeFeedId] : []),
+  );
   const [returningFromTitle, setReturningFromTitle] = useState(
     () => sessionStorage.getItem(profileStorageKey(HOME_RETURNING_FROM_TITLE_KEY)) === "1",
   );
@@ -667,6 +656,8 @@ function HomePage() {
   const renderCenterIndexRef = useRef(-1);
   const pendingFeedIndexRef = useRef(-1);
   const feedSettleTimerRef = useRef<number | null>(null);
+  const suppressedScrollSaveFeedIdsRef = useRef(new Set<string>());
+  const feedScrollPositionsRef = useRef(new Map<string, number>());
   const didInitialPagerAlignRef = useRef(false);
   const previousHomePathRef = useRef(location.pathname);
   const lastAlignedFeedIdRef = useRef("");
@@ -678,10 +669,44 @@ function HomePage() {
   const activeFeedIdRef = useRef(activeFeedId);
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
   const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
+  const keepFeedFullyRendered = useCallback((feedId: string) => {
+    setFullFeedIds((current) => {
+      if ([...current][0] === feedId) return current;
+      const ordered = [feedId, ...current].filter((id, index, values) => values.indexOf(id) === index).slice(0, 5);
+      return new Set(ordered);
+    });
+  }, []);
 
   useEffect(() => {
     activeFeedIdRef.current = activeFeedId;
-  }, [activeFeedId]);
+    if (activeFeedId) keepFeedFullyRendered(activeFeedId);
+  }, [activeFeedId, keepFeedFullyRendered]);
+
+  useEffect(() => {
+    if (activeFeedIndex < 0) return;
+    const nearbyIds = feeds
+      .slice(Math.max(0, activeFeedIndex - 2), Math.min(feeds.length, activeFeedIndex + 3))
+      .map((feed) => feed.id);
+    const prewarm = () => {
+      setFullFeedIds((current) => {
+        const ordered = [...nearbyIds, ...current]
+          .filter((id, index, values) => values.indexOf(id) === index)
+          .slice(0, 5);
+        if (ordered.length === current.size && ordered.every((id) => current.has(id))) return current;
+        return new Set(ordered);
+      });
+    };
+    const idleWindow = window as Window & {
+      requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    if (idleWindow.requestIdleCallback && idleWindow.cancelIdleCallback) {
+      const idleHandle = idleWindow.requestIdleCallback(prewarm, { timeout: 1000 });
+      return () => idleWindow.cancelIdleCallback?.(idleHandle);
+    }
+    const timer = globalThis.setTimeout(prewarm, 500);
+    return () => globalThis.clearTimeout(timer);
+  }, [activeFeedIndex, feeds]);
 
   useEffect(() => {
     if (location.pathname !== "/") return;
@@ -708,32 +733,26 @@ function HomePage() {
   }, [activeFeedIndex]);
 
   useLayoutEffect(() => {
-    if (renderCenterIndex < 0) return;
-    const nearbyFeeds = feeds.slice(
-      Math.max(0, renderCenterIndex - HOME_FEED_RENDER_RADIUS),
-      Math.min(feeds.length, renderCenterIndex + HOME_FEED_RENDER_RADIUS + 1),
-    );
-    const frame = requestAnimationFrame(() => {
-      requestAnimationFrame(() => nearbyFeeds.forEach((feed) => restoreHomeScroll(feed)));
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [feeds, renderCenterIndex]);
-
-  useLayoutEffect(() => {
     const enteredHome = previousHomePathRef.current !== "/" && location.pathname === "/";
     previousHomePathRef.current = location.pathname;
     if (!store.ready || !activeFeed || location.pathname !== "/") return;
     const pane = paneRefs.current.get(activeFeed.id);
     if (!pane) return;
+    const switchedFeed = lastAlignedFeedIdRef.current !== activeFeed.id;
     const needsAlignment = enteredHome
       || returningFromTitle
       || !didInitialPagerAlignRef.current
-      || lastAlignedFeedIdRef.current !== activeFeed.id;
+      || switchedFeed;
     if (!needsAlignment) return;
     pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
     lastAlignedFeedIdRef.current = activeFeed.id;
-    if (returningFromTitle) {
+    const savedPosition = feedScrollPositionsRef.current.get(activeFeed.id);
+    if (savedPosition != null) {
+      getHomeScrollContainer(activeFeed)?.scrollTo({ top: savedPosition, behavior: "instant" });
+    } else {
       restoreHomeScroll(activeFeed);
+    }
+    if (returningFromTitle) {
       setReturningFromTitle(false);
       try {
         sessionStorage.removeItem(profileStorageKey(HOME_RETURNING_FROM_TITLE_KEY));
@@ -743,10 +762,7 @@ function HomePage() {
       }
       return;
     }
-    if (!didInitialPagerAlignRef.current) {
-      didInitialPagerAlignRef.current = true;
-      restoreHomeScroll(activeFeed);
-    }
+    if (!didInitialPagerAlignRef.current) didInitialPagerAlignRef.current = true;
   }, [activeFeed, location.pathname, returningFromTitle, store.ready]);
 
   const warmFeedsAroundScrollPosition = useCallback(() => {
@@ -768,6 +784,18 @@ function HomePage() {
       feedSettleTimerRef.current = null;
       const settledFeedId = feeds[pendingFeedIndexRef.current]?.id;
       if (settledFeedId && settledFeedId !== activeFeedIdRef.current) {
+        const previousFeedId = activeFeedIdRef.current;
+        const previousFeed = feeds.find((feed) => feed.id === previousFeedId) ?? null;
+        const previousScrollTop = getHomeScrollContainer(previousFeed)?.scrollTop;
+        if (previousFeedId && previousScrollTop != null) {
+          feedScrollPositionsRef.current.set(previousFeedId, previousScrollTop);
+        }
+        saveHomeScroll(previousFeed);
+        if (previousFeedId) {
+          suppressedScrollSaveFeedIdsRef.current.add(previousFeedId);
+          window.setTimeout(() => suppressedScrollSaveFeedIdsRef.current.delete(previousFeedId), 400);
+        }
+        activeFeedIdRef.current = settledFeedId;
         setActiveFeedId(settledFeedId);
       }
     }, 110);
@@ -782,6 +810,10 @@ function HomePage() {
 
   const handleFeedPaneScroll = useCallback(
     (feed: Feed) => {
+      if (suppressedScrollSaveFeedIdsRef.current.has(feed.id)) return;
+      if (feed.id !== activeFeedIdRef.current) return;
+      const scrollTop = getHomeScrollContainer(feed)?.scrollTop;
+      if (scrollTop != null) feedScrollPositionsRef.current.set(feed.id, scrollTop);
       saveHomeScroll(feed);
     },
     [],
@@ -834,7 +866,7 @@ function HomePage() {
               const renderRadius = returningFromTitle ? 0 : HOME_FEED_RENDER_RADIUS;
               const isNearby = renderOriginIndex >= 0 && Math.abs(index - renderOriginIndex) <= renderRadius;
               const shouldRenderFeed = isActive || isNearby;
-              const retainedScrollTop = readHomeScroll(feed);
+              const isFullyRendered = isActive || fullFeedIds.has(feed.id);
               return (
                 <div
                   key={feed.id}
@@ -850,21 +882,16 @@ function HomePage() {
                     data-home-scroll-key={homeScrollKey(feed)}
                     onScroll={() => handleFeedPaneScroll(feed)}
                   >
-                    <div
-                      className="feed-pane-content"
-                      style={retainedScrollTop > 0 ? { minHeight: `calc(${retainedScrollTop}px + 100dvh)` } : undefined}
-                    >
-                      {shouldRenderFeed ? (
-                        <FeedView
-                          feed={feed}
-                          preview={!isActive}
-                          onEdit={() => setEditingFeed(feed)}
-                          onManageTitles={() => setEditingCustomTitlesFeed(feed)}
-                        />
-                      ) : (
-                        <HomeFeedPaneSkeleton feed={feed} />
-                      )}
-                    </div>
+                    {shouldRenderFeed ? (
+                      <FeedView
+                        feed={feed}
+                        preview={!isFullyRendered}
+                        onEdit={() => setEditingFeed(feed)}
+                        onManageTitles={() => setEditingCustomTitlesFeed(feed)}
+                      />
+                    ) : (
+                      <HomeFeedPaneSkeleton feed={feed} />
+                    )}
                   </div>
                 </div>
               );
@@ -1262,6 +1289,7 @@ function TitleCollection({
   const [draggedTitleId, setDraggedTitleId] = useState<number | null>(null);
   const dragScrollVelocityRef = useRef(0);
   const dragScrollFrameRef = useRef<number | null>(null);
+  const dragScrollLastFrameRef = useRef(0);
   const reorderSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -1271,14 +1299,17 @@ function TitleCollection({
     if (dragScrollFrameRef.current != null) cancelAnimationFrame(dragScrollFrameRef.current);
     dragScrollFrameRef.current = null;
   }, []);
-  const runDragScroll = useCallback(() => {
+  const runDragScroll = useCallback((timestamp: number) => {
     const velocity = dragScrollVelocityRef.current;
     if (!velocity) {
       dragScrollFrameRef.current = null;
       return;
     }
-    const scroller = getHomeScrollContainer(feed);
-    if (scroller) scroller.scrollTop += velocity;
+    if (timestamp - dragScrollLastFrameRef.current >= 28) {
+      const scroller = getHomeScrollContainer(feed);
+      if (scroller) scroller.scrollTop += velocity * 1.7;
+      dragScrollLastFrameRef.current = timestamp;
+    }
     dragScrollFrameRef.current = requestAnimationFrame(runDragScroll);
   }, [feed]);
   const handleResultDragMove = useCallback((event: DragMoveEvent) => {
@@ -1334,7 +1365,13 @@ function TitleCollection({
     );
   }
   const cards = visibleItems.map((series, index) => {
-    const card = (
+    const card = reorderEnabled ? (
+      <ReorderTitleCard
+        series={series}
+        rank={rankById?.get(series.id) ?? index + 1}
+        showRank={feed.view.visible.rank}
+      />
+    ) : (
       <MemoTitleCard
         key={series.id}
         series={series}
@@ -2035,8 +2072,10 @@ function FeedsPage() {
           type="search"
           value={librarySearch}
           onChange={(event) => setLibrarySearch(event.target.value)}
-          placeholder="Search feed and folder names"
+          placeholder="Search folders and feeds"
           autoComplete="off"
+          spellCheck={false}
+          aria-label="Search folder and feed names"
         />
         {librarySearch ? (
           <button type="button" aria-label="Clear library search" onClick={() => setLibrarySearch("")}>
@@ -2068,7 +2107,7 @@ function FeedsPage() {
             </button>
           ))}
           {matchingFolders.length === 0 && matchingFeeds.length === 0 ? (
-            <div className="empty-state compact-empty"><Search size={24} /><strong>No matching feed or folder</strong></div>
+            <div className="library-name-empty">No matching folder or feed names</div>
           ) : null}
         </section>
       ) : null}
@@ -2236,6 +2275,10 @@ function FeedsPage() {
                 store.upsertFeed(feed);
                 if (isNew && selectedFolderId) store.moveFeedToFolder(feed.id, selectedFolderId);
                 setEditorFeed(null);
+                if (isNew) {
+                  store.setActiveFeedId(feed.id);
+                  scheduleRouteChange("page", () => navigate("/"));
+                }
               }}
             />
           ) : (
@@ -2247,6 +2290,10 @@ function FeedsPage() {
                 store.upsertFeed(feed);
                 if (isNew && selectedFolderId) store.moveFeedToFolder(feed.id, selectedFolderId);
                 setEditorFeed(null);
+                if (isNew) {
+                  store.setActiveFeedId(feed.id);
+                  scheduleRouteChange("page", () => navigate("/"));
+                }
               }}
             />
           )
@@ -2303,14 +2350,16 @@ function FeedsPage() {
 }
 
 function SortableResultTitleCard({ titleId, children }: { titleId: number; children: React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
     id: `result-title:${titleId}`,
+    transition: null,
+    animateLayoutChanges: () => false,
   });
   return (
     <div
       ref={setNodeRef}
       className={`sortable-result-title ${isDragging ? "sortable-dragging" : ""}`}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{ transform: CSS.Transform.toString(transform) }}
     >
       {children}
       <button
@@ -2325,6 +2374,26 @@ function SortableResultTitleCard({ titleId, children }: { titleId: number; child
     </div>
   );
 }
+
+const ReorderTitleCard = memo(function ReorderTitleCard({
+  series,
+  rank,
+  showRank,
+}: {
+  series: SeriesCatalog;
+  rank: number;
+  showRank: boolean;
+}) {
+  return (
+    <div className="title-card-wrap reorder-title-card">
+      <div className="poster-shell">
+        <Cover series={series} priority={rank <= 18} />
+        {showRank ? <span className="rank">{rank}</span> : null}
+      </div>
+      <span className="title-name">{visibleTitle(series)}</span>
+    </div>
+  );
+});
 
 function TitleDragPreview({ series }: { series?: SeriesCatalog }) {
   if (!series) return null;
@@ -3049,7 +3118,6 @@ function CustomFeedEditor({
   const [draft, setDraft] = useState<Feed>(() => structuredClone(feed));
   const [searchText, setSearchText] = useState("");
   const [status, setStatus] = useState("");
-  const [editorTab, setEditorTab] = useState<"titles" | "settings">(() => mode === "settings" ? "settings" : "titles");
   const [tagSearch, setTagSearch] = useState("");
   const [showAllTags, setShowAllTags] = useState(false);
   const [showMoreParameters, setShowMoreParameters] = useState(false);
@@ -3099,7 +3167,6 @@ function CustomFeedEditor({
     setDraft(structuredClone(feed));
     setSearchText("");
     setStatus("");
-    setEditorTab(mode === "settings" ? "settings" : "titles");
     setTagSearch("");
     setShowAllTags(false);
     setShowMoreParameters(false);
@@ -3191,16 +3258,7 @@ function CustomFeedEditor({
         </div>
       </div> : null}
 
-      {mode === "create" ? <div className="segmented compact-segments custom-feed-tabs" role="tablist" aria-label="Custom feed editor">
-        <button className={`segment ${editorTab === "titles" ? "active" : ""}`} type="button" onClick={() => setEditorTab("titles")}>
-          Titles
-        </button>
-        <button className={`segment ${editorTab === "settings" ? "active" : ""}`} type="button" onClick={() => setEditorTab("settings")}>
-          Settings
-        </button>
-      </div> : null}
-
-      {mode !== "settings" && editorTab === "titles" ? (
+      {mode === "titles" ? (
         <>
           <div className="custom-feed-picker-heading">
             <strong>{draft.customTitleIds.length.toLocaleString()} / {MAX_CUSTOM_FEED_TITLES}</strong>
@@ -3250,7 +3308,7 @@ function CustomFeedEditor({
             </div>
           )}
         </>
-      ) : mode !== "titles" ? (
+      ) : (
         <div className="custom-feed-settings">
           <h2 className="section-title">Title View</h2>
           <div className="field">
@@ -3443,7 +3501,7 @@ function CustomFeedEditor({
             </button>
           ) : null}
         </div>
-      ) : null}
+      )}
 
       <div className="toolbar custom-feed-editor-actions">
         <button className="button" type="button" onClick={onCancel}>Cancel</button>
@@ -4234,6 +4292,10 @@ function SearchPage() {
   }, [store.settings.contentRatings]);
   const getTitle = useCallback((item: SeriesCatalog) => visibleTitle(item), []);
   const inputQuery = query;
+  const inputQueryRef = useRef(inputQuery);
+  const activeSearchProfileId = store.activeProfile.id;
+  const profileSearchQuery = store.profileSession.searchQuery;
+  const lastSearchProfileIdRef = useRef(activeSearchProfileId);
   const [debouncedQuery, setDebouncedQuery] = useState(inputQuery);
   const [searchResultIds, setSearchResultIds] = useState<number[]>([]);
   const searchWorkerRef = useRef<Worker | null>(null);
@@ -4248,7 +4310,7 @@ function SearchPage() {
     searchWorkerRef.current = worker;
     worker.onmessage = (event: MessageEvent<{ type: "results"; requestId: number; ids: number[] }>) => {
       if (event.data.type !== "results" || event.data.requestId !== searchRequestRef.current) return;
-      setSearchResultIds(event.data.ids);
+      startTransition(() => setSearchResultIds(event.data.ids));
     };
     return () => {
       worker.terminate();
@@ -4285,13 +4347,15 @@ function SearchPage() {
 
     const sensitiveFamily = sensitiveTagIdsForSearch(term, sensitiveTagIds);
     if (sensitiveFamily) {
-      setSearchResultIds(
-        searchableCatalog
-        .filter((item) => item.tag_ids.some((tagId) => sensitiveFamily.has(tagId)))
-        .sort((a, b) => getTitle(a).localeCompare(getTitle(b)))
-        .slice(0, 60)
-        .map((item) => item.id),
-      );
+      startTransition(() => {
+        setSearchResultIds(
+          searchableCatalog
+          .filter((item) => item.tag_ids.some((tagId) => sensitiveFamily.has(tagId)))
+          .sort((a, b) => getTitle(a).localeCompare(getTitle(b)))
+          .slice(0, 60)
+          .map((item) => item.id),
+        );
+      });
       return;
     }
 
@@ -4310,12 +4374,17 @@ function SearchPage() {
         .sort((a, b) => getTitle(a).localeCompare(getTitle(b))),
     [getTitle, searchResultIds, searchableCatalogById],
   );
+  useEffect(() => () => {
+    updateProfileSession({ searchQuery: inputQueryRef.current });
+  }, [updateProfileSession]);
   useEffect(() => {
-    updateProfileSession({ searchQuery: inputQuery });
-  }, [inputQuery, updateProfileSession]);
-  useEffect(() => {
-    setQuery(store.profileSession.searchQuery);
-  }, [store.activeProfile.id, store.profileSession.searchQuery]);
+    if (lastSearchProfileIdRef.current === activeSearchProfileId) return;
+    lastSearchProfileIdRef.current = activeSearchProfileId;
+    inputQueryRef.current = profileSearchQuery;
+    setQuery(profileSearchQuery);
+    setDebouncedQuery(profileSearchQuery);
+    setSearchResultIds([]);
+  }, [activeSearchProfileId, profileSearchQuery]);
   const remember = (value = query) => {
     const clean = value.trim();
     if (!clean) return;
@@ -4340,7 +4409,11 @@ function SearchPage() {
           <input
             className="input"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              inputQueryRef.current = event.target.value;
+              setQuery(event.target.value);
+            }}
+            onBlur={() => updateProfileSession({ searchQuery: inputQueryRef.current })}
             placeholder="Search titles"
             autoComplete="off"
           />
