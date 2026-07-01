@@ -3134,6 +3134,7 @@ textarea,
   overscroll-behavior-x: contain;
   overscroll-behavior-y: none;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: auto;
   scrollbar-width: none;
   touch-action: auto;
 }
@@ -3175,6 +3176,8 @@ textarea,
   height: 100%;
   min-height: 0;
   overflow-y: auto;
+  overflow-anchor: none;
+  scroll-behavior: auto;
   overscroll-behavior-y: contain;
   padding-top: 12px;
   padding-bottom: calc(104px + env(safe-area-inset-bottom));
@@ -3482,41 +3485,6 @@ textarea,
   min-height: 59px;
   font-size: 27.5px;
   transform: none;
-}
-
-/* Immediate route acknowledgement while the destination React tree mounts. */
-.route-transition-feedback {
-  position: fixed;
-  inset: 0;
-  z-index: 29;
-  display: none;
-  overflow: hidden;
-  background: var(--bg);
-  color: var(--text);
-  pointer-events: auto;
-  contain: strict;
-}
-
-html[data-route-pending="detail"] .route-transition-detail,
-html[data-route-pending="page"] .route-transition-page {
-  display: block;
-}
-
-.route-transition-actions {
-  display: flex;
-  align-items: center;
-}
-
-.route-transition-actions .skeleton-chip {
-  width: 42px;
-  min-width: 42px;
-  height: 42px;
-  min-height: 42px;
-  border-radius: 8px;
-}
-
-.route-page-skeleton {
-  padding-top: calc(18px + env(safe-area-inset-top));
 }
 
 .route-page-skeleton > .skeleton-line-title {

@@ -119,8 +119,7 @@ const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.
 const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
 const SEARCH_DEBOUNCE_MS = 140;
-const HOME_FEED_RENDER_RADIUS = 4;
-const HOME_FEED_PREVIEW_TITLES = 18;
+const HOME_FEED_RENDER_RADIUS = 2;
 const FEED_TITLE_EXPANDED_MAX = 140;
 const FEED_DESCRIPTION_EXPANDED_MAX = 260;
 const PWA_CHROME_THEME_COLOR = "#11131a";
@@ -140,16 +139,12 @@ const ACCENT_COLORS = [
   { name: "Amber", value: "#f59e0b" },
   { name: "Cyan", value: "#06b6d4" },
 ] as const;
-type RouteFeedbackKind = "detail" | "page";
-
 function clearRouteFeedback() {
-  delete document.documentElement.dataset.routePending;
+  // Kept for Back handlers that may run while an older app shell is still open.
 }
 
-function scheduleRouteChange(kind: RouteFeedbackKind, action: () => void) {
-  document.documentElement.dataset.routePending = kind;
+function scheduleRouteChange(_kind: "detail" | "page", action: () => void) {
   action();
-  window.setTimeout(clearRouteFeedback, 1800);
 }
 
 function isPlainNavigationClick(event: React.MouseEvent) {
@@ -404,7 +399,6 @@ function AppFrame() {
   return (
     <div className="app-shell">
       <SessionRestorer />
-      <RouteTransitionFeedback />
       <main>
         {keepHomeMounted && (
           <div className={showingTitle ? "route-cache-hidden" : undefined} aria-hidden={showingTitle || undefined}>
@@ -567,7 +561,6 @@ function SessionRestorer() {
       return;
     }
     if (location.pathname === "/") {
-      requestAnimationFrame(() => requestAnimationFrame(() => restoreHomeScroll(activeFeed)));
       return;
     }
     const candidates = [store.profileSession.scroll[key], Number(localStorage.getItem(key)), store.profileSession.scroll[path]];
@@ -645,18 +638,15 @@ function HomePage() {
   const [editingFeed, setEditingFeed] = useState<Feed | null>(null);
   const [editingCustomTitlesFeed, setEditingCustomTitlesFeed] = useState<Feed | null>(null);
   const [renderCenterIndex, setRenderCenterIndex] = useState(-1);
-  const [fullFeedIds, setFullFeedIds] = useState<Set<string>>(
-    () => new Set(store.activeFeedId ? [store.activeFeedId] : []),
-  );
   const [returningFromTitle, setReturningFromTitle] = useState(
     () => sessionStorage.getItem(profileStorageKey(HOME_RETURNING_FROM_TITLE_KEY)) === "1",
   );
   const pagerRef = useRef<HTMLDivElement | null>(null);
   const paneRefs = useRef(new Map<string, HTMLDivElement>());
   const renderCenterIndexRef = useRef(-1);
+  const restoredRenderCenterIndexRef = useRef(-1);
   const pendingFeedIndexRef = useRef(-1);
   const feedSettleTimerRef = useRef<number | null>(null);
-  const suppressedScrollSaveFeedIdsRef = useRef(new Set<string>());
   const feedScrollPositionsRef = useRef(new Map<string, number>());
   const didInitialPagerAlignRef = useRef(false);
   const previousHomePathRef = useRef(location.pathname);
@@ -669,44 +659,10 @@ function HomePage() {
   const activeFeedIdRef = useRef(activeFeedId);
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
   const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
-  const keepFeedFullyRendered = useCallback((feedId: string) => {
-    setFullFeedIds((current) => {
-      if ([...current][0] === feedId) return current;
-      const ordered = [feedId, ...current].filter((id, index, values) => values.indexOf(id) === index).slice(0, 5);
-      return new Set(ordered);
-    });
-  }, []);
 
   useEffect(() => {
     activeFeedIdRef.current = activeFeedId;
-    if (activeFeedId) keepFeedFullyRendered(activeFeedId);
-  }, [activeFeedId, keepFeedFullyRendered]);
-
-  useEffect(() => {
-    if (activeFeedIndex < 0) return;
-    const nearbyIds = feeds
-      .slice(Math.max(0, activeFeedIndex - 2), Math.min(feeds.length, activeFeedIndex + 3))
-      .map((feed) => feed.id);
-    const prewarm = () => {
-      setFullFeedIds((current) => {
-        const ordered = [...nearbyIds, ...current]
-          .filter((id, index, values) => values.indexOf(id) === index)
-          .slice(0, 5);
-        if (ordered.length === current.size && ordered.every((id) => current.has(id))) return current;
-        return new Set(ordered);
-      });
-    };
-    const idleWindow = window as Window & {
-      requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
-      cancelIdleCallback?: (handle: number) => void;
-    };
-    if (idleWindow.requestIdleCallback && idleWindow.cancelIdleCallback) {
-      const idleHandle = idleWindow.requestIdleCallback(prewarm, { timeout: 1000 });
-      return () => idleWindow.cancelIdleCallback?.(idleHandle);
-    }
-    const timer = globalThis.setTimeout(prewarm, 500);
-    return () => globalThis.clearTimeout(timer);
-  }, [activeFeedIndex, feeds]);
+  }, [activeFeedId]);
 
   useEffect(() => {
     if (location.pathname !== "/") return;
@@ -733,24 +689,43 @@ function HomePage() {
   }, [activeFeedIndex]);
 
   useLayoutEffect(() => {
+    if (renderCenterIndex < 0) return;
+    if (restoredRenderCenterIndexRef.current === renderCenterIndex) return;
+    restoredRenderCenterIndexRef.current = renderCenterIndex;
+    const nearbyFeeds = feeds.slice(
+      Math.max(0, renderCenterIndex - HOME_FEED_RENDER_RADIUS),
+      Math.min(feeds.length, renderCenterIndex + HOME_FEED_RENDER_RADIUS + 1),
+    );
+    nearbyFeeds.forEach((feed) => {
+      if (feed.id === activeFeedId) return;
+      const target = feedScrollPositionsRef.current.get(feed.id) ?? readHomeScroll(feed);
+      if (target <= 0) return;
+      getHomeScrollContainer(feed)?.scrollTo({ top: target, behavior: "instant" });
+    });
+  }, [activeFeedId, feeds, renderCenterIndex]);
+
+  useLayoutEffect(() => {
     const enteredHome = previousHomePathRef.current !== "/" && location.pathname === "/";
     previousHomePathRef.current = location.pathname;
     if (!store.ready || !activeFeed || location.pathname !== "/") return;
     const pane = paneRefs.current.get(activeFeed.id);
     if (!pane) return;
     const switchedFeed = lastAlignedFeedIdRef.current !== activeFeed.id;
-    const needsAlignment = enteredHome
-      || returningFromTitle
-      || !didInitialPagerAlignRef.current
-      || switchedFeed;
+    const needsInitialRestore = enteredHome || returningFromTitle || !didInitialPagerAlignRef.current;
+    const needsAlignment = needsInitialRestore || switchedFeed;
     if (!needsAlignment) return;
-    pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
+    const pager = pagerRef.current;
+    if (pager && Math.abs(pager.scrollLeft - pane.offsetLeft) > 2) {
+      pager.scrollTo({ left: pane.offsetLeft, top: 0, behavior: "instant" });
+    }
     lastAlignedFeedIdRef.current = activeFeed.id;
-    const savedPosition = feedScrollPositionsRef.current.get(activeFeed.id);
-    if (savedPosition != null) {
-      getHomeScrollContainer(activeFeed)?.scrollTo({ top: savedPosition, behavior: "instant" });
-    } else {
-      restoreHomeScroll(activeFeed);
+    if (needsInitialRestore) {
+      const savedPosition = feedScrollPositionsRef.current.get(activeFeed.id);
+      if (savedPosition != null) {
+        getHomeScrollContainer(activeFeed)?.scrollTo({ top: savedPosition, behavior: "instant" });
+      } else {
+        restoreHomeScroll(activeFeed);
+      }
     }
     if (returningFromTitle) {
       setReturningFromTitle(false);
@@ -791,10 +766,6 @@ function HomePage() {
           feedScrollPositionsRef.current.set(previousFeedId, previousScrollTop);
         }
         saveHomeScroll(previousFeed);
-        if (previousFeedId) {
-          suppressedScrollSaveFeedIdsRef.current.add(previousFeedId);
-          window.setTimeout(() => suppressedScrollSaveFeedIdsRef.current.delete(previousFeedId), 400);
-        }
         activeFeedIdRef.current = settledFeedId;
         setActiveFeedId(settledFeedId);
       }
@@ -810,7 +781,6 @@ function HomePage() {
 
   const handleFeedPaneScroll = useCallback(
     (feed: Feed) => {
-      if (suppressedScrollSaveFeedIdsRef.current.has(feed.id)) return;
       if (feed.id !== activeFeedIdRef.current) return;
       const scrollTop = getHomeScrollContainer(feed)?.scrollTop;
       if (scrollTop != null) feedScrollPositionsRef.current.set(feed.id, scrollTop);
@@ -866,7 +836,6 @@ function HomePage() {
               const renderRadius = returningFromTitle ? 0 : HOME_FEED_RENDER_RADIUS;
               const isNearby = renderOriginIndex >= 0 && Math.abs(index - renderOriginIndex) <= renderRadius;
               const shouldRenderFeed = isActive || isNearby;
-              const isFullyRendered = isActive || fullFeedIds.has(feed.id);
               return (
                 <div
                   key={feed.id}
@@ -885,7 +854,6 @@ function HomePage() {
                     {shouldRenderFeed ? (
                       <FeedView
                         feed={feed}
-                        preview={!isFullyRendered}
                         onEdit={() => setEditingFeed(feed)}
                         onManageTitles={() => setEditingCustomTitlesFeed(feed)}
                       />
@@ -956,12 +924,10 @@ function HomePage() {
 
 function FeedView({
   feed,
-  preview = false,
   onEdit,
   onManageTitles,
 }: {
   feed: Feed;
-  preview?: boolean;
   onEdit?: () => void;
   onManageTitles?: () => void;
 }) {
@@ -1112,7 +1078,6 @@ function FeedView({
         feed={feed}
         history={store.history}
         latestDate={store.syncMeta?.historyLastDate}
-        preview={preview}
         rankById={rankById}
       />
       <BottomDrawer title={feed.name} open={actionsOpen} onOpenChange={setActionsOpen}>
@@ -1131,36 +1096,6 @@ function FeedView({
           <SharePanelButton payload={{ kind: "feed", version: 2, feed }} label="Share Feed" />
         </div>
       </BottomDrawer>
-    </>
-  );
-}
-
-function RouteTransitionFeedback() {
-  return (
-    <>
-      <div className="route-transition-feedback route-transition-detail" aria-hidden="true">
-        <div className="detail-page">
-          <div className="detail-top-actions route-transition-actions">
-            <span className="skeleton-chip" />
-            <span className="spacer" />
-            <span className="skeleton-chip" />
-          </div>
-          <DetailSkeleton series={null} showRecommendations={false} />
-        </div>
-      </div>
-      <div className="route-transition-feedback route-transition-page" aria-hidden="true">
-        <div className="page route-page-skeleton">
-          <span className="skeleton-line skeleton-line-title" />
-          <div className="title-grid columns-3 density-standard" style={{ "--grid-columns": 3 } as React.CSSProperties}>
-            {Array.from({ length: 9 }).map((_, index) => (
-              <div className="title-card-wrap" key={index}>
-                <div className="cover-wrap skeleton-box" />
-                <span className="skeleton-line skeleton-line-body" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
     </>
   );
 }
@@ -1256,7 +1191,6 @@ function TitleCollection({
   history,
   latestDate,
   loading = false,
-  preview = false,
   onTitleOpen,
   rankById,
 }: {
@@ -1265,7 +1199,6 @@ function TitleCollection({
   history: HistoryMap;
   latestDate?: string | null;
   loading?: boolean;
-  preview?: boolean;
   onTitleOpen?: (series: SeriesCatalog) => void;
   rankById?: Map<number, number>;
 }) {
@@ -1281,7 +1214,7 @@ function TitleCollection({
   useEffect(() => {
     sessionStorage.setItem(countKey, String(visibleCount));
   }, [countKey, visibleCount]);
-  const visibleItems = items.slice(0, preview ? Math.min(visibleCount, HOME_FEED_PREVIEW_TITLES) : visibleCount);
+  const visibleItems = items.slice(0, visibleCount);
   const selectedIdSet = useMemo(() => new Set(selectedTitleIds), [selectedTitleIds]);
   const toggleSelection = toggleSelectedTitleId;
   const metricWindow = useMemo(() => resolveRollingWindow(feed.filters.rolling, latestDate), [feed.filters.rolling, latestDate]);
@@ -1428,9 +1361,7 @@ function TitleCollection({
           </DragOverlay>
         </DndContext>
       ) : grid}
-      {preview ? null : (
-        <LoadMore visibleCount={visibleCount} total={items.length} onMore={() => setVisibleCount((count) => count + pageSize)} />
-      )}
+      <LoadMore visibleCount={visibleCount} total={items.length} onMore={() => setVisibleCount((count) => count + pageSize)} />
     </>
   );
 }
@@ -5247,7 +5178,7 @@ function TitleDetailPage() {
   const params = useParams();
   const id = Number(params.id);
   const invalidRoute = !Number.isFinite(id) || id <= 0;
-  const catalogItem = store.catalog.find((item) => item.id === id);
+  const catalogItem = store.catalogById.get(id);
   const [detail, setDetail] = useState<SeriesDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("Loading detail");
