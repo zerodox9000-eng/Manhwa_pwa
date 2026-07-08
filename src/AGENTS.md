@@ -1,0 +1,38 @@
+# Purpose
+
+Owns the frontend application source: React routes, UI, domain rules, data loading, persistence, workers, and shared libraries.
+
+## Ownership
+
+- `App.tsx` owns live route composition and much of the mobile UI shell.
+- `domain/` owns feed/filter/share/recommendation types and pure business rules.
+- `services/` owns catalog loading, detail loading, and external data-source integration.
+- `store/` owns local persistence and migrations.
+- `workers/` owns background computation paths.
+- `assets/`, `lib/`, and `db/` support source-level UI/data helpers.
+
+## Local Contracts
+
+- Read the root AGENTS.md first.
+- Keep frontend data consumption compatible with `manhwa_db/db/exports/frontend`.
+- Do not make the frontend read backend raw, processed, enrichment, cache, or state files.
+- Preserve no-recognized-tag exclusion across feeds, search, and custom-add flows.
+- Installed PWA users may already have IndexedDB state; migrations must be backward-compatible and recoverable.
+- Home pager behavior is fragile and user-visible: horizontal feed swipe and vertical feed scroll state must not fight each other.
+
+## Work Guidance
+
+- Use existing domain helpers and types before adding new state shapes.
+- Keep rendering cheap on mobile; avoid expensive blur, image extraction, or large list updates in scroll handlers.
+- Route/detail navigation should respond immediately, even if details or recommendations are still loading.
+- If changing feed settings, custom feeds, folders, or profiles, update migration and serialization paths together.
+- Search should remain stable while typing and deleting; debounce expensive work instead of blocking input.
+
+## Verification
+
+- Run `npm run lint`, `npm test -- --run`, and `npm run build` for source changes.
+- For Home, feed, search, settings, and detail interaction changes, test a mobile-width browser or LAN phone preview when possible.
+
+## Child DOX Index
+
+No deeper child AGENTS.md files yet. Add one if a source subfolder gains its own durable rules.

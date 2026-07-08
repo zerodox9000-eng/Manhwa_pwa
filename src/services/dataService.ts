@@ -1,21 +1,9 @@
-import { inflate } from "pako";
 import { db, saveSyncMeta } from "../db/appDb";
 import { DATA_SOURCE_CANDIDATES } from "../domain/defaults";
 import { normalizeCatalog, resolveDisplayTitle } from "../domain/catalog";
 import type { RecommendationFeature, SeriesCatalog, SeriesDetail, SyncMeta } from "../domain/types";
 import { parseCatalogList, parseDetail, parseHistory, parseRecommendationFeatures, parseTags } from "../domain/validation";
-
-function bytesToText(bytes: Uint8Array) {
-  return new TextDecoder("utf-8").decode(bytes);
-}
-
-function decodeJsonBytes(bytes: Uint8Array) {
-  try {
-    return bytesToText(inflate(bytes));
-  } catch {
-    return bytesToText(bytes);
-  }
-}
+import { decodeJsonBytes, fetchChunkedFrontendData } from "./chunkedData";
 
 async function fetchJson<T>(base: string, path: string, preferGzip = true): Promise<T> {
   const targets = preferGzip ? [`${path}.gz`, path] : [path];
@@ -134,17 +122,23 @@ export async function resolveDataSource(preferred?: string) {
 
     try {
       const response = await fetch(
-        `${candidate}/series/all.json.gz`,
+        `${candidate}/meta/data-manifest.json`,
         { cache: "no-cache" }
       );
 
-      if (!response.ok) {
-        throw new Error(`${response.status} ${response.statusText}`);
-      }
-
-      return candidate;
+      if (response.ok) return candidate;
     } catch {
-      // Try next source
+      // Fall back to the legacy probe.
+    }
+
+    try {
+      const response = await fetch(
+        `${candidate}/series/all.json.gz`,
+        { cache: "no-cache" }
+      );
+      if (response.ok) return candidate;
+    } catch {
+      // Try next source.
     }
   }
 
@@ -157,10 +151,19 @@ export async function syncFrontendData(
 ) {
   const source = await resolveDataSource(preferredSource);
   const syncTimestamp = new Date().toISOString();
+  let chunkedData: Awaited<ReturnType<typeof fetchChunkedFrontendData>> | null = null;
+
+  try {
+    onProgress?.("Loading versioned backend data");
+    chunkedData = await fetchChunkedFrontendData(source, onProgress);
+  } catch {
+    onProgress?.("Using compatible backend data");
+  }
 
   onProgress?.("Loading current backend catalog");
-
-  const liveCatalog = await fetchJsonValidated(source, "series/all.json", parseCatalogList, true);
+  const liveCatalog =
+    chunkedData?.catalog ??
+    await fetchJsonValidated(source, "series/all.json", parseCatalogList, true);
 
   onProgress?.("Merging query-ready fields");
 
@@ -172,19 +175,25 @@ export async function syncFrontendData(
 
   onProgress?.("Downloading tags");
 
-  const tags = parseTags(await fetchJson<unknown>(source, "meta/tags.json", true));
+  const tags =
+    chunkedData?.tags ??
+    parseTags(await fetchJson<unknown>(source, "meta/tags.json", true));
 
   onProgress?.("Downloading history");
 
-  const rawHistory = parseHistory(await fetchJson<unknown>(source, "stats/history.json", true));
+  const rawHistory =
+    chunkedData?.history ??
+    parseHistory(await fetchJson<unknown>(source, "stats/history.json", true));
 
   onProgress?.("Downloading recommendation features");
 
-  let recommendationFeatures: RecommendationFeature[] = [];
-  try {
-    recommendationFeatures = parseRecommendationFeatures(await fetchJson<unknown>(source, "recommendations/features.json", true));
-  } catch {
-    recommendationFeatures = [];
+  let recommendationFeatures: RecommendationFeature[] = chunkedData?.recommendationFeatures ?? [];
+  if (!chunkedData) {
+    try {
+      recommendationFeatures = parseRecommendationFeatures(await fetchJson<unknown>(source, "recommendations/features.json", true));
+    } catch {
+      recommendationFeatures = [];
+    }
   }
 
   onProgress?.("Saving offline data");
@@ -203,14 +212,12 @@ export async function syncFrontendData(
 
   await db.transaction(
     "rw",
-    [db.catalog, db.tags, db.details, db.recommendationFeatures, db.history],
+    [db.catalog, db.tags, db.recommendationFeatures, db.history],
     async () => {
       await db.catalog.clear();
       await db.tags.clear();
       await db.recommendationFeatures.clear();
       await db.history.clear();
-      await db.details.clear();
-
       await db.catalog.bulkPut(catalog);
       await db.tags.bulkPut(tags);
       if (recommendationFeatures.length > 0) {
@@ -231,7 +238,9 @@ export async function syncFrontendData(
     totalSeries: catalog.length,
     historyFirstDate: historyDates[0] ?? null,
     historyLastDate: historyDates.at(-1) ?? null,
-    versionHash: `live-merged-${catalog.length}-${historyDates.at(-1) ?? "no-history"}`,
+    versionHash: chunkedData
+      ? `chunked-${chunkedData.buildId}`
+      : `live-merged-${catalog.length}-${historyDates.at(-1) ?? "no-history"}`,
     source,
   };
 

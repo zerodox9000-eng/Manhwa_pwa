@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, createFeed } from "./defaults";
-import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, runFeedQuery } from "./query";
+import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch } from "./query";
 import type { HistoryMap, SeriesCatalog, TagNode } from "./types";
 
 const tags: TagNode[] = [
@@ -8,6 +8,8 @@ const tags: TagNode[] = [
   { id: 7, name: "Boys Love", path: "Themes > Relationship > Boys Love", is_genre: false, parent_id: null, level: 3 },
   { id: 8, name: "School Boys Love", path: "Themes > Relationship > Boys Love > School Boys Love", is_genre: false, parent_id: 7, level: 4 },
   { id: 2, name: "Hentai", path: "Sexual Content > Intensity > Hentai", is_genre: true, parent_id: null, level: 2 },
+  { id: 9, name: "Smut", path: "Sexual Content > Intensity > Smut", is_genre: true, parent_id: null, level: 2 },
+  { id: 10, name: "Girls Love", path: "Themes > Relationship > Girls Love", is_genre: true, parent_id: null, level: 2 },
   { id: 3, name: "Fantasy", path: "Themes > Fantasy", is_genre: true, parent_id: null, level: 2 },
   { id: 4, name: "Isekai", path: "Themes > Fantasy > Isekai", is_genre: false, parent_id: 3, level: 3 },
   { id: 5, name: "Non-BL with Two Male Leads", path: "Themes > Relationship > Non-BL with Two Male Leads", is_genre: false, parent_id: null, level: 3 },
@@ -146,6 +148,27 @@ describe("runFeedQuery", () => {
     const groups = buildSensitiveTagGroups(tags);
     expect(groups.adult.has(2)).toBe(true);
     expect(groups.adult.has(6)).toBe(true);
+  });
+
+  it("maps sensitive search aliases to the correct tag families", () => {
+    const groups = buildSensitiveTagGroups(tags);
+    expect(sensitiveTagIdsForSearch("BL", groups)?.has(7)).toBe(true);
+    expect(sensitiveTagIdsForSearch("GL", groups)?.has(10)).toBe(true);
+    expect(sensitiveTagIdsForSearch("smut", groups)?.has(9)).toBe(true);
+    expect(sensitiveTagIdsForSearch("action", groups)).toBeNull();
+  });
+
+  it("lets an enabled sensitive family override the default content-rating gate", () => {
+    const groups = buildSensitiveTagGroups(tags);
+    const adultTitle = {
+      ...baseSeries[0],
+      id: 46,
+      content_rating: "pornographic" as const,
+      tag_ids: [9],
+    };
+
+    expect(isSearchVisible(adultTitle, DEFAULT_SETTINGS, groups)).toBe(false);
+    expect(isSearchVisible(adultTitle, { ...DEFAULT_SETTINGS, searchAdultTags: true }, groups)).toBe(true);
   });
 
   it("segments non-AniList titles by source mode", () => {

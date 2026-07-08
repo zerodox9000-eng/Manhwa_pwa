@@ -1,6 +1,8 @@
 import type { HistoryMap, MetricId, SeriesCatalog } from "./types";
 import { isFutureDate, parseDate } from "./dates";
 
+const UNDERRATED_POPULARITY_PERCENTILE_CUTOFF = 50;
+
 export interface MetricDefinition {
   id: MetricId;
   label: string;
@@ -19,7 +21,7 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
   { id: "popularityPercentile", label: "Popularity percentile", shortLabel: "PopPct", help: "How high popularity ranks against other titles.", filterable: true, anilistOnly: true },
   { id: "underratedScore", label: "Underrated score", shortLabel: "Und", help: "Fan rank minus popularity percentile for titles that stay above the popularity cutoff.", filterable: true, anilistOnly: true },
   { id: "fanFavouriteDiscoveryScore", label: "Discovery score", shortLabel: "Disc", help: "Balanced score for loved titles with enough popularity confidence.", filterable: true, anilistOnly: true },
-  { id: "fanFavouriteDiscoveryPercentile", label: "Fan Rank", shortLabel: "Fan Rank", help: "Percentile rank of the balanced fan discovery score.", filterable: true, anilistOnly: true },
+  { id: "fanFavouriteDiscoveryPercentile", label: "Fan Rank", shortLabel: "Fan Rank", help: "Favourites-to-popularity engagement ranked across the entire AniList-mapped manhwa catalog with the required stats.", filterable: true, anilistOnly: true },
   { id: "year", label: "Year", shortLabel: "Year", help: "Release year from the catalog.", filterable: true, anilistOnly: false },
   { id: "chapters", label: "Chapters", shortLabel: "Ch", help: "Parsed chapter count when available.", filterable: true, anilistOnly: false },
   { id: "releaseDate", label: "Release date", shortLabel: "Rel", help: "Start date from MangaBaka/AniList export.", filterable: false, anilistOnly: false },
@@ -114,7 +116,7 @@ export function metricValue(series: SeriesCatalog, metric: MetricId, history: Hi
     const popularityPercentile = analytics.popularityPercentile;
     const displayedPopPct = displayedPopularityPercentile(series);
     if (fanRank == null || popularityPercentile == null || displayedPopPct == null) return -Infinity;
-    if (displayedPopPct < 70) return -Infinity;
+    if (displayedPopPct < UNDERRATED_POPULARITY_PERCENTILE_CUTOFF) return -Infinity;
     return fanRank - popularityPercentile;
   }
   if (metric === "fanFavouriteDiscoveryScore") return analytics.fanFavouriteDiscoveryScore ?? -Infinity;

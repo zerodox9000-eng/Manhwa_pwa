@@ -13,6 +13,20 @@ import { chapterNumber, displayComparableMetricValue, displayReleaseDate, effect
 
 const RELATIONSHIP_SENSITIVE_NAMES = new Set(["boys love", "girls love"]);
 const ADULT_SENSITIVE_NAMES = new Set(["smut", "hentai"]);
+type SensitiveSearchFamily = "boysLove" | "girlsLove" | "yaoi" | "yuri" | "smut" | "hentai";
+
+const SENSITIVE_SEARCH_ALIASES: ReadonlyMap<string, SensitiveSearchFamily> = new Map([
+  ["bl", "boysLove"],
+  ["boys love", "boysLove"],
+  ["boy love", "boysLove"],
+  ["yaoi", "yaoi"],
+  ["gl", "girlsLove"],
+  ["girls love", "girlsLove"],
+  ["girl love", "girlsLove"],
+  ["yuri", "yuri"],
+  ["smut", "smut"],
+  ["hentai", "hentai"],
+]);
 
 export function hasAniList(series: SeriesCatalog) {
   return Boolean(
@@ -50,11 +64,23 @@ function buildDescendantTagSet(tags: TagNode[], roots: Set<number>) {
 }
 
 export function buildSensitiveTagGroups(tags: TagNode[]) {
+  const boysLove = buildDescendantTagSet(tags, buildExactTagSet(tags, new Set(["boys love"])));
+  const girlsLove = buildDescendantTagSet(tags, buildExactTagSet(tags, new Set(["girls love"])));
+  const yaoi = buildDescendantTagSet(tags, buildExactTagSet(tags, new Set(["yaoi"])));
+  const yuri = buildDescendantTagSet(tags, buildExactTagSet(tags, new Set(["yuri"])));
+  const smut = buildDescendantTagSet(tags, buildExactTagSet(tags, new Set(["smut"])));
+  const hentai = buildDescendantTagSet(tags, buildExactTagSet(tags, new Set(["hentai"])));
   const relationshipRoots = buildExactTagSet(tags, RELATIONSHIP_SENSITIVE_NAMES);
   const relationship = buildDescendantTagSet(tags, relationshipRoots);
   const adultRoots = buildExactTagSet(tags, ADULT_SENSITIVE_NAMES);
   const adult = buildDescendantTagSet(tags, adultRoots);
   return {
+    boysLove,
+    girlsLove,
+    yaoi,
+    yuri,
+    smut,
+    hentai,
     relationship,
     adult,
     all: new Set([...relationship, ...adult]),
@@ -63,6 +89,37 @@ export function buildSensitiveTagGroups(tags: TagNode[]) {
 
 export function buildSensitiveTagSet(tags: TagNode[]) {
   return buildSensitiveTagGroups(tags).all;
+}
+
+export function sensitiveTagIdsForSearch(
+  query: string,
+  groups: ReturnType<typeof buildSensitiveTagGroups>,
+) {
+  const family = SENSITIVE_SEARCH_ALIASES.get(query.trim().toLocaleLowerCase());
+  return family ? groups[family] : null;
+}
+
+export function isSearchVisible(
+  series: SeriesCatalog,
+  settings: AppSettings,
+  groups: ReturnType<typeof buildSensitiveTagGroups>,
+) {
+  const tagIds = new Set(series.tag_ids ?? []);
+  const hasRelationshipTag = [...groups.relationship].some((id) => tagIds.has(id));
+  const hasAdultTag = [...groups.adult].some((id) => tagIds.has(id));
+
+  if (!settings.searchRelationshipTags && hasRelationshipTag) return false;
+  if (!settings.searchAdultTags && hasAdultTag) return false;
+
+  const rating = series.content_rating as AppSettings["contentRatings"][number] | null;
+  if (rating && !settings.contentRatings.includes(rating)) {
+    const explicitlyAllowed =
+      (settings.searchRelationshipTags && hasRelationshipTag) ||
+      (settings.searchAdultTags && hasAdultTag);
+    if (!explicitlyAllowed) return false;
+  }
+
+  return true;
 }
 
 function dateTimeValue(value?: string | null) {

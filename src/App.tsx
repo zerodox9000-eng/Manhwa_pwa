@@ -43,7 +43,7 @@ import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT } from "./domain/defaults";
 import { resolveRollingWindow } from "./domain/dates";
-import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, runFeedQuery, tagRoot } from "./domain/query";
+import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
@@ -223,15 +223,6 @@ function restoreHomeScroll(feed: Feed | null) {
   container.scrollTo({ top: target, behavior: "auto" });
 }
 
-function isSearchVisible(series: SeriesCatalog, settings: AppSettings, sensitiveTagIds: { relationship: Set<number>; adult: Set<number> }) {
-  const rating = series.content_rating as AppSettings["contentRatings"][number] | null;
-  if (rating && !settings.contentRatings.includes(rating)) return false;
-  const tagIds = new Set(series.tag_ids ?? []);
-  if (!settings.searchRelationshipTags && [...sensitiveTagIds.relationship].some((id) => tagIds.has(id))) return false;
-  if (!settings.searchAdultTags && [...sensitiveTagIds.adult].some((id) => tagIds.has(id))) return false;
-  return true;
-}
-
 function formatStatusLabel(value: string | null | undefined) {
   if (!value) return "";
   return value
@@ -286,7 +277,21 @@ function AppFrame() {
       themeMeta.name = "theme-color";
       document.head.appendChild(themeMeta);
     }
-    themeMeta.content = PWA_CHROME_THEME_COLOR;
+    const enforceChromeTheme = () => {
+      themeMeta.content = PWA_CHROME_THEME_COLOR;
+      document.documentElement.style.backgroundColor = PWA_CHROME_THEME_COLOR;
+      document.body.style.backgroundColor = PWA_CHROME_THEME_COLOR;
+    };
+    const enforceAfterViewportChange = () => requestAnimationFrame(enforceChromeTheme);
+    enforceChromeTheme();
+    window.addEventListener("focusin", enforceAfterViewportChange);
+    window.addEventListener("focusout", enforceAfterViewportChange);
+    window.visualViewport?.addEventListener("resize", enforceAfterViewportChange);
+    return () => {
+      window.removeEventListener("focusin", enforceAfterViewportChange);
+      window.removeEventListener("focusout", enforceAfterViewportChange);
+      window.visualViewport?.removeEventListener("resize", enforceAfterViewportChange);
+    };
   }, [location.pathname]);
 
   useEffect(() => {
@@ -1854,12 +1859,20 @@ function SearchPage() {
   const results = useMemo(() => {
     const term = deferredQuery.trim();
     if (!term) return [];
+    const sensitiveFamily = sensitiveTagIdsForSearch(term, sensitiveTagIds);
+    if (sensitiveFamily) {
+      return store.catalog
+        .filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds))
+        .filter((item) => item.tag_ids.some((tagId) => sensitiveFamily.has(tagId)))
+        .sort((a, b) => getTitle(a).localeCompare(getTitle(b)))
+        .slice(0, 60);
+    }
     return searchIndex
       .search(term, { limit: 60 })
       .map((result) => result.item)
       .filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds))
       .sort((a, b) => getTitle(a).localeCompare(getTitle(b)));
-  }, [deferredQuery, getTitle, searchIndex, sensitiveTagIds, store.settings]);
+  }, [deferredQuery, getTitle, searchIndex, sensitiveTagIds, store.catalog, store.settings]);
   useEffect(() => {
     sessionStorage.setItem("manhwa-search-query", inputQuery);
   }, [inputQuery]);
