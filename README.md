@@ -10,21 +10,21 @@ Mobile-first local PWA for building custom manhwa discovery grids from the `zero
 
 - Vite + React + TypeScript PWA with install metadata, maskable icons, service worker registration, and offline shell caching.
 - Uses the backend export as a catalog source, then merges in the local query index so the frontend keeps the richer search and display fields current.
-- Stores catalog, tags, history, details, recommendation features, feeds, folders, labels, and settings in IndexedDB for offline use.
+- Stores catalog, tags, history, details, recommendation features, feeds, labels, and settings in IndexedDB for offline use.
 - Home is feed-driven and mobile-first, with a native scroll-snap horizontal pager, per-feed scroll restore, and per-feed grid settings.
 - Feeds support AniList and non-AniList filtering, content ratings, status, chapter/year/popularity/favourites/score bounds, tag include/exclude, rolling date windows, labels, and custom sort rules.
 - Title detail pages include external links, creator metadata, markdown description rendering, configurable stat blocks, and embedded recommendations.
 - Search is title-only with local recent-search history and sensitive-tag filtering controls.
 - Recommendations use editable shelves, source-mode toggles, tag-match scoring, and metric ranges.
 - Share links are compressed and same-domain, and import links open a preview before anything is applied.
-- Exports currently cover feeds as CSV, plus share payloads for feeds, folders, settings, labels, and full snapshots.
+- Exports currently cover feeds as CSV, plus share payloads for feeds, settings, labels, and full snapshots.
 
 ## Home Shell Notes
 
 - The Home pager now uses a native horizontal scroll-snap container for feed-to-feed movement.
-- Feed tabs are visual navigation only and auto-center independently of the pager.
 - Vertical scroll inside a feed stays in the feed pane; restore state is keyed by feed id plus grid settings.
 - Dense grids still use skeleton placeholders for offscreen panes so the pager stays cheap to render.
+- The stable behavior baseline is `9f16d14` plus chunked backend data loading. Do not reintroduce `HOME_FEED_PREVIEW_TITLES = 18` or delayed post-swipe scroll correction.
 
 ## Routes
 

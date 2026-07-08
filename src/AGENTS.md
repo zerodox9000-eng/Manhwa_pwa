@@ -16,15 +16,17 @@ Owns the frontend application source: React routes, UI, domain rules, data loadi
 - Read the root AGENTS.md first.
 - Keep frontend data consumption compatible with `manhwa_db/db/exports/frontend`.
 - Do not make the frontend read backend raw, processed, enrichment, cache, or state files.
-- Preserve no-recognized-tag exclusion across feeds, search, and custom-add flows.
+- Do not add a blanket no-recognized-tag exclusion unless the user explicitly asks; backend/API tag coverage can differ from the MangaBaka site.
 - Installed PWA users may already have IndexedDB state; migrations must be backward-compatible and recoverable.
-- Home pager behavior is fragile and user-visible: horizontal feed swipe and vertical feed scroll state must not fight each other.
+- Home pager behavior is protected and user-visible: horizontal feed swipe, per-feed vertical scroll, detail back, and route/session restore must keep the stable `9f16d14` behavior baseline.
+- Do not reintroduce commit `6b05599` behavior, `HOME_FEED_PREVIEW_TITLES = 18`, delayed route wrappers, hidden-pane vertical restoration, or delayed post-swipe scroll corrections.
 
 ## Work Guidance
 
 - Use existing domain helpers and types before adding new state shapes.
 - Keep rendering cheap on mobile; avoid expensive blur, image extraction, or large list updates in scroll handlers.
 - Route/detail navigation should respond immediately, even if details or recommendations are still loading.
+- If title drag/drop is added later, gate only that mode by disabling horizontal Home swipe while dragging; do not rewrite pager ownership.
 - If changing feed settings, custom feeds, folders, or profiles, update migration and serialization paths together.
 - Search should remain stable while typing and deleting; debounce expensive work instead of blocking input.
 

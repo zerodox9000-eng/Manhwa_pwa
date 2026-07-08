@@ -47,9 +47,10 @@ import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isS
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
-import { decodeSharePayload, exportCsv, makeShareUrl, type SharePayload } from "./domain/share";
+import { decodeSharePayload, makeShareUrl, type SharePayload } from "./domain/share";
 import type {
   AppSettings,
+  AppStateSnapshot,
   ContentRating,
   Feed,
   FeedViewSettings,
@@ -83,6 +84,14 @@ const HOME_FEED_RENDER_RADIUS = 4;
 const FEED_TITLE_EXPANDED_MAX = 140;
 const FEED_DESCRIPTION_EXPANDED_MAX = 260;
 const PWA_CHROME_THEME_COLOR = "#11131a";
+const ACCENT_COLORS = [
+  { name: "Rose", value: "#ff3b81" },
+  { name: "Blue", value: "#4f8cff" },
+  { name: "Emerald", value: "#26c281" },
+  { name: "Violet", value: "#8b5cf6" },
+  { name: "Amber", value: "#f59e0b" },
+  { name: "Cyan", value: "#06b6d4" },
+] as const;
 
 const SESSION_RESTORE_KEY = "manhwa-library-route-v1";
 const HOME_SCROLL_PREFIX = "manhwa-home-scroll";
@@ -477,6 +486,7 @@ function BottomDrawer({
 function HomePage() {
   const store = useAppStore();
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editorFeed, setEditorFeed] = useState<Feed | null>(null);
   const [preloadReady, setPreloadReady] = useState(false);
   const [renderCenterIndex, setRenderCenterIndex] = useState(-1);
   const [warmFeedIds, setWarmFeedIds] = useState<Set<string>>(() => new Set());
@@ -650,7 +660,7 @@ function HomePage() {
                     data-home-scroll-key={homeScrollKey(feed)}
                     onScroll={() => handleFeedPaneScroll(feed)}
                   >
-                    {shouldRenderFeed ? <FeedView feed={feed} /> : <HomeFeedPaneSkeleton feed={feed} />}
+                    {shouldRenderFeed ? <FeedView feed={feed} onEditFeed={setEditorFeed} /> : <HomeFeedPaneSkeleton feed={feed} />}
                   </div>
                 </div>
               );
@@ -668,14 +678,27 @@ function HomePage() {
           }}
         />
       </BottomDrawer>
+      <BottomDrawer title={editorFeed?.name ?? "Feed Settings"} open={Boolean(editorFeed)} onOpenChange={(open) => !open && setEditorFeed(null)}>
+        {editorFeed ? (
+          <FeedEditor
+            feed={editorFeed}
+            onCancel={() => setEditorFeed(null)}
+            onSave={(feed) => {
+              store.upsertFeed(feed);
+              setEditorFeed(null);
+            }}
+          />
+        ) : null}
+      </BottomDrawer>
     </div>
   );
 }
 
-function FeedView({ feed }: { feed: Feed }) {
+function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) => void }) {
   const store = useAppStore();
   const [titleExpanded, setTitleExpanded] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const lastTitleTapRef = useRef(0);
   const query = useMemo(
     () =>
       runFeedQuery({
@@ -703,7 +726,16 @@ function FeedView({ feed }: { feed: Feed }) {
             <button
               className={`feed-title-button ${titleCanExpand ? "expandable" : ""}`}
               type="button"
-              onClick={() => titleCanExpand && setTitleExpanded((expanded) => !expanded)}
+              onClick={() => {
+                const now = performance.now();
+                if (onEditFeed && now - lastTitleTapRef.current < 320) {
+                  lastTitleTapRef.current = 0;
+                  onEditFeed(feed);
+                  return;
+                }
+                lastTitleTapRef.current = now;
+                if (titleCanExpand) setTitleExpanded((expanded) => !expanded);
+              }}
               aria-expanded={titleCanExpand ? titleExpanded : undefined}
               aria-disabled={!titleCanExpand}
             >
@@ -1342,7 +1374,16 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
     <div>
       <div className="field">
         <label htmlFor="feed-name">Feed name</label>
-        <input id="feed-name" className="input" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+        <input
+          id="feed-name"
+          className="input"
+          value={draft.name}
+          onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+        />
       </div>
       <div className="field">
         <label htmlFor="feed-description">Description</label>
@@ -2271,26 +2312,58 @@ function RecommendationShelfEditor({
 
 function SettingsPage() {
   const store = useAppStore();
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [backupStatus, setBackupStatus] = useState("");
+  const importBackup = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const snapshot = JSON.parse(await file.text()) as Partial<AppStateSnapshot>;
+      if (!Array.isArray(snapshot.feeds)) throw new Error("This file does not contain a feeds backup.");
+      store.importSnapshot(snapshot, "replace");
+      setBackupStatus(`Imported ${snapshot.feeds.length.toLocaleString()} feeds.`);
+    } catch (error) {
+      setBackupStatus(error instanceof Error ? error.message : "Could not import this backup.");
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  };
   return (
-    <div className="page">
+    <div className="page settings-page">
       <h1>Settings</h1>
 
-      <SettingsSection title="App Settings">
-        <div className="field">
-          <label>Accent color</label>
-          <input className="input" type="color" value={store.settings.accentColor} onChange={(event) => store.updateSettings({ accentColor: event.target.value })} />
+      <SettingsSection title="Appearance">
+        <div className="setting-stack">
+          <div>
+            <strong>Accent color</strong>
+            <div className="muted tiny">Used for active controls, selection, and navigation.</div>
+          </div>
+          <div className="accent-swatches" role="group" aria-label="Accent color">
+            {ACCENT_COLORS.map((color) => {
+              const selected = store.settings.accentColor.toLowerCase() === color.value.toLowerCase();
+              return (
+                <button
+                  className={`accent-swatch ${selected ? "selected" : ""}`}
+                  style={{ "--swatch-color": color.value } as React.CSSProperties}
+                  type="button"
+                  key={color.value}
+                  onClick={() => store.updateSettings({ accentColor: color.value })}
+                  aria-label={color.name}
+                  aria-pressed={selected}
+                  title={color.name}
+                >
+                  {selected ? <Check size={17} /> : null}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </SettingsSection>
 
-      <SettingsSection title="Data & Sync">
-        <div className="field">
-          <label>Data source URL</label>
-          <input className="input" value={store.settings.dataSourceUrl} onChange={(event) => store.updateSettings({ dataSourceUrl: event.target.value })} />
-        </div>
+      <SettingsSection title="Library">
         <div className="setting-row">
           <div>
-            <strong>{store.syncMeta?.totalSeries.toLocaleString() ?? 0} titles cached</strong>
-            <div className="muted tiny">{store.syncStatus || store.syncMeta?.source || "No sync yet"}</div>
+            <strong>{store.syncMeta?.totalSeries.toLocaleString() ?? store.catalog.length.toLocaleString()} total titles</strong>
+            <div className="muted tiny">{store.syncStatus || "Library data is cached for offline use."}</div>
           </div>
           <button className="button" type="button" onClick={() => void store.refreshData()}>
             <Database size={16} /> Refresh
@@ -2317,30 +2390,32 @@ function SettingsPage() {
         />
       </SettingsSection>
 
-      <SettingsSection title="Sharing & Backup">
+      <SettingsSection title="Backup & Help">
         <Link className="button" to="/learn">
           <Info size={16} /> Learn metrics and data
         </Link>
-        <SharePanelButton payload={{ kind: "settings", version: 2, settings: store.settings }} label="Share settings" />
         <button
           className="button"
           type="button"
-          onClick={() => downloadText("manhwa-library-backup.json", JSON.stringify(makeSnapshot(store), null, 2))}
+          onClick={() => downloadText("manhwa-feeds-backup.json", JSON.stringify(makeSnapshot(store), null, 2))}
         >
-          <Download size={16} /> Export JSON backup
+          <Download size={16} /> Export Feeds JSON Backup
         </button>
+        <input
+          ref={importInputRef}
+          className="visually-hidden"
+          type="file"
+          accept="application/json,.json"
+          onChange={(event) => void importBackup(event.target.files?.[0])}
+        />
         <button
           className="button"
           type="button"
-          onClick={() =>
-            downloadText(
-              "manhwa-library-feeds.csv",
-              exportCsv(store.feeds.map((feed) => ({ name: feed.name, description: feed.description, sourceMode: feed.filters.sourceMode, createdAt: feed.createdAt }))),
-            )
-          }
+          onClick={() => importInputRef.current?.click()}
         >
-          <Download size={16} /> Export feeds CSV
+          <Import size={16} /> Import Feeds JSON Backup
         </button>
+        {backupStatus ? <div className="settings-status" role="status">{backupStatus}</div> : null}
         <button className="button danger" type="button" onClick={() => void store.resetLocalState()}>
           Reset local app state
         </button>
@@ -2351,7 +2426,7 @@ function SettingsPage() {
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="section">
+    <section className="section settings-section">
       <h2 className="section-title">{title}</h2>
       <div className="settings-list">{children}</div>
     </section>
@@ -2805,40 +2880,32 @@ function DetailSettingsDrawer({
 
 function LearnPage() {
   return (
-    <div className="page">
+    <div className="page learn-page">
       <h1>Learn</h1>
       <div className="learn-grid">
-        <LearnItem title="MangaBaka">
-          MangaBaka is the catalog backbone: titles, covers, chapters, status, dates, content rating, links, and the detailed tag
-          hierarchy come from the backend export. <a href="https://mangabaka.org" target="_blank" rel="noreferrer">Open MangaBaka</a>.
+        <LearnItem title="Catalog and tags">
+          <a href="https://mangabaka.org" target="_blank" rel="noreferrer">MangaBaka</a> supplies the main catalog,
+          covers, publication details, links, and tag hierarchy used by feeds and detail pages.
         </LearnItem>
-        <LearnItem title="AniList Metrics">
-          Popularity, favourites, and mean score are used only for AniList-mapped titles. Non-AniList titles can still be browsed
-          through common filters such as title, tags, year, chapters, and status. <a href="https://anilist.co" target="_blank" rel="noreferrer">Open AniList</a>.
+        <LearnItem title="AniList signals">
+          <a href="https://anilist.co" target="_blank" rel="noreferrer">AniList</a> supplies popularity, favourites,
+          and mean score for mapped titles. These values give audience-size and engagement context; they are not
+          available for every title.
         </LearnItem>
         <LearnItem title="Fan Rank">
-          Fan Rank is the percentile version of the balanced fan discovery score. It combines fandom attachment and popularity confidence so niche titles do not unfairly dominate.
+          Fan Rank is like comparing a YouTube video&apos;s likes with its views to estimate how strongly viewers
+          engaged. Here, favourites are compared with popularity, adjusted for sample-size confidence, then ranked
+          as a percentile across the AniList-mapped manhwa catalog with the required stats.
         </LearnItem>
-        <LearnItem title="Cover Stats">
-          Cover stat slots show at most three metrics. Fan% is the default rank signal, with Pop and Fav beside it for context.
+        <LearnItem title="Dates and history">
+          Release and completion windows use confirmed dates only; estimated dates do not qualify. Growth values
+          compare available history snapshots, so longer windows improve as more backend history accumulates.
         </LearnItem>
-        <LearnItem title="Safe Defaults">
-          Safe and suggestive content are enabled by default. BL, GL, Smut, and Hentai are exact-tag exclusions unless a feed explicitly includes them.
-        </LearnItem>
-        <LearnItem title="Offline And Sharing">
-          Catalog, tags, history, feeds, settings, and opened details are cached locally. Share links contain compressed
-          config data and open an import preview before changing anything.
-        </LearnItem>
-        <LearnItem title="Other Sources">
-          Non-AniList titles prefer <a href="https://www.mangaupdates.com" target="_blank" rel="noreferrer">MangaUpdates</a>, then{" "}
-          <a href="https://www.anime-planet.com/manga" target="_blank" rel="noreferrer">Anime-Planet</a>. Available English reading links appear last.
-        </LearnItem>
-        <LearnItem title="Live Data Sync">
-          The app now merges live backend catalog stats with query-only enriched fields so cover stats and detail stats use the current backend values.
-        </LearnItem>
-        <LearnItem title="Data Limits">
-          Long growth windows become more useful as backend history accumulates. Until then, the app runs against available history and
-          tells you when a query is limited.
+        <LearnItem title="Additional sources">
+          When available, title identity and links are cross-checked with{" "}
+          <a href="https://www.mangaupdates.com" target="_blank" rel="noreferrer">MangaUpdates</a> and{" "}
+          <a href="https://www.anime-planet.com/manga" target="_blank" rel="noreferrer">Anime-Planet</a>. Feeds and
+          settings stay on this device and can be moved with the JSON backup.
         </LearnItem>
       </div>
     </div>

@@ -26,14 +26,17 @@ This repo is the PWA frontend for `zerodox9000-eng/manhwa_db`. Keep changes here
 ## Current Behavior
 
 - The app loads the frontend export, then merges in the local query index and cached IndexedDB data.
-- Catalog, tags, history, details, recommendation features, feeds, folders, labels, and settings are persisted locally.
-- Share payloads currently support `feed`, `folder`, `settings`, `labels`, and `full` snapshots.
+- Catalog, tags, history, details, recommendation features, feeds, labels, and settings are persisted locally.
+- Share payloads currently support feeds, settings, labels, and full snapshots; folder UI is not part of the stable behavior baseline.
 - Import links always open a preview before applying anything.
 - Search is title-only; filtering still honors content ratings and sensitive-tag toggles.
 - The home screen is feed-first and remembers scroll position per feed and layout.
-- Home paging now uses native scroll-snap: the pager handles horizontal feed-to-feed motion, while the feed tab row stays visual-only and auto-centers independently.
+- Home paging uses the protected `9f16d14` native scroll-snap behavior plus chunked backend loading. Treat this as the stable baseline.
 - Feed headers use a fixed two-lane layout: the title stays on one line and can shrink before ellipsizing, while the description gets its own glass block with a stable two-line footprint.
+- Double-tapping the Home feed title opens that feed's existing settings drawer. Keep this shortcut scoped to the header; it must not change pager ownership.
 - Restore keys for Home should stay scoped to feed id plus grid columns and density, otherwise 4/5-grid back navigation will drift.
+- Blacklist `6b05599 Improve navigation and loading responsiveness`: do not reintroduce `HOME_FEED_PREVIEW_TITLES = 18`, delayed route wrappers, hidden-pane vertical restore, or post-swipe scroll correction.
+- If custom title drag/drop is rebuilt, the only acceptable pager-facing change is disabling horizontal Home swipe while drag mode is active.
 - `tag_weights` are read from the catalog items inside `query-index.json.gz` or the live export, not from the standalone scrape file directly.
 - `recommendations/features.json` is optional. If present, the frontend uses it; if absent, it falls back to local feature building from catalog data and tag weights.
 
