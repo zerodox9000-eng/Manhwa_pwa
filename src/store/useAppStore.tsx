@@ -51,9 +51,11 @@ interface StoreState {
   syncStatus: string;
   syncInFlight: boolean;
   homePreviewSegmentId: string | null;
+  homeResetNonce: number;
   setActiveFeedId: (id: string | null) => void;
   openFeedInHome: (feedId: string, segmentId: string | null) => void;
   exitHomePreview: () => void;
+  requestHomeReset: () => void;
   upsertFeed: (feed: Feed) => void;
   deleteFeed: (id: string) => void;
   moveFeed: (id: string, targetId: string) => void;
@@ -372,6 +374,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   );
   const [activeFeedId, setActiveFeedId] = useState<string | null>(local.activeFeedId ?? null);
   const [homePreviewSegmentId, setHomePreviewSegmentId] = useState<string | null>(null);
+  const [homeResetNonce, setHomeResetNonce] = useState(0);
   const [syncStatus, setSyncStatus] = useState("");
   const [syncInFlight, setSyncInFlight] = useState(false);
   const syncInFlightRef = useRef<Promise<void> | null>(null);
@@ -519,6 +522,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const exitHomePreview = useCallback(() => {
     setHomePreviewSegmentId(null);
+  }, []);
+
+  const requestHomeReset = useCallback(() => {
+    setHomeResetNonce((current) => current + 1);
   }, []);
 
   const deleteFeed = useCallback((id: string) => {
@@ -710,9 +717,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       syncStatus,
       syncInFlight,
       homePreviewSegmentId,
+      homeResetNonce,
       setActiveFeedId,
       openFeedInHome,
       exitHomePreview,
+      requestHomeReset,
       upsertFeed,
       deleteFeed,
       moveFeed,
@@ -746,9 +755,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       syncStatus,
       syncInFlight,
       homePreviewSegmentId,
+      homeResetNonce,
       setActiveFeedId,
       openFeedInHome,
       exitHomePreview,
+      requestHomeReset,
       upsertFeed,
       deleteFeed,
       moveFeed,

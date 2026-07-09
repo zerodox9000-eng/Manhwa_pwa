@@ -28,7 +28,8 @@ Owns the frontend application source: React routes, UI, domain rules, data loadi
 - Route/detail navigation should respond immediately, even if details or recommendations are still loading.
 - If title drag/drop is added later, gate only that mode by disabling horizontal Home swipe while dragging; do not rewrite pager ownership.
 - If changing feed settings, custom feeds, folders, or profiles, update migration and serialization paths together.
-- Built-in sensitive feed segments are installed once without replacing saved feeds. Their Feeds-page visibility follows the existing BL/GL and Smut/Hentai search toggles, but they never enter the normal Home feed list. Opening one previews only that segment in Home until the Home shortcut clears it. Newly created feeds always enter UNSEGMENTED, never a built-in segment.
+- Built-in sensitive feed segments are installed once without replacing saved feeds. Their Feeds-page visibility follows the existing BL/GL and Smut/Hentai search toggles. Their own Home visibility setting controls whether they join the normal Home sequence; they start hidden. A temporary preview of one closes as soon as its Settings toggle is off. Newly created feeds always enter UNSEGMENTED, never a built-in segment.
+- Double-tapping the Home navigation item clears any temporary segment preview and resets Home to the first currently visible feed at its top; this must work even when Home is already active.
 - Search should remain stable while typing and deleting; debounce expensive work instead of blocking input.
 
 ## Verification

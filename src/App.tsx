@@ -46,7 +46,7 @@ import {
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
-import { isBuiltInSensitiveSegment, isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments";
+import { isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments";
 import { resolveRollingWindow } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
@@ -245,7 +245,7 @@ function orderedFeedsForSegments(feeds: Feed[], segments: FeedSegment[], options
   const seen = new Set<string>();
   const ordered: Feed[] = [];
   for (const segment of segments) {
-    if (options.homeOnly && (segment.hiddenFromHome || isBuiltInSensitiveSegment(segment))) continue;
+    if (options.homeOnly && segment.hiddenFromHome) continue;
     for (const feedId of segment.feedIds) {
       const feed = byId.get(feedId);
       if (!feed || seen.has(feedId)) continue;
@@ -295,6 +295,7 @@ function AppFrame() {
   const location = useLocation();
   const navigate = useNavigate();
   const lastHomeNavTapRef = useRef(0);
+  const homeTapTimerRef = useRef<number | null>(null);
   const nav = NAV_ITEMS.filter((item) => store.settings.bottomNavItems.includes(item.id));
   const showingHome = location.pathname === "/";
   const showingTitle = location.pathname.startsWith("/title/");
@@ -381,12 +382,21 @@ function AppFrame() {
               onClick={(event) => {
                 if (item.id !== "home") return;
                 const now = Date.now();
-                const isDoubleTap = now - lastHomeNavTapRef.current <= 360;
+                const isDoubleTap = now - lastHomeNavTapRef.current <= 700;
+                if (homeTapTimerRef.current !== null) window.clearTimeout(homeTapTimerRef.current);
                 lastHomeNavTapRef.current = now;
-                if (!isDoubleTap) return;
+                if (!isDoubleTap) {
+                  homeTapTimerRef.current = window.setTimeout(() => {
+                    lastHomeNavTapRef.current = 0;
+                    homeTapTimerRef.current = null;
+                  }, 700);
+                  return;
+                }
                 event.preventDefault();
+                lastHomeNavTapRef.current = 0;
                 store.exitHomePreview();
                 store.setActiveFeedId(defaultHomeFeeds[0]?.id ?? null);
+                store.requestHomeReset();
                 navigate("/");
               }}
             >
@@ -546,10 +556,16 @@ function HomePage() {
   const renderCenterIndexRef = useRef(-1);
   const warmFeedIdsRef = useRef(new Set<string>());
   const didInitialPagerAlignRef = useRef(false);
-  const previewSegment = useMemo(
-    () => store.feedSegments.find((segment) => segment.id === store.homePreviewSegmentId) ?? null,
-    [store.feedSegments, store.homePreviewSegmentId],
-  );
+  const handledHomeResetNonceRef = useRef(0);
+  const previewSegment = useMemo(() => {
+    const segment = store.feedSegments.find((item) => item.id === store.homePreviewSegmentId) ?? null;
+    if (!segment || !isBuiltInSensitiveSegmentVisible(segment, store.settings)) return null;
+    return segment;
+  }, [store.feedSegments, store.homePreviewSegmentId, store.settings]);
+
+  useEffect(() => {
+    if (store.homePreviewSegmentId && !previewSegment) store.exitHomePreview();
+  }, [previewSegment, store]);
   const feeds = useMemo(() => {
     if (!previewSegment) return orderedFeedsForSegments(store.feeds, store.feedSegments, { homeOnly: true });
     const byId = new Map(store.feeds.map((feed) => [feed.id, feed]));
@@ -571,6 +587,28 @@ function HomePage() {
   useEffect(() => {
     if (!activeFeedId && feeds[0]) setActiveFeedId(feeds[0].id);
   }, [activeFeedId, feeds, setActiveFeedId]);
+
+  useLayoutEffect(() => {
+    if (!store.homeResetNonce || handledHomeResetNonceRef.current === store.homeResetNonce || feeds.length === 0) return;
+    const firstFeed = feeds[0];
+    if (activeFeedId !== firstFeed.id) {
+      setActiveFeedId(firstFeed.id);
+      return;
+    }
+    handledHomeResetNonceRef.current = store.homeResetNonce;
+    const firstFeedIndex = 0;
+    renderCenterIndexRef.current = firstFeedIndex;
+    setRenderCenterIndex(firstFeedIndex);
+    const pane = paneRefs.current.get(firstFeed.id);
+    if (!pane) return;
+    const frame = window.requestAnimationFrame(() => {
+      pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
+      const scroller = pane.querySelector<HTMLElement>(".feed-pane-scroll");
+      scroller?.scrollTo({ top: 0, behavior: "auto" });
+      localStorage.setItem(homeScrollKey(firstFeed), "0");
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeFeedId, feeds, setActiveFeedId, store.homeResetNonce]);
 
   useEffect(() => {
     if (activeFeedIndex < 0 || renderCenterIndexRef.current >= 0) return;
@@ -1338,7 +1376,6 @@ function FeedsPage() {
           });
           const canDelete = segment.id !== "unsegmented" && segmentFeeds.length === 0;
           const canDeleteWithFeeds = segment.id !== "unsegmented" && segmentFeeds.length > 0;
-          const isSensitiveSegment = isBuiltInSensitiveSegment(segment);
           const isRenaming = renamingSegmentId === segment.id;
           return (
             <section
@@ -1427,16 +1464,14 @@ function FeedsPage() {
                   </button>
                 )}
                 <span className="spacer" />
-                {!isSensitiveSegment && (
-                  <button
-                    className="icon-button"
-                    type="button"
-                    onClick={() => store.updateFeedSegment(segment.id, { hiddenFromHome: !segment.hiddenFromHome })}
-                    aria-label={segment.hiddenFromHome ? `Show ${segment.name} in Home` : `Hide ${segment.name} from Home`}
-                  >
-                    {segment.hiddenFromHome ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                )}
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={() => store.updateFeedSegment(segment.id, { hiddenFromHome: !segment.hiddenFromHome })}
+                  aria-label={segment.hiddenFromHome ? `Show ${segment.name} in Home` : `Hide ${segment.name} from Home`}
+                >
+                  {segment.hiddenFromHome ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
                 <button
                   className="icon-button"
                   type="button"
