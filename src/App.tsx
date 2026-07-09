@@ -70,7 +70,7 @@ import type {
   TagNode,
 } from "./domain/types";
 import { fetchSeriesDetail } from "./services/dataService";
-import { AppStoreProvider, UNSEGMENTED_FEED_SEGMENT_ID, useAppStore } from "./store/useAppStore";
+import { AppStoreProvider, isBuiltInDefaultFeed, UNSEGMENTED_FEED_SEGMENT_ID, useAppStore } from "./store/useAppStore";
 
 const NAV_ITEMS = [
   { id: "home", to: "/", label: "Home", icon: Home },
@@ -800,7 +800,8 @@ function HomePage() {
       </BottomDrawer>
       <BottomDrawer title={editorFeed?.name ?? "Feed Settings"} open={Boolean(editorFeed)} onOpenChange={(open) => !open && setEditorFeed(null)}>
         {editorFeed ? (
-          <FeedEditor
+          <FeedSettingsEditor
+            key={editorFeed.id}
             feed={editorFeed}
             onCancel={() => setEditorFeed(null)}
             onSave={(feed) => {
@@ -1577,7 +1578,8 @@ function FeedsPage() {
       )}
       <BottomDrawer title={editorFeed?.name ?? "Feed"} open={Boolean(editorFeed)} onOpenChange={(open) => !open && setEditorFeed(null)}>
         {editorFeed && (
-          <FeedEditor
+          <FeedSettingsEditor
+            key={editorFeed.id}
             feed={editorFeed}
             onCancel={() => setEditorFeed(null)}
             onSave={(feed) => {
@@ -1677,6 +1679,66 @@ function FeedCoverCard({
         </div>
       )}
     </article>
+  );
+}
+
+function FeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Feed) => void; onCancel: () => void }) {
+  if (!isBuiltInDefaultFeed(feed)) return <FeedEditor feed={feed} onSave={onSave} onCancel={onCancel} />;
+  return <DefaultFeedSettingsEditor feed={feed} onSave={onSave} onCancel={onCancel} />;
+}
+
+function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Feed) => void; onCancel: () => void }) {
+  const [view, setView] = useState<FeedViewSettings>(() => structuredClone(feed.view));
+  const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : ["fanFavouriteDiscoveryPercentile"]);
+  const coverStatsVisible = view.metricSlots.length > 0;
+
+  const setCoverStatsVisible = (visible: boolean) => {
+    setView((current) => {
+      if (visible) return { ...current, metricSlots: [...savedMetricSlotsRef.current] };
+      if (current.metricSlots.length) savedMetricSlotsRef.current = [...current.metricSlots];
+      return { ...current, metricSlots: [] };
+    });
+  };
+
+  return (
+    <div className="setting-stack default-feed-settings">
+      <div className="field">
+        <label>Grid columns</label>
+        <div className="segmented compact-segments">
+          {[1, 2, 3, 4, 5].map((columns) => (
+            <button
+              className={`segment ${view.gridColumns === columns ? "active" : ""}`}
+              type="button"
+              key={columns}
+              onClick={() => setView((current) => ({ ...current, gridColumns: columns as FeedViewSettings["gridColumns"] }))}
+            >
+              {columns}
+            </button>
+          ))}
+        </div>
+      </div>
+      <ToggleRow
+        label="Show rank"
+        description="Show the title position on each cover."
+        value={view.visible.rank}
+        onChange={(rank) => setView((current) => ({ ...current, visible: { ...current.visible, rank } }))}
+      />
+      <ToggleRow
+        label="Show cover stats"
+        description="Show the feed's configured stat strip on covers."
+        value={coverStatsVisible}
+        onChange={setCoverStatsVisible}
+      />
+      <div className="toolbar">
+        <button className="button" type="button" onClick={onCancel}>
+          Cancel
+        </button>
+        <span className="spacer" />
+        <button className="button primary" type="button" onClick={() => onSave({ ...feed, view })}>
+          Save
+        </button>
+      </div>
+    </div>
   );
 }
 

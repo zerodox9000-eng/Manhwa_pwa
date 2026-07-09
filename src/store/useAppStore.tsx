@@ -308,6 +308,15 @@ function defaultFeeds() {
   );
 }
 
+const BUILT_IN_DEFAULT_FEED_IDS = new Set([
+  ...(defaultFeedsJson as Feed[]).map((feed) => feed.id),
+  ...builtInSensitiveFeeds().map((feed) => feed.id),
+]);
+
+export function isBuiltInDefaultFeed(feed: Pick<Feed, "id">) {
+  return BUILT_IN_DEFAULT_FEED_IDS.has(feed.id);
+}
+
 function defaultFeedSegments(feeds: Feed[]) {
   return normalizeFeedSegments(feeds, [...(defaultFeedSegmentsJson as FeedSegment[]), ...builtInSensitiveSegments()]);
 }
