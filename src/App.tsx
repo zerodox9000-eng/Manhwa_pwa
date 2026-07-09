@@ -2313,6 +2313,11 @@ function SettingsPage() {
   const store = useAppStore();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [backupStatus, setBackupStatus] = useState("");
+  const refreshLabel = store.syncInFlight
+    ? store.syncStatus.startsWith("Checking")
+      ? "Checking..."
+      : "Syncing..."
+    : "Refresh";
   const importBackup = async (file: File | undefined) => {
     if (!file) return;
     try {
@@ -2364,8 +2369,8 @@ function SettingsPage() {
             <strong>{store.syncMeta?.totalSeries.toLocaleString() ?? store.catalog.length.toLocaleString()} total titles</strong>
             <div className="muted tiny">{store.syncStatus || "Library data is cached for offline use."}</div>
           </div>
-          <button className="button" type="button" onClick={() => void store.refreshData()}>
-            <Database size={16} /> Refresh
+          <button className="button" type="button" onClick={() => void store.refreshData()} disabled={store.syncInFlight}>
+            <Database size={16} /> {refreshLabel}
           </button>
         </div>
       </SettingsSection>

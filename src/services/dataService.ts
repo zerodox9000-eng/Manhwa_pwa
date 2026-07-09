@@ -3,7 +3,7 @@ import { DATA_SOURCE_CANDIDATES } from "../domain/defaults";
 import { normalizeCatalog, resolveDisplayTitle } from "../domain/catalog";
 import type { RecommendationFeature, SeriesCatalog, SeriesDetail, SyncMeta } from "../domain/types";
 import { parseCatalogList, parseDetail, parseHistory, parseRecommendationFeatures, parseTags } from "../domain/validation";
-import { decodeJsonBytes, fetchChunkedFrontendData } from "./chunkedData";
+import { decodeJsonBytes, fetchChunkedFrontendData, parseFrontendDataManifest } from "./chunkedData";
 
 async function fetchJson<T>(base: string, path: string, preferGzip = true): Promise<T> {
   const targets = preferGzip ? [`${path}.gz`, path] : [path];
@@ -115,11 +115,13 @@ function mergeLiveCatalog(
 export async function resolveDataSource(preferred?: string) {
   const candidates = [preferred, ...DATA_SOURCE_CANDIDATES].filter(Boolean) as string[];
   const seen = new Set<string>();
-
-  for (const candidate of candidates) {
-    if (seen.has(candidate)) continue;
+  const uniqueCandidates = candidates.filter((candidate) => {
+    if (seen.has(candidate)) return false;
     seen.add(candidate);
+    return true;
+  });
 
+  for (const candidate of uniqueCandidates) {
     try {
       const response = await fetch(
         `${candidate}/meta/data-manifest.json`,
@@ -128,15 +130,54 @@ export async function resolveDataSource(preferred?: string) {
 
       if (response.ok) return candidate;
     } catch {
-      // Fall back to the legacy probe.
+      // Try all manifest-capable sources before falling back to legacy files.
     }
+  }
 
+  for (const candidate of uniqueCandidates) {
     try {
       const response = await fetch(
         `${candidate}/series/all.json.gz`,
         { cache: "no-cache" }
       );
       if (response.ok) return candidate;
+    } catch {
+      // Try next source.
+    }
+  }
+
+  throw new Error("No working data source found.");
+}
+
+export async function checkFrontendDataVersion(preferred?: string) {
+  const candidates = [preferred, ...DATA_SOURCE_CANDIDATES].filter(Boolean) as string[];
+  const seen = new Set<string>();
+  const uniqueCandidates = candidates.filter((candidate) => {
+    if (seen.has(candidate)) return false;
+    seen.add(candidate);
+    return true;
+  });
+
+  for (const candidate of uniqueCandidates) {
+    try {
+      const response = await fetch(`${candidate}/meta/data-manifest.json`, { cache: "no-cache" });
+      if (response.ok) {
+        const manifest = parseFrontendDataManifest(await response.json());
+        return {
+          source: candidate,
+          versionHash: `chunked-${manifest.buildId}`,
+          generatedAt: manifest.generatedAt,
+        };
+      }
+    } catch {
+      // Try all manifest-capable sources before falling back to legacy files.
+    }
+  }
+
+  for (const candidate of uniqueCandidates) {
+    try {
+      const response = await fetch(`${candidate}/series/all.json.gz`, { cache: "no-cache" });
+      if (response.ok) return { source: candidate, versionHash: null, generatedAt: null };
     } catch {
       // Try next source.
     }

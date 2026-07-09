@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS } from "../domain/defaults";
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import { feedUsesAniListOnlyParameters } from "../domain/query";
@@ -16,10 +16,15 @@ import type {
   UserLabel,
 } from "../domain/types";
 import { db, loadSyncMeta } from "../db/appDb";
-import { loadBundledCatalog, loadCachedData, syncFrontendData } from "../services/dataService";
+import { checkFrontendDataVersion, loadBundledCatalog, loadCachedData, syncFrontendData } from "../services/dataService";
 
 const STORAGE_KEY = "manhwa-library-state-v1";
 const THREE_COLUMN_FEEDS_MIGRATION_KEY = "manhwa-three-column-feeds-v1";
+
+function shortDataVersion(versionHash: string | null | undefined) {
+  if (!versionHash) return "none";
+  return versionHash.replace(/^chunked-v1-/, "v1-").replace(/^live-merged-/, "legacy-").slice(0, 22);
+}
 
 interface StoreState {
   ready: boolean;
@@ -34,6 +39,7 @@ interface StoreState {
   settings: AppSettings;
   activeFeedId: string | null;
   syncStatus: string;
+  syncInFlight: boolean;
   setActiveFeedId: (id: string | null) => void;
   upsertFeed: (feed: Feed) => void;
   deleteFeed: (id: string) => void;
@@ -42,7 +48,7 @@ interface StoreState {
   deleteFolder: (id: string) => void;
   upsertLabel: (label: UserLabel) => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
-  refreshData: () => Promise<void>;
+  refreshData: (options?: { force?: boolean }) => Promise<void>;
   resetLocalState: () => Promise<void>;
   importSnapshot: (snapshot: Partial<AppStateSnapshot>, mode: "merge" | "replace") => void;
 }
@@ -206,6 +212,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(mergeSettings(parseSettings(local.settings) ?? local.settings));
   const [activeFeedId, setActiveFeedId] = useState<string | null>(local.activeFeedId ?? null);
   const [syncStatus, setSyncStatus] = useState("");
+  const [syncInFlight, setSyncInFlight] = useState(false);
+  const syncInFlightRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     if (shouldMigrateFeedsToThreeColumns) {
@@ -264,11 +272,27 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         }
       }
       setReady(true);
-      const hasLiveMergedCatalog = meta?.versionHash?.includes("live-merged");
       const hasQueryDates = cachedCatalog.some((item) => item.published?.start_date || item.published?.end_date);
       const online = typeof navigator === "undefined" || navigator.onLine;
-      if (cachedCatalog.length === 0 || !hasQueryDates || !hasLiveMergedCatalog || online) {
-        window.setTimeout(() => void refreshData(), 1800);
+      const hasUsableCache = cachedCatalog.length > 0 && hasQueryDates && Boolean(meta?.versionHash);
+      if (!hasUsableCache) {
+        window.setTimeout(() => void refreshData({ force: true }), 1800);
+      } else if (online) {
+        window.setTimeout(() => {
+          void (async () => {
+            try {
+              setSyncStatus("Checking library version");
+              const remote = await checkFrontendDataVersion(settings.dataSourceUrl);
+              if (remote.versionHash && remote.versionHash === meta?.versionHash) {
+                setSyncStatus("Library already current");
+                return;
+              }
+              void refreshData({ force: true });
+            } catch (error) {
+              setSyncStatus(error instanceof Error ? error.message : "Version check failed");
+            }
+          })();
+        }, 1800);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -286,21 +310,49 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
   }, [feeds, folders, labels, settings, activeFeedId]);
 
-  const refreshData = useCallback(async () => {
-    setSyncStatus("Starting sync");
-    try {
-      const synced = await syncFrontendData(settings.dataSourceUrl, setSyncStatus);
-      setCatalog(synced.catalog);
-      setTags(synced.tags);
-      setHistory(synced.history);
-      setRecommendationFeatures(synced.recommendationFeatures);
-      setSyncMeta(synced.meta);
-      setSettings((current) => ({ ...current, dataSourceUrl: synced.meta.source }));
-      setSyncStatus("Sync complete");
-    } catch (error) {
-      setSyncStatus(error instanceof Error ? error.message : "Sync failed");
-    }
-  }, [settings.dataSourceUrl]);
+  const refreshData = useCallback((options?: { force?: boolean }) => {
+    if (syncInFlightRef.current) return syncInFlightRef.current;
+
+    const task = (async () => {
+      setSyncInFlight(true);
+      setSyncStatus("Checking library version");
+      try {
+        if (!options?.force) {
+          const [remote, latestMeta] = await Promise.all([
+            checkFrontendDataVersion(settings.dataSourceUrl),
+            loadSyncMeta(),
+          ]);
+          const currentVersion = latestMeta?.versionHash ?? syncMeta?.versionHash;
+          const hasCachedCatalog = catalog.length > 0 || Number(latestMeta?.totalSeries ?? 0) > 0;
+          if (remote.versionHash && currentVersion === remote.versionHash && hasCachedCatalog) {
+            if (latestMeta && latestMeta.versionHash !== syncMeta?.versionHash) setSyncMeta(latestMeta);
+            setSyncStatus("Library already current");
+            return;
+          }
+          setSyncStatus(`Updating ${shortDataVersion(currentVersion)} -> ${shortDataVersion(remote.versionHash)}`);
+        }
+        setSyncStatus("Starting sync");
+        const synced = await syncFrontendData(settings.dataSourceUrl, setSyncStatus);
+        setSyncMeta(synced.meta);
+        setSettings((current) => ({ ...current, dataSourceUrl: synced.meta.source }));
+        startTransition(() => {
+          setCatalog(synced.catalog);
+          setTags(synced.tags);
+          setHistory(synced.history);
+          setRecommendationFeatures(synced.recommendationFeatures);
+        });
+        setSyncStatus("Sync complete");
+      } catch (error) {
+        setSyncStatus(error instanceof Error ? error.message : "Sync failed");
+      }
+    })();
+
+    syncInFlightRef.current = task.finally(() => {
+      syncInFlightRef.current = null;
+      setSyncInFlight(false);
+    });
+    return syncInFlightRef.current;
+  }, [catalog.length, settings.dataSourceUrl, syncMeta?.versionHash]);
 
   const upsertFeed = useCallback((feed: Feed) => {
     const updated = normalizeFeed({ ...feed, updatedAt: new Date().toISOString() });
@@ -395,6 +447,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       settings,
       activeFeedId,
       syncStatus,
+      syncInFlight,
       setActiveFeedId,
       upsertFeed,
       deleteFeed,
@@ -420,6 +473,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       settings,
       activeFeedId,
       syncStatus,
+      syncInFlight,
       setActiveFeedId,
       upsertFeed,
       deleteFeed,

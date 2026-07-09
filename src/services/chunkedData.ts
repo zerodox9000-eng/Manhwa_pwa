@@ -136,6 +136,7 @@ export function decodeJsonBytes(bytes: Uint8Array) {
 }
 
 async function sha256(bytes: Uint8Array) {
+  if (!globalThis.crypto?.subtle) return null;
   const copy = new Uint8Array(bytes);
   const digest = await crypto.subtle.digest("SHA-256", copy.buffer);
   return [...new Uint8Array(digest)]
@@ -170,7 +171,8 @@ async function downloadChunk(base: string, chunk: ChunkDescriptor) {
 
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes.byteLength !== chunk.bytes) throw new Error(`${chunk.path}: byte count mismatch`);
-  if (await sha256(bytes) !== chunk.sha256) throw new Error(`${chunk.path}: checksum mismatch`);
+  const checksum = await sha256(bytes);
+  if (checksum && checksum !== chunk.sha256) throw new Error(`${chunk.path}: checksum mismatch`);
 
   return JSON.parse(decodeJsonBytes(bytes)) as unknown;
 }
