@@ -314,9 +314,23 @@ export async function loadBundledCatalog() {
   return normalizeCatalog(catalog, {}).catalog;
 }
 
+function hasDetailDescription(detail: SeriesDetail | null | undefined) {
+  return Boolean(detail?.description?.trim());
+}
+
 export async function fetchSeriesDetail(source: string, id: number) {
   const cached = await db.details.get(id);
   if (cached) {
+    if (!hasDetailDescription(cached)) {
+      try {
+        const rawDetail = await fetchJson<unknown>(source, `details/${id}.json`, false);
+        const detail = fixMangaBakaLink(parseDetail(rawDetail) ?? (rawDetail as SeriesDetail));
+        await db.details.put(detail);
+        return detail;
+      } catch {
+        return cached;
+      }
+    }
     void fetchJson<unknown>(source, `details/${id}.json`, false)
       .then((detail) => {
         const parsed = parseDetail(detail);
