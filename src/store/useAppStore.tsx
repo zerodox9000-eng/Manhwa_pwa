@@ -50,7 +50,10 @@ interface StoreState {
   activeFeedId: string | null;
   syncStatus: string;
   syncInFlight: boolean;
+  homePreviewSegmentId: string | null;
   setActiveFeedId: (id: string | null) => void;
+  openFeedInHome: (feedId: string, segmentId: string | null) => void;
+  exitHomePreview: () => void;
   upsertFeed: (feed: Feed) => void;
   deleteFeed: (id: string) => void;
   moveFeed: (id: string, targetId: string) => void;
@@ -218,13 +221,27 @@ function unsegmentedSegment(feedIds: string[] = []): FeedSegment {
   const now = new Date().toISOString();
   return {
     id: UNSEGMENTED_FEED_SEGMENT_ID,
-    name: "Unsegmented",
+    name: "UNSEGMENTED",
     feedIds,
     collapsed: false,
     hiddenFromHome: false,
     createdAt: now,
     updatedAt: now,
   };
+}
+
+export function addNewFeedToUnsegmentedSegment(segments: FeedSegment[], feedId: string) {
+  if (segments.some((segment) => segment.feedIds.includes(feedId))) return segments;
+  const next = segments.length ? [...segments] : [unsegmentedSegment()];
+  let targetIndex = next.findIndex((segment) => segment.id === UNSEGMENTED_FEED_SEGMENT_ID);
+  if (targetIndex < 0) {
+    next.unshift(unsegmentedSegment());
+    targetIndex = 0;
+  }
+  const now = new Date().toISOString();
+  return next.map((segment, index) =>
+    index === targetIndex ? { ...segment, feedIds: [...segment.feedIds, feedId], updatedAt: now } : segment,
+  );
 }
 
 function normalizeFeedSegments(feeds: Feed[], segments?: FeedSegment[]): FeedSegment[] {
@@ -245,7 +262,7 @@ function normalizeFeedSegments(feeds: Feed[], segments?: FeedSegment[]): FeedSeg
     if (id === UNSEGMENTED_FEED_SEGMENT_ID) hasUnsegmented = true;
     normalized.push({
       id,
-      name: id === UNSEGMENTED_FEED_SEGMENT_ID ? "Unsegmented" : segment.name || "New Segment",
+      name: id === UNSEGMENTED_FEED_SEGMENT_ID ? "UNSEGMENTED" : segment.name || "New Segment",
       feedIds,
       collapsed: Boolean(segment.collapsed),
       hiddenFromHome: Boolean(segment.hiddenFromHome),
@@ -354,6 +371,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       : mergeSettings(parseSettings(local.settings) ?? local.settings),
   );
   const [activeFeedId, setActiveFeedId] = useState<string | null>(local.activeFeedId ?? null);
+  const [homePreviewSegmentId, setHomePreviewSegmentId] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState("");
   const [syncInFlight, setSyncInFlight] = useState(false);
   const syncInFlightRef = useRef<Promise<void> | null>(null);
@@ -489,14 +507,18 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       return exists ? current.map((item) => (item.id === feed.id ? updated : item)) : [...current, updated];
     });
     setFeedSegments((current) => {
-      if (current.some((segment) => segment.feedIds.includes(updated.id))) return current;
-      const normalized = current.length ? current : [unsegmentedSegment()];
-      const targetIndex = Math.max(0, normalized.length - 1);
-      return normalized.map((segment, index) =>
-        index === targetIndex ? { ...segment, feedIds: [...segment.feedIds, updated.id], updatedAt: new Date().toISOString() } : segment,
-      );
+      return addNewFeedToUnsegmentedSegment(current, updated.id);
     });
     setActiveFeedId((current) => current ?? updated.id);
+  }, []);
+
+  const openFeedInHome = useCallback((feedId: string, segmentId: string | null) => {
+    setHomePreviewSegmentId(segmentId);
+    setActiveFeedId(feedId);
+  }, []);
+
+  const exitHomePreview = useCallback(() => {
+    setHomePreviewSegmentId(null);
   }, []);
 
   const deleteFeed = useCallback((id: string) => {
@@ -687,7 +709,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       activeFeedId,
       syncStatus,
       syncInFlight,
+      homePreviewSegmentId,
       setActiveFeedId,
+      openFeedInHome,
+      exitHomePreview,
       upsertFeed,
       deleteFeed,
       moveFeed,
@@ -720,7 +745,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       activeFeedId,
       syncStatus,
       syncInFlight,
+      homePreviewSegmentId,
       setActiveFeedId,
+      openFeedInHome,
+      exitHomePreview,
       upsertFeed,
       deleteFeed,
       moveFeed,

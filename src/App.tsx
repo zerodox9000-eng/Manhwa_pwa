@@ -46,7 +46,7 @@ import {
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
-import { isBuiltInSensitiveSegment, isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments";
+import { isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments";
 import { resolveRollingWindow } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
@@ -245,7 +245,7 @@ function orderedFeedsForSegments(feeds: Feed[], segments: FeedSegment[], options
   const seen = new Set<string>();
   const ordered: Feed[] = [];
   for (const segment of segments) {
-    if (options.homeOnly && (segment.hiddenFromHome || isBuiltInSensitiveSegment(segment))) continue;
+    if (options.homeOnly && segment.hiddenFromHome) continue;
     for (const feedId of segment.feedIds) {
       const feed = byId.get(feedId);
       if (!feed || seen.has(feedId)) continue;
@@ -293,10 +293,16 @@ function App() {
 function AppFrame() {
   const store = useAppStore();
   const location = useLocation();
+  const navigate = useNavigate();
+  const lastHomeNavTapRef = useRef(0);
   const nav = NAV_ITEMS.filter((item) => store.settings.bottomNavItems.includes(item.id));
   const showingHome = location.pathname === "/";
   const showingTitle = location.pathname.startsWith("/title/");
   const keepHomeMounted = showingHome || showingTitle;
+  const defaultHomeFeeds = useMemo(
+    () => orderedFeedsForSegments(store.feeds, store.feedSegments, { homeOnly: true }),
+    [store.feeds, store.feedSegments],
+  );
   const { needRefresh, updateServiceWorker } = useRegisterSW({
     onRegisteredSW() {
       void 0;
@@ -368,7 +374,22 @@ function AppFrame() {
         {nav.map((item) => {
           const Icon = item.icon;
           return (
-            <NavLink key={item.id} to={item.to} className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}>
+            <NavLink
+              key={item.id}
+              to={item.to}
+              className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+              onClick={(event) => {
+                if (item.id !== "home") return;
+                const now = Date.now();
+                const isDoubleTap = now - lastHomeNavTapRef.current <= 360;
+                lastHomeNavTapRef.current = now;
+                if (!isDoubleTap) return;
+                event.preventDefault();
+                store.exitHomePreview();
+                store.setActiveFeedId(defaultHomeFeeds[0]?.id ?? null);
+                navigate("/");
+              }}
+            >
               <Icon size={20} />
               <span>{item.label}</span>
             </NavLink>
@@ -525,13 +546,27 @@ function HomePage() {
   const renderCenterIndexRef = useRef(-1);
   const warmFeedIdsRef = useRef(new Set<string>());
   const didInitialPagerAlignRef = useRef(false);
-  const feeds = useMemo(
-    () => orderedFeedsForSegments(store.feeds, store.feedSegments, { homeOnly: true }),
-    [store.feeds, store.feedSegments],
+  const previewSegment = useMemo(
+    () => store.feedSegments.find((segment) => segment.id === store.homePreviewSegmentId) ?? null,
+    [store.feedSegments, store.homePreviewSegmentId],
   );
+  const feeds = useMemo(() => {
+    if (!previewSegment) return orderedFeedsForSegments(store.feeds, store.feedSegments, { homeOnly: true });
+    const byId = new Map(store.feeds.map((feed) => [feed.id, feed]));
+    return previewSegment.feedIds.flatMap((feedId) => {
+      const feed = byId.get(feedId);
+      return feed ? [feed] : [];
+    });
+  }, [previewSegment, store.feedSegments, store.feeds]);
   const { activeFeedId, setActiveFeedId } = store;
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
   const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
+
+  useEffect(() => {
+    renderCenterIndexRef.current = -1;
+    didInitialPagerAlignRef.current = false;
+    setRenderCenterIndex(-1);
+  }, [store.homePreviewSegmentId]);
 
   useEffect(() => {
     if (!activeFeedId && feeds[0]) setActiveFeedId(feeds[0].id);
@@ -1436,7 +1471,7 @@ function FeedsPage() {
                         dragging={draggingId === feed.id}
                         over={overId === feed.id}
                         onOpen={() => {
-                          store.setActiveFeedId(feed.id);
+                          store.openFeedInHome(feed.id, segment.hiddenFromHome ? segment.id : null);
                         }}
                         onEdit={() => setEditorFeed(feed)}
                         onDelete={() => store.deleteFeed(feed.id)}
