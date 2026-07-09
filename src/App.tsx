@@ -240,12 +240,17 @@ function restoreHomeScroll(feed: Feed | null) {
   container.scrollTo({ top: target, behavior: "auto" });
 }
 
-function orderedFeedsForSegments(feeds: Feed[], segments: FeedSegment[], options: { homeOnly?: boolean } = {}) {
+function orderedFeedsForSegments(
+  feeds: Feed[],
+  segments: FeedSegment[],
+  settings: Pick<AppSettings, "searchAdultTags" | "searchRelationshipTags">,
+  options: { homeOnly?: boolean } = {},
+) {
   const byId = new Map(feeds.map((feed) => [feed.id, feed]));
   const seen = new Set<string>();
   const ordered: Feed[] = [];
   for (const segment of segments) {
-    if (options.homeOnly && segment.hiddenFromHome) continue;
+    if (options.homeOnly && (segment.hiddenFromHome || !isBuiltInSensitiveSegmentVisible(segment, settings))) continue;
     for (const feedId of segment.feedIds) {
       const feed = byId.get(feedId);
       if (!feed || seen.has(feedId)) continue;
@@ -301,8 +306,8 @@ function AppFrame() {
   const showingTitle = location.pathname.startsWith("/title/");
   const keepHomeMounted = showingHome || showingTitle;
   const defaultHomeFeeds = useMemo(
-    () => orderedFeedsForSegments(store.feeds, store.feedSegments, { homeOnly: true }),
-    [store.feeds, store.feedSegments],
+    () => orderedFeedsForSegments(store.feeds, store.feedSegments, store.settings, { homeOnly: true }),
+    [store.feeds, store.feedSegments, store.settings],
   );
   const { needRefresh, updateServiceWorker } = useRegisterSW({
     onRegisteredSW() {
@@ -312,7 +317,7 @@ function AppFrame() {
 
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", store.settings.accentColor);
-    document.title = store.settings.appName || "Manhwa Lib";
+    document.title = store.settings.appName || "Aeon";
   }, [store.settings.accentColor, store.settings.appName]);
 
   useEffect(() => {
@@ -567,13 +572,13 @@ function HomePage() {
     if (store.homePreviewSegmentId && !previewSegment) store.exitHomePreview();
   }, [previewSegment, store]);
   const feeds = useMemo(() => {
-    if (!previewSegment) return orderedFeedsForSegments(store.feeds, store.feedSegments, { homeOnly: true });
+    if (!previewSegment) return orderedFeedsForSegments(store.feeds, store.feedSegments, store.settings, { homeOnly: true });
     const byId = new Map(store.feeds.map((feed) => [feed.id, feed]));
     return previewSegment.feedIds.flatMap((feedId) => {
       const feed = byId.get(feedId);
       return feed ? [feed] : [];
     });
-  }, [previewSegment, store.feedSegments, store.feeds]);
+  }, [previewSegment, store.feedSegments, store.feeds, store.settings]);
   const { activeFeedId, setActiveFeedId } = store;
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
   const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
@@ -1245,6 +1250,7 @@ const MemoTitleMetrics = memo(TitleMetrics, (prev, next) =>
 
 function FeedsPage() {
   const store = useAppStore();
+  const navigate = useNavigate();
   const [editorFeed, setEditorFeed] = useState<Feed | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
@@ -1510,6 +1516,7 @@ function FeedsPage() {
                         over={overId === feed.id}
                         onOpen={() => {
                           store.openFeedInHome(feed.id, segment.hiddenFromHome ? segment.id : null);
+                          navigate("/");
                         }}
                         onEdit={() => setEditorFeed(feed)}
                         onDelete={() => store.deleteFeed(feed.id)}
@@ -1643,10 +1650,10 @@ function FeedCoverCard({
   const [menuOpen, setMenuOpen] = useState(false);
   return (
     <article className={`feed-cover-card ${dragging ? "dragging" : ""} ${over ? "drag-over" : ""}`} data-feed-id={feed.id}>
-      <Link className="feed-cover-link" to="/" onClick={onOpen}>
+      <button className="feed-cover-link" type="button" onClick={onOpen}>
         {loading ? <div className="mosaic-cover mosaic-loading" aria-hidden="true" /> : <MosaicCover items={covers} title={feed.name} />}
         <strong className="feed-card-title">{feed.name}</strong>
-      </Link>
+      </button>
       <button
         className="feed-drag-handle"
         type="button"
@@ -3336,7 +3343,7 @@ function SharePanelButton({ payload, label = "Share" }: { payload: SharePayload;
 
 function SharePanel({ payload }: { payload: SharePayload }) {
   const url = useMemo(() => makeShareUrl(payload), [payload]);
-  const title = payload.kind === "feed" ? payload.feed.name : "Manhwa Lib configuration";
+  const title = payload.kind === "feed" ? payload.feed.name : "Aeon configuration";
   const description = payload.kind === "feed" && payload.feed.showDescription ? payload.feed.description.trim() : "";
   const share = async () => {
     if (navigator.share) {

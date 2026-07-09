@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: process.env.NODE_ENV === 'production' ? '/Manhwa_pwa/' : '/',
+  base: process.env.NODE_ENV === 'production' ? '/Aeon/' : '/',
   plugins: [
     react(),
     VitePWA({
@@ -12,15 +12,15 @@ export default defineConfig({
       injectRegister: 'auto',
       includeAssets: ['favicon.svg', 'pwa-192.png', 'pwa-512.png', 'maskable-512.png'],
       manifest: {
-        name: 'Manhwa Lib',
-        short_name: 'Manhwa Lib',
+        name: 'Aeon',
+        short_name: 'Aeon',
         description: 'Local-first manhwa discovery grids powered by MangaBaka and AniList exports.',
         theme_color: '#11131a',
         background_color: '#08090d',
         display: 'standalone',
         orientation: 'portrait',
-        scope: '/Manhwa_pwa/',
-        start_url: '/Manhwa_pwa/',
+        scope: '/Aeon/',
+        start_url: '/Aeon/',
         icons: [
           {
             src: 'pwa-192.png',
@@ -43,7 +43,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        navigateFallback: '/Manhwa_pwa/index.html',
+        navigateFallback: '/Aeon/index.html',
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: true,

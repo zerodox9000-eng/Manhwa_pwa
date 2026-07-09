@@ -120,7 +120,7 @@ export const DEFAULT_RECOMMENDATION_SHELVES: RecommendationShelf[] = [
 ];
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  appName: "Manhwa Lib",
+  appName: "Aeon",
   themeMode: "dark",
   accentColor: "#ff006e",
   dataSourceUrl: RAW_EXPORT_BASE,

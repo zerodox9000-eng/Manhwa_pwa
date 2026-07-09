@@ -28,6 +28,8 @@ const DEFAULT_FEED_LIBRARY_VERSION_KEY = "manhwa-default-feed-library-version";
 const DEFAULT_FEED_LIBRARY_VERSION = "backup-4-segmented-v4";
 const SENSITIVE_FEED_SEGMENTS_VERSION_KEY = "manhwa-sensitive-feed-segments-version";
 const SENSITIVE_FEED_SEGMENTS_VERSION = "v1";
+const LEGACY_APP_NAME = "Manhwa Lib";
+const DEFAULT_APP_NAME = "Aeon";
 export const UNSEGMENTED_FEED_SEGMENT_ID = "unsegmented";
 
 function shortDataVersion(versionHash: string | null | undefined) {
@@ -378,6 +380,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [syncStatus, setSyncStatus] = useState("");
   const [syncInFlight, setSyncInFlight] = useState(false);
   const syncInFlightRef = useRef<Promise<void> | null>(null);
+
+  useEffect(() => {
+    setSettings((current) => (current.appName.trim() === LEGACY_APP_NAME ? { ...current, appName: DEFAULT_APP_NAME } : current));
+  }, []);
 
   useEffect(() => {
     if (shouldMigrateFeedsToThreeColumns) {

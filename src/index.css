@@ -1114,7 +1114,13 @@ select {
 .feed-cover-link {
   display: grid;
   gap: 7px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: inherit;
+  font: inherit;
+  text-align: left;
   text-decoration: none;
 }
 

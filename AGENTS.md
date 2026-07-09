@@ -39,7 +39,7 @@ Update parent docs when parent-level structure, ownership, workflow, or child in
 ## Project Contract
 
 - This repo is the frontend PWA. Backend data and pipeline work belongs in the sibling `C:\Users\japne\OneDrive\Documents\manhwa_db` repo unless the user explicitly asks for cross-repo work.
-- The live app is GitHub Pages at `https://zerodox9000-eng.github.io/Manhwa_pwa/`.
+- The live app is GitHub Pages at `https://zerodox9000-eng.github.io/Aeon/`.
 - Treat phone/PWA observations from the user as authoritative UX evidence.
 - Keep local repo layout clear: frontend is `MANHWA CODEX 1`; backend is `manhwa_db`; do not recreate duplicate backend folders.
 - Do not push frontend changes unless the user asks to ship or explicitly gives live/deploy approval.
