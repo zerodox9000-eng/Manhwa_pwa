@@ -31,7 +31,7 @@ This repo is the PWA frontend for `zerodox9000-eng/manhwa_db`. Keep changes here
 - Import links always open a preview before applying anything.
 - Search is title-only; filtering still honors content ratings and sensitive-tag toggles.
 - The home screen is feed-first and remembers scroll position per feed and layout.
-- Home paging uses the protected `9f16d14` native scroll-snap behavior plus chunked backend loading. Treat this as the stable baseline.
+- Home paging uses the protected `a1a1446` native scroll-snap behavior plus chunked backend loading. Treat this as the stable baseline for feed memory and return behavior.
 - Feed headers use a fixed two-lane layout: the title stays on one line and can shrink before ellipsizing, while the description gets its own glass block with a stable two-line footprint.
 - Non-AniList entries shown by the `Add` / MangaBaka latest sort must have a cover and a MangaUpdates source link. Do not reject all MangaBaka `imgproxy` covers; reject only missing covers and covers that decode to Anime-Planet/AP-proxy images.
 - Title detail pages do not render embedded recommendation shelves; keep detail back/navigation free from recommendation ranking or loading work.
@@ -40,9 +40,9 @@ This repo is the PWA frontend for `zerodox9000-eng/manhwa_db`. Keep changes here
 - Startup and Settings refresh must check the backend manifest before heavy data sync. Opening Settings, Search, or any route must not initiate a full sync by itself; the Refresh button stays disabled while a sync is already running.
 - LAN previews may run on insecure `http://192.168...` origins where `crypto.subtle` is unavailable; chunk loading must still work there without falling back to legacy full-file sync loops.
 - Restore keys for Home should stay scoped to feed id plus grid columns and density, otherwise 4/5-grid back navigation will drift.
-- Home scroll saves are buffered during scrolling and flushed immediately when opening a title. Do not put synchronous localStorage writes back into every scroll event.
-- Global session restoration must not restore or save Home feed-pane scroll. Home owns its own per-feed scroll state; route-level delayed Home restores cause post-swipe jumps.
-- Home feeds outside the active render window are considered forgotten. Clear their per-feed scroll keys so returning to them starts exactly at top like a newly opened feed.
+- Home scroll saves use the simple `a1a1446` direct localStorage/session restore path. Do not replace it with buffered memory maps, top-threshold cleanup, or delayed "enforce top" corrections.
+- SessionRestorer participates in Home feed-pane save/restore in the `a1a1446` style. Do not remove that Home path unless a better phone-verified replacement exists.
+- Home feeds should keep their per-feed scroll memory even when they leave the active render window. Do not delete far-feed scroll keys as a performance shortcut; users prefer returning to the last position.
 - Blacklist `6b05599 Improve navigation and loading responsiveness`: do not reintroduce `HOME_FEED_PREVIEW_TITLES = 18`, delayed route wrappers, hidden-pane vertical restore, or post-swipe scroll correction.
 - If custom title drag/drop is rebuilt, the only acceptable pager-facing change is disabling horizontal Home swipe while drag mode is active.
 - `tag_weights` are read from the catalog items inside `query-index.json.gz` or the live export, not from the standalone scrape file directly.

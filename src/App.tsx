@@ -79,9 +79,8 @@ const RANGE_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.filte
 const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.id !== "title" && definition.id !== "mangabakaLatestRank");
 const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
-const HOME_FEED_INITIAL_RENDER_RADIUS = 2;
-const HOME_FEED_RENDER_RADIUS = 2;
-const HOME_SCROLL_TOP_EPSILON = 80;
+const HOME_FEED_INITIAL_RENDER_RADIUS = 4;
+const HOME_FEED_RENDER_RADIUS = 4;
 const FEED_TITLE_EXPANDED_MAX = 140;
 const FEED_DESCRIPTION_EXPANDED_MAX = 260;
 const PWA_CHROME_THEME_COLOR = "#11131a";
@@ -190,89 +189,20 @@ function getHomeScrollContainer(feed: Feed | null) {
   return document.querySelector<HTMLElement>(`[data-home-scroll-key="${homeScrollKey(feed)}"]`);
 }
 
-function readStoredHomeScroll(key: string) {
-  const memoryValue = homeScrollMemory.get(key);
-  if (Number.isFinite(memoryValue)) return memoryValue != null && memoryValue > HOME_SCROLL_TOP_EPSILON ? memoryValue : 0;
-  const storedValue = Number(localStorage.getItem(key));
-  return Number.isFinite(storedValue) ? (storedValue > HOME_SCROLL_TOP_EPSILON ? storedValue : 0) : null;
-}
-
-const homeScrollMemory = new Map<string, number>();
-const pendingHomeScrollSaves = new Map<string, number>();
-let homeScrollSaveTimer: number | null = null;
-
-function persistHomeScrollSaves() {
-  homeScrollSaveTimer = null;
-  if (pendingHomeScrollSaves.size === 0) return;
+function saveHomeScroll(feed: Feed | null) {
+  if (!feed) return;
   try {
+    const key = homeScrollKey(feed);
+    const scrollTop = getHomeScrollContainer(feed)?.scrollTop ?? 0;
+    localStorage.setItem(key, String(scrollTop));
     const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
       path?: string;
       scroll?: Record<string, number>;
     };
-    const scroll = { ...(saved.scroll ?? {}) };
-    pendingHomeScrollSaves.forEach((scrollTop, key) => {
-      scroll[key] = scrollTop;
-      if (key.startsWith(HOME_SCROLL_PREFIX)) localStorage.setItem(key, String(scrollTop));
-    });
-    const rootScroll = pendingHomeScrollSaves.get("/");
     localStorage.setItem(
       SESSION_RESTORE_KEY,
-      JSON.stringify({ ...saved, path: "/", scroll: { ...scroll, ...(rootScroll == null ? {} : { "/": rootScroll }) } }),
+      JSON.stringify({ ...saved, path: "/", scroll: { ...(saved.scroll ?? {}), "/": scrollTop, [key]: scrollTop } }),
     );
-    pendingHomeScrollSaves.clear();
-  } catch {
-    pendingHomeScrollSaves.clear();
-  }
-}
-
-function scheduleHomeScrollPersist() {
-  if (homeScrollSaveTimer != null) return;
-  homeScrollSaveTimer = window.setTimeout(persistHomeScrollSaves, 220);
-}
-
-function saveHomeScroll(feed: Feed | null, flush = false) {
-  if (!feed) return;
-  const key = homeScrollKey(feed);
-  const scrollTop = getHomeScrollContainer(feed)?.scrollTop ?? 0;
-  homeScrollMemory.set(key, scrollTop);
-  homeScrollMemory.set("/", scrollTop);
-  pendingHomeScrollSaves.set(key, scrollTop);
-  pendingHomeScrollSaves.set("/", scrollTop);
-  if (!flush) {
-    scheduleHomeScrollPersist();
-    return;
-  }
-  if (homeScrollSaveTimer != null) {
-    window.clearTimeout(homeScrollSaveTimer);
-    homeScrollSaveTimer = null;
-  }
-  persistHomeScrollSaves();
-}
-
-function saveHomeScrollNow(feed: Feed | null) {
-  try {
-    saveHomeScroll(feed, true);
-  } catch {
-    // Best effort only.
-  }
-}
-
-function forgetHomeScroll(feed: Feed | null) {
-  if (!feed) return;
-  const key = homeScrollKey(feed);
-  homeScrollMemory.delete(key);
-  pendingHomeScrollSaves.delete(key);
-  try {
-    localStorage.removeItem(key);
-    const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
-      path?: string;
-      scroll?: Record<string, number>;
-    };
-    if (saved.scroll && key in saved.scroll) {
-      const scroll = { ...saved.scroll };
-      delete scroll[key];
-      localStorage.setItem(SESSION_RESTORE_KEY, JSON.stringify({ ...saved, scroll }));
-    }
   } catch {
     // Best effort only.
   }
@@ -280,7 +210,7 @@ function forgetHomeScroll(feed: Feed | null) {
 
 function prepareHomeTitleNavigation(feed: Feed | null) {
   if (!getHomeScrollContainer(feed)) return;
-  saveHomeScrollNow(feed);
+  saveHomeScroll(feed);
   try {
     sessionStorage.setItem(HOME_RETURNING_FROM_TITLE_KEY, "1");
   } catch {
@@ -288,34 +218,15 @@ function prepareHomeTitleNavigation(feed: Feed | null) {
   }
 }
 
-function enforceHomeScrollTop(feed: Feed | null) {
-  if (!feed) return;
-  const key = homeScrollKey(feed);
-  const scrollToTop = () => {
-    if ((readStoredHomeScroll(key) ?? 0) > 0) return;
-    const container = getHomeScrollContainer(feed);
-    if (container && container.scrollTop !== 0) container.scrollTo({ top: 0, behavior: "auto" });
-  };
-  scrollToTop();
-  requestAnimationFrame(() => {
-    scrollToTop();
-    requestAnimationFrame(scrollToTop);
-  });
-  window.setTimeout(scrollToTop, 120);
-}
-
 function restoreHomeScroll(feed: Feed | null) {
   if (!feed) return;
   const key = homeScrollKey(feed);
-  const target = readStoredHomeScroll(key);
+  const target = Number(localStorage.getItem(key));
   appDebugLog("home-scroll", "restore lookup", { feedId: feed?.id ?? null, key, target });
+  if (!Number.isFinite(target) || target <= 0) return;
   const container = getHomeScrollContainer(feed);
   if (!container) {
     requestAnimationFrame(() => restoreHomeScroll(feed));
-    return;
-  }
-  if (!Number.isFinite(target) || target == null || target <= 0) {
-    enforceHomeScrollTop(feed);
     return;
   }
   container.scrollTo({ top: target, behavior: "auto" });
@@ -444,6 +355,10 @@ function SessionRestorer() {
   const location = useLocation();
   const navigate = useNavigate();
   const restored = useRef(false);
+  const activeFeed = useMemo(
+    () => store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null,
+    [store.activeFeedId, store.feeds],
+  );
 
   useEffect(() => {
     if (restored.current || !store.ready) return;
@@ -460,17 +375,19 @@ function SessionRestorer() {
 
   useEffect(() => {
     if (!store.settings.restoreLastSession) return;
+    const path = `${location.pathname}${location.search}`;
+    const key = location.pathname === "/" ? homeScrollKey(activeFeed) : path;
     if (location.pathname.startsWith("/title/")) {
       window.scrollTo({ top: 0, behavior: "instant" });
       return;
     }
     if (location.pathname === "/") {
+      requestAnimationFrame(() => requestAnimationFrame(() => restoreHomeScroll(activeFeed)));
       return;
     }
-    const path = `${location.pathname}${location.search}`;
     try {
       const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as { scroll?: Record<string, number> };
-      const candidates = [saved.scroll?.[path], Number(localStorage.getItem(path))];
+      const candidates = [saved.scroll?.[key], Number(localStorage.getItem(key)), saved.scroll?.[path]];
       const y = candidates.find((value) => Number.isFinite(value)) ?? 0;
       if (y > 0) {
         requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: y })));
@@ -478,14 +395,38 @@ function SessionRestorer() {
     } catch {
       // Ignore stale restore payloads.
     }
-  }, [location.pathname, location.search, store.settings.restoreLastSession]);
+  }, [activeFeed, location.pathname, location.search, store.settings.restoreLastSession]);
 
   useEffect(() => {
     if (!store.settings.restoreLastSession) return;
     const path = `${location.pathname}${location.search}`;
+    const key = location.pathname === "/" ? homeScrollKey(activeFeed) : path;
     if (location.pathname.startsWith("/title/")) return;
     if (location.pathname === "/") {
-      return;
+      const container = getHomeScrollContainer(activeFeed);
+      if (!container) return;
+      const save = () => {
+        try {
+          const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
+            path?: string;
+            scroll?: Record<string, number>;
+          };
+          localStorage.setItem(
+            SESSION_RESTORE_KEY,
+            JSON.stringify({
+              ...saved,
+              path,
+              scroll: { ...(saved.scroll ?? {}), [path]: container.scrollTop, [key]: container.scrollTop },
+            }),
+          );
+          localStorage.setItem(key, String(container.scrollTop));
+        } catch {
+          // localStorage can be unavailable in private contexts.
+        }
+      };
+      save();
+      container.addEventListener("scroll", save, { passive: true });
+      return () => container.removeEventListener("scroll", save);
     }
     const save = () => {
       try {
@@ -495,8 +436,9 @@ function SessionRestorer() {
         };
         localStorage.setItem(
           SESSION_RESTORE_KEY,
-          JSON.stringify({ ...saved, path, scroll: { ...(saved.scroll ?? {}), [path]: window.scrollY } }),
+          JSON.stringify({ ...saved, path, scroll: { ...(saved.scroll ?? {}), [path]: window.scrollY, [key]: window.scrollY } }),
         );
+        if (location.pathname === "/") localStorage.setItem(key, String(window.scrollY));
       } catch {
         // localStorage can be unavailable in private contexts.
       }
@@ -504,7 +446,7 @@ function SessionRestorer() {
     save();
     window.addEventListener("scroll", save, { passive: true });
     return () => window.removeEventListener("scroll", save);
-  }, [location.pathname, location.search, store.settings.restoreLastSession]);
+  }, [activeFeed, location.pathname, location.search, store.settings.restoreLastSession]);
 
   return null;
 }
@@ -581,27 +523,12 @@ function HomePage() {
     setWarmFeedIds(nextWarmFeedIds);
   }, [feeds]);
 
-  const setWarmFeedWindow = useCallback(
-    (centerIndex: number) => {
-      if (centerIndex < 0 || feeds.length === 0) return;
-      const nextWarmFeedIds = new Set<string>();
-      for (let offset = -HOME_FEED_RENDER_RADIUS; offset <= HOME_FEED_RENDER_RADIUS; offset += 1) {
-        const feed = feeds[centerIndex + offset];
-        if (feed) nextWarmFeedIds.add(feed.id);
-      }
-      for (const feed of feeds) {
-        if (!nextWarmFeedIds.has(feed.id)) forgetHomeScroll(feed);
-      }
-      let changed = nextWarmFeedIds.size !== warmFeedIdsRef.current.size;
-      if (!changed) {
-        for (const feedId of nextWarmFeedIds) {
-          if (!warmFeedIdsRef.current.has(feedId)) {
-            changed = true;
-            break;
-          }
-        }
-      }
-      if (!changed) return;
+  const warmFeedAt = useCallback(
+    (index: number) => {
+      const feed = feeds[Math.max(0, Math.min(feeds.length - 1, index))];
+      if (!feed || warmFeedIdsRef.current.has(feed.id)) return;
+      const nextWarmFeedIds = new Set(warmFeedIdsRef.current);
+      nextWarmFeedIds.add(feed.id);
       warmFeedIdsRef.current = nextWarmFeedIds;
       startTransition(() => setWarmFeedIds(nextWarmFeedIds));
     },
@@ -623,7 +550,9 @@ function HomePage() {
       }
       window.setTimeout(() => {
         setPreloadReady(true);
-        setWarmFeedWindow(activeFeedIndex);
+        for (let offset = -HOME_FEED_RENDER_RADIUS; offset <= HOME_FEED_RENDER_RADIUS; offset += 1) {
+          warmFeedAt(activeFeedIndex + offset);
+        }
       }, 120);
       return;
     }
@@ -632,21 +561,16 @@ function HomePage() {
       pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
       restoreHomeScroll(activeFeed);
     }
-  }, [activeFeed, activeFeedIndex, returningFromTitle, setWarmFeedWindow, store.ready]);
+  }, [activeFeed, activeFeedIndex, returningFromTitle, store.ready, warmFeedAt]);
 
   useEffect(() => {
     if (!store.ready || activeFeedIndex < 0) return;
-    const timer = window.setTimeout(() => setWarmFeedWindow(activeFeedIndex), 180);
-    return () => window.clearTimeout(timer);
-  }, [activeFeedIndex, setWarmFeedWindow, store.ready]);
-
-  useLayoutEffect(() => {
-    if (!store.ready || !activeFeed) return;
-    const key = homeScrollKey(activeFeed);
-    const target = readStoredHomeScroll(key);
-    if (target != null && target > 0) return;
-    enforceHomeScrollTop(activeFeed);
-  }, [activeFeed, activeFeedIndex, store.ready]);
+    const warmOrder = [5, -1, -2, -3, -4, -5];
+    const timers = warmOrder.map((offset, step) =>
+      window.setTimeout(() => warmFeedAt(activeFeedIndex + offset), 450 + step * 220),
+    );
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [activeFeedIndex, store.ready, warmFeedAt]);
 
   const warmFeedsAroundScrollPosition = useCallback(() => {
     setPreloadReady(true);
@@ -667,19 +591,18 @@ function HomePage() {
         renderCenterIndexRef.current = nearestIndex;
         startTransition(() => setRenderCenterIndex(nearestIndex));
       }
-      setWarmFeedWindow(nearestIndex);
+      for (let offset = -HOME_FEED_RENDER_RADIUS; offset <= HOME_FEED_RENDER_RADIUS; offset += 1) {
+        warmFeedAt(nearestIndex + offset);
+      }
     };
     handleScroll();
-  }, [activeFeedId, feeds, setActiveFeedId, setWarmFeedWindow]);
+  }, [activeFeedId, feeds, setActiveFeedId, warmFeedAt]);
 
   const handleFeedPaneScroll = useCallback(
-    (feed: Feed, scroller: HTMLElement) => {
-      if (feed.id !== activeFeedId) return;
-      const activeScroller = getHomeScrollContainer(activeFeed);
-      if (activeScroller !== scroller) return;
+    (feed: Feed) => {
       saveHomeScroll(feed);
     },
-    [activeFeed, activeFeedId],
+    [],
   );
 
   useEffect(() => {
@@ -688,6 +611,7 @@ function HomePage() {
     const scroller = pane?.querySelector<HTMLElement>(".feed-pane-scroll");
     if (!pane || !feed || !scroller) return;
     appDebugLog("home-scroll", "attach scroll listener", { feedId: feed.id });
+    saveHomeScroll(feed);
   }, [activeFeedId, feeds]);
 
   return (
@@ -734,7 +658,7 @@ function HomePage() {
                   <div
                     className="feed-pane-scroll"
                     data-home-scroll-key={homeScrollKey(feed)}
-                    onScroll={(event) => handleFeedPaneScroll(feed, event.currentTarget)}
+                    onScroll={() => handleFeedPaneScroll(feed)}
                   >
                     {shouldRenderFeed ? <FeedView feed={feed} onEditFeed={setEditorFeed} /> : <HomeFeedPaneSkeleton feed={feed} />}
                   </div>
