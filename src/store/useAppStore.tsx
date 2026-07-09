@@ -22,6 +22,8 @@ import { checkFrontendDataVersion, loadCachedData, syncFrontendData } from "../s
 
 const STORAGE_KEY = "manhwa-library-state-v1";
 const THREE_COLUMN_FEEDS_MIGRATION_KEY = "manhwa-three-column-feeds-v1";
+const DEFAULT_FEED_LIBRARY_VERSION_KEY = "manhwa-default-feed-library-version";
+const DEFAULT_FEED_LIBRARY_VERSION = "backup-4-segmented";
 export const UNSEGMENTED_FEED_SEGMENT_ID = "unsegmented";
 
 function shortDataVersion(versionHash: string | null | undefined) {
@@ -275,11 +277,34 @@ function orderFeedsBySegments(feeds: Feed[], segments: FeedSegment[]) {
   return ordered;
 }
 
+function defaultFeeds() {
+  return (defaultFeedsJson as Feed[]).map((feed) => normalizeFeed(feed));
+}
+
+function defaultFeedSegments(feeds: Feed[]) {
+  return normalizeFeedSegments(feeds, defaultFeedSegmentsJson as FeedSegment[]);
+}
+
+function shouldReplaceSavedFeeds(hasSavedState: boolean) {
+  if (!hasSavedState) return false;
+  return localStorage.getItem(DEFAULT_FEED_LIBRARY_VERSION_KEY) !== DEFAULT_FEED_LIBRARY_VERSION;
+}
+
 const AppStoreContext = createContext<StoreState | null>(null);
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const local = useMemo(loadLocalSnapshot, []);
   const hasSavedState = useMemo(() => localStorage.getItem(STORAGE_KEY) != null, []);
+  const replaceDefaultLikeSavedFeeds = useMemo(
+    () => shouldReplaceSavedFeeds(hasSavedState),
+    [hasSavedState],
+  );
+  const initialFeeds = useMemo(
+    () => replaceDefaultLikeSavedFeeds || !hasSavedState
+      ? defaultFeeds()
+      : (local.feeds ?? []).map((feed) => normalizeFeed(feed)),
+    [hasSavedState, local.feeds, replaceDefaultLikeSavedFeeds],
+  );
   const shouldMigrateFeedsToThreeColumns = useMemo(
     () => localStorage.getItem(THREE_COLUMN_FEEDS_MIGRATION_KEY) !== "1",
     [],
@@ -291,15 +316,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [recommendationFeatures, setRecommendationFeatures] = useState<RecommendationFeature[]>([]);
   const [syncMeta, setSyncMeta] = useState<SyncMeta | null>(null);
   const [feeds, setFeeds] = useState<Feed[]>(() => {
-    const normalizedFeeds = (hasSavedState ? local.feeds ?? [] : (defaultFeedsJson as Feed[])).map((feed) =>
-      normalizeFeed(feed),
-    );
-    if (!shouldMigrateFeedsToThreeColumns) return normalizedFeeds;
+    const normalizedFeeds = initialFeeds;
+    if (!shouldMigrateFeedsToThreeColumns || replaceDefaultLikeSavedFeeds) return normalizedFeeds;
     return normalizedFeeds.map((feed) => ({ ...feed, view: { ...feed.view, gridColumns: 3 } }));
   });
   const [feedSegments, setFeedSegments] = useState<FeedSegment[]>(() => normalizeFeedSegments(
-    (hasSavedState ? local.feeds ?? [] : (defaultFeedsJson as Feed[])).map((feed) => normalizeFeed(feed)),
-    hasSavedState ? local.feedSegments : (defaultFeedSegmentsJson as FeedSegment[]),
+    initialFeeds,
+    replaceDefaultLikeSavedFeeds || !hasSavedState ? (defaultFeedSegmentsJson as FeedSegment[]) : local.feedSegments,
   ));
   const [folders, setFolders] = useState<Folder[]>(local.folders ?? []);
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
@@ -313,7 +336,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (shouldMigrateFeedsToThreeColumns) {
       localStorage.setItem(THREE_COLUMN_FEEDS_MIGRATION_KEY, "1");
     }
-  }, [shouldMigrateFeedsToThreeColumns]);
+    if (replaceDefaultLikeSavedFeeds || !hasSavedState) {
+      localStorage.setItem(DEFAULT_FEED_LIBRARY_VERSION_KEY, DEFAULT_FEED_LIBRARY_VERSION);
+    }
+  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldMigrateFeedsToThreeColumns]);
 
   useEffect(() => {
     void (async () => {
@@ -568,12 +594,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const resetLocalState = useCallback(async () => {
     localStorage.removeItem(STORAGE_KEY);
     await db.details.clear();
-    setFeeds([]);
-    setFeedSegments([unsegmentedSegment()]);
+    const nextFeeds = defaultFeeds();
+    setFeeds(nextFeeds);
+    setFeedSegments(defaultFeedSegments(nextFeeds));
     setFolders([]);
     setLabels([]);
     setSettings(DEFAULT_SETTINGS);
-    setActiveFeedId(null);
+    setActiveFeedId(nextFeeds[0]?.id ?? null);
+    localStorage.setItem(DEFAULT_FEED_LIBRARY_VERSION_KEY, DEFAULT_FEED_LIBRARY_VERSION);
   }, []);
 
   const importSnapshot = useCallback((snapshot: Partial<AppStateSnapshot>, mode: "merge" | "replace") => {
