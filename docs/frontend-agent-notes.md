@@ -6,7 +6,7 @@ This repo is the PWA frontend for `zerodox9000-eng/manhwa_db`. Keep changes here
 
 - `src/App.tsx` defines the live routes, page composition, share/import flows, and most visible UI behavior.
 - `src/domain/defaults.ts` defines shipped defaults for feeds, filters, settings, and cover/stat visibility.
-- `src/domain/defaultFeeds.generated.json` and `src/domain/defaultFeedSegments.generated.json` define the shipped feed library for fresh installs; update them together when replacing defaults from a backup.
+- `src/domain/defaultFeeds.generated.json`, `src/domain/defaultFeedSegments.generated.json`, and `src/domain/defaultSettings.generated.json` define the shipped library for fresh installs; update them together when replacing defaults from a backup.
 - `src/services/dataService.ts` defines the current sync path and data-source fallback behavior.
 - `src/domain/share.ts` defines what can be shared and how import payloads are encoded.
 - `src/domain/types.ts` is the canonical shape for app data and settings.
@@ -33,7 +33,7 @@ This repo is the PWA frontend for `zerodox9000-eng/manhwa_db`. Keep changes here
 - Search is title-only; filtering still honors content ratings and sensitive-tag toggles.
 - The home screen is feed-first and remembers scroll position per feed and layout.
 - Feeds page grouping uses flat feed segments, not folders. Segments are headings/separators with ordered feed IDs, collapse state for Feeds only, and a Home visibility toggle. Dragging a segment moves all feeds inside it; segment drag previews stay collapsed/compact. Empty segments can be deleted directly; non-empty segments require the in-app confirmation drawer because deleting them also deletes their feeds.
-- The `backup-4-segmented-v2` default feed library is forced once onto existing installs that do not have that default-library version marker, so old saved default feeds do not keep winning over the shipped backup defaults. Preserve the backup's feed view settings when applying this migration.
+- The `backup-4-segmented-v3` default feed library is forced once onto existing installs that do not have that default-library version marker, so old saved default feeds/settings do not keep winning over the shipped backup defaults. Preserve the backup's feed view settings when applying this migration.
 - Home paging uses the protected `a1a1446` native scroll-snap behavior plus chunked backend loading. Treat this as the stable baseline for feed memory and return behavior.
 - Feed headers use a fixed two-lane layout: the title stays on one line and can shrink before ellipsizing, while the description gets its own glass block with a stable two-line footprint.
 - Non-AniList entries shown by the `Add` / MangaBaka latest sort must have a cover and a MangaUpdates source link. Do not reject all MangaBaka `imgproxy` covers; reject only missing covers and covers that decode to Anime-Planet/AP-proxy images.

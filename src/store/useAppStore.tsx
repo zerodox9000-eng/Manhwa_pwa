@@ -2,6 +2,7 @@ import { createContext, startTransition, useCallback, useContext, useEffect, use
 import { DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS, makeId } from "../domain/defaults";
 import defaultFeedSegmentsJson from "../domain/defaultFeedSegments.generated.json";
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
+import defaultSettingsJson from "../domain/defaultSettings.generated.json";
 import { feedUsesAniListOnlyParameters } from "../domain/query";
 import { parseAppStateSnapshot, parseSettings } from "../domain/validation";
 import type {
@@ -23,7 +24,7 @@ import { checkFrontendDataVersion, loadCachedData, syncFrontendData } from "../s
 const STORAGE_KEY = "manhwa-library-state-v1";
 const THREE_COLUMN_FEEDS_MIGRATION_KEY = "manhwa-three-column-feeds-v1";
 const DEFAULT_FEED_LIBRARY_VERSION_KEY = "manhwa-default-feed-library-version";
-const DEFAULT_FEED_LIBRARY_VERSION = "backup-4-segmented-v2";
+const DEFAULT_FEED_LIBRARY_VERSION = "backup-4-segmented-v3";
 export const UNSEGMENTED_FEED_SEGMENT_ID = "unsegmented";
 
 function shortDataVersion(versionHash: string | null | undefined) {
@@ -285,6 +286,10 @@ function defaultFeedSegments(feeds: Feed[]) {
   return normalizeFeedSegments(feeds, defaultFeedSegmentsJson as FeedSegment[]);
 }
 
+function defaultSettings() {
+  return mergeSettings(defaultSettingsJson as Partial<AppSettings>);
+}
+
 function shouldReplaceSavedFeeds(hasSavedState: boolean) {
   if (!hasSavedState) return false;
   return localStorage.getItem(DEFAULT_FEED_LIBRARY_VERSION_KEY) !== DEFAULT_FEED_LIBRARY_VERSION;
@@ -326,7 +331,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   ));
   const [folders, setFolders] = useState<Folder[]>(local.folders ?? []);
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
-  const [settings, setSettings] = useState<AppSettings>(mergeSettings(parseSettings(local.settings) ?? local.settings));
+  const [settings, setSettings] = useState<AppSettings>(() =>
+    replaceDefaultLikeSavedFeeds || !hasSavedState
+      ? defaultSettings()
+      : mergeSettings(parseSettings(local.settings) ?? local.settings),
+  );
   const [activeFeedId, setActiveFeedId] = useState<string | null>(local.activeFeedId ?? null);
   const [syncStatus, setSyncStatus] = useState("");
   const [syncInFlight, setSyncInFlight] = useState(false);
@@ -599,7 +608,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setFeedSegments(defaultFeedSegments(nextFeeds));
     setFolders([]);
     setLabels([]);
-    setSettings(DEFAULT_SETTINGS);
+    setSettings(defaultSettings());
     setActiveFeedId(nextFeeds[0]?.id ?? null);
     localStorage.setItem(DEFAULT_FEED_LIBRARY_VERSION_KEY, DEFAULT_FEED_LIBRARY_VERSION);
   }, []);

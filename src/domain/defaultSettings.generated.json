@@ -1,0 +1,109 @@
+{
+  "appName": "Manhwa Lib",
+  "themeMode": "dark",
+  "accentColor": "#06b6d4",
+  "dataSourceUrl": "https://raw.githubusercontent.com/zerodox9000-eng/manhwa_db/main/db/exports/frontend",
+  "adultUnlocked": false,
+  "contentRatings": [
+    "safe",
+    "suggestive"
+  ],
+  "defaultFeedView": {
+    "mode": "grid",
+    "gridColumns": 3,
+    "gridDensity": "standard",
+    "listCoverSize": "medium",
+    "listDensity": "standard",
+    "metricSlots": [
+      "fanFavouriteDiscoveryPercentile"
+    ],
+    "visible": {
+      "cover": true,
+      "title": true,
+      "rank": true,
+      "genreChips": true,
+      "status": false,
+      "year": false,
+      "chapters": false,
+      "contentRating": false,
+      "popularity": true,
+      "favourites": true,
+      "meanScore": false,
+      "fanFavouriteRatio": false,
+      "discoveryScore": false,
+      "growthDelta": false,
+      "labels": false,
+      "sourceBadges": false,
+      "quickActions": false,
+      "description": false,
+      "links": false
+    }
+  },
+  "recommendationShelves": [
+    {
+      "id": "similar-loved",
+      "name": "Most loved matches",
+      "statusMode": "any",
+      "dateMode": "any",
+      "sourceModes": [
+        "anilist"
+      ],
+      "sort": [
+        {
+          "id": "rec-discpct",
+          "metric": "fanFavouriteDiscoveryPercentile",
+          "direction": "desc"
+        }
+      ],
+      "metricRanges": []
+    }
+  ],
+  "detailVisible": {
+    "cover": true,
+    "title": true,
+    "description": false,
+    "genreTags": true,
+    "allTags": false,
+    "authorsArtists": false,
+    "links": true,
+    "labels": false,
+    "popularity": true,
+    "favourites": true,
+    "meanScore": false,
+    "fanFavouriteRatio": false,
+    "discoveryMetrics": true,
+    "growthNumbers": false,
+    "status": true,
+    "year": true,
+    "chapters": true,
+    "contentRating": false
+  },
+  "detailCoverLayout": "left",
+  "metricNames": {
+    "popularity": "Popularity",
+    "favourites": "Favourites",
+    "meanScore": "Mean Score",
+    "fanFavouriteRaw": "Fan Favourite Percent",
+    "fanFavouriteDiscoveryScore": "Discovery Score",
+    "fanFavouriteDiscoveryPercentile": "Fan Rank",
+    "underratedScore": "Und",
+    "popularityGrowth": "Popularity Growth",
+    "favouritesGrowth": "Favourites Growth"
+  },
+  "bottomNavItems": [
+    "home",
+    "feeds",
+    "search",
+    "recommendations",
+    "settings"
+  ],
+  "controlPlacement": "toolbar",
+  "restoreLastSession": true,
+  "nonAniListPlacement": "bottom",
+  "sharingDefault": "feed",
+  "sfwShareDefault": true,
+  "includeAppNameInShare": true,
+  "searchSensitiveTags": false,
+  "searchRelationshipTags": false,
+  "searchAdultTags": false
+}
