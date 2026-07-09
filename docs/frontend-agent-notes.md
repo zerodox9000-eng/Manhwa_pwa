@@ -39,6 +39,7 @@ This repo is the PWA frontend for `zerodox9000-eng/manhwa_db`. Keep changes here
 - Title detail descriptions must not silently disappear because of stale cache. If cached or first fresh detail data lacks a description, retry fresh detail JSON before accepting the missing synopsis as final.
 - Double-tapping the Home feed title opens that feed's existing settings drawer. Keep this shortcut scoped to the header; it must not change pager ownership.
 - Startup and Settings refresh must check the backend manifest before heavy data sync. Opening Settings, Search, or any route must not initiate a full sync by itself; the Refresh button stays disabled while a sync is already running.
+- Online startup must not display stale IndexedDB or bundled query-index rows before the manifest check finishes. Only show cached catalog data when its saved version matches the current backend manifest; if it is stale, keep the loading/updating state until fresh sync completes.
 - LAN previews may run on insecure `http://192.168...` origins where `crypto.subtle` is unavailable; chunk loading must still work there without falling back to legacy full-file sync loops.
 - Restore keys for Home should stay scoped to feed id plus grid columns and density, otherwise 4/5-grid back navigation will drift.
 - Home scroll saves use the simple `a1a1446` direct localStorage/session restore path. Do not replace it with buffered memory maps, top-threshold cleanup, or delayed "enforce top" corrections.

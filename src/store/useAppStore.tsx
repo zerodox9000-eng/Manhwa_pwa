@@ -17,7 +17,7 @@ import type {
   UserLabel,
 } from "../domain/types";
 import { db, loadSyncMeta } from "../db/appDb";
-import { checkFrontendDataVersion, loadBundledCatalog, loadCachedData, syncFrontendData } from "../services/dataService";
+import { checkFrontendDataVersion, loadCachedData, syncFrontendData } from "../services/dataService";
 
 const STORAGE_KEY = "manhwa-library-state-v1";
 const THREE_COLUMN_FEEDS_MIGRATION_KEY = "manhwa-three-column-feeds-v1";
@@ -315,76 +315,50 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void (async () => {
-      const bundledCatalogPromise = loadBundledCatalog();
       const cachedDataPromise = loadCachedData();
       const metaPromise = loadSyncMeta();
-      let cacheResolved = false;
-      let showedBundled = false;
-      const bundledTimer = window.setTimeout(() => {
-        void bundledCatalogPromise.then((bundledCatalog) => {
-          if (cacheResolved || bundledCatalog.length === 0) return;
-          showedBundled = true;
-          setCatalog(bundledCatalog);
-          setSyncMeta({
-            lastSync: new Date().toISOString(),
-            totalSeries: bundledCatalog.length,
-            historyFirstDate: null,
-            historyLastDate: null,
-            versionHash: `bundled-${bundledCatalog.length}`,
-            source: "Bundled query index",
-          });
-          setReady(true);
-        });
-      }, 260);
-
       const [{ catalog: cachedCatalog, tags: cachedTags, history: cachedHistory, recommendationFeatures: cachedRecommendationFeatures }, meta] = await Promise.all([
         cachedDataPromise,
         metaPromise,
       ]);
-      cacheResolved = true;
-      window.clearTimeout(bundledTimer);
-      if (cachedCatalog.length > 0) {
+      const hasQueryDates = cachedCatalog.some((item) => item.published?.start_date || item.published?.end_date);
+      const online = typeof navigator === "undefined" || navigator.onLine;
+      const hasUsableCache = cachedCatalog.length > 0 && hasQueryDates && Boolean(meta?.versionHash);
+      let remote: Awaited<ReturnType<typeof checkFrontendDataVersion>> | null = null;
+
+      if (online) {
+        try {
+          setSyncStatus("Checking library version");
+          remote = await checkFrontendDataVersion(settings.dataSourceUrl);
+        } catch (error) {
+          setSyncStatus(error instanceof Error ? error.message : "Version check failed");
+        }
+      }
+
+      const cacheMatchesRemote = Boolean(
+        remote?.versionHash &&
+        meta?.versionHash &&
+        remote.versionHash === meta.versionHash,
+      );
+      const canShowCachedData = hasUsableCache && (!online || !remote?.versionHash || cacheMatchesRemote);
+
+      if (canShowCachedData) {
         setCatalog(cachedCatalog);
         setTags(cachedTags);
         setHistory(cachedHistory);
         setRecommendationFeatures(cachedRecommendationFeatures);
         setSyncMeta(meta);
-      } else if (!showedBundled) {
-        const bundledCatalog = await bundledCatalogPromise;
-        if (bundledCatalog.length > 0) {
-          setCatalog(bundledCatalog);
-          setSyncMeta({
-            lastSync: new Date().toISOString(),
-            totalSeries: bundledCatalog.length,
-            historyFirstDate: null,
-            historyLastDate: null,
-            versionHash: `bundled-${bundledCatalog.length}`,
-            source: "Bundled query index",
-          });
-        }
+        setReady(true);
+      } else if (hasUsableCache && remote?.versionHash && meta?.versionHash && remote.versionHash !== meta.versionHash) {
+        setSyncMeta(meta);
+        setSyncStatus(`Updating ${shortDataVersion(meta.versionHash)} -> ${shortDataVersion(remote.versionHash)}`);
       }
-      setReady(true);
-      const hasQueryDates = cachedCatalog.some((item) => item.published?.start_date || item.published?.end_date);
-      const online = typeof navigator === "undefined" || navigator.onLine;
-      const hasUsableCache = cachedCatalog.length > 0 && hasQueryDates && Boolean(meta?.versionHash);
-      if (!hasUsableCache) {
-        window.setTimeout(() => void refreshData({ force: true }), 1800);
-      } else if (online) {
-        window.setTimeout(() => {
-          void (async () => {
-            try {
-              setSyncStatus("Checking library version");
-              const remote = await checkFrontendDataVersion(settings.dataSourceUrl);
-              if (remote.versionHash && remote.versionHash === meta?.versionHash) {
-                setSyncStatus("Library already current");
-                return;
-              }
-              void refreshData({ force: true });
-            } catch (error) {
-              setSyncStatus(error instanceof Error ? error.message : "Version check failed");
-            }
-          })();
-        }, 1800);
+
+      if (!hasUsableCache || (remote?.versionHash && remote.versionHash !== meta?.versionHash)) {
+        await refreshData({ force: true });
+        setReady(true);
+      } else if (online && remote?.versionHash && cacheMatchesRemote) {
+        setSyncStatus("Library already current");
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
