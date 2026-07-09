@@ -46,7 +46,7 @@ import {
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
-import { isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments";
+import { isBuiltInSensitiveSegment, isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments";
 import { resolveRollingWindow } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
@@ -245,7 +245,7 @@ function orderedFeedsForSegments(feeds: Feed[], segments: FeedSegment[], options
   const seen = new Set<string>();
   const ordered: Feed[] = [];
   for (const segment of segments) {
-    if (options.homeOnly && segment.hiddenFromHome) continue;
+    if (options.homeOnly && (segment.hiddenFromHome || isBuiltInSensitiveSegment(segment))) continue;
     for (const feedId of segment.feedIds) {
       const feed = byId.get(feedId);
       if (!feed || seen.has(feedId)) continue;
@@ -1338,6 +1338,7 @@ function FeedsPage() {
           });
           const canDelete = segment.id !== "unsegmented" && segmentFeeds.length === 0;
           const canDeleteWithFeeds = segment.id !== "unsegmented" && segmentFeeds.length > 0;
+          const isSensitiveSegment = isBuiltInSensitiveSegment(segment);
           const isRenaming = renamingSegmentId === segment.id;
           return (
             <section
@@ -1426,14 +1427,16 @@ function FeedsPage() {
                   </button>
                 )}
                 <span className="spacer" />
-                <button
-                  className="icon-button"
-                  type="button"
-                  onClick={() => store.updateFeedSegment(segment.id, { hiddenFromHome: !segment.hiddenFromHome })}
-                  aria-label={segment.hiddenFromHome ? `Show ${segment.name} in Home` : `Hide ${segment.name} from Home`}
-                >
-                  {segment.hiddenFromHome ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
+                {!isSensitiveSegment && (
+                  <button
+                    className="icon-button"
+                    type="button"
+                    onClick={() => store.updateFeedSegment(segment.id, { hiddenFromHome: !segment.hiddenFromHome })}
+                    aria-label={segment.hiddenFromHome ? `Show ${segment.name} in Home` : `Hide ${segment.name} from Home`}
+                  >
+                    {segment.hiddenFromHome ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                )}
                 <button
                   className="icon-button"
                   type="button"
