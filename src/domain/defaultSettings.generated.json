@@ -94,7 +94,6 @@
     "home",
     "feeds",
     "search",
-    "recommendations",
     "settings"
   ],
   "controlPlacement": "toolbar",

@@ -117,12 +117,14 @@ function normalizeRecommendationShelves(settings?: Partial<AppSettings>) {
 
 function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
   const recommendationShelves = normalizeRecommendationShelves(settings);
+  const bottomNavItems = (settings?.bottomNavItems ?? DEFAULT_SETTINGS.bottomNavItems).filter((item) => item !== "recommendations");
   const relationshipTags =
     settings?.searchRelationshipTags ?? settings?.searchSensitiveTags ?? DEFAULT_SETTINGS.searchRelationshipTags;
   const adultTags = settings?.searchAdultTags ?? settings?.searchSensitiveTags ?? DEFAULT_SETTINGS.searchAdultTags;
   return {
     ...DEFAULT_SETTINGS,
     ...settings,
+    bottomNavItems,
     defaultFeedView: {
       ...DEFAULT_SETTINGS.defaultFeedView,
       ...settings?.defaultFeedView,
@@ -410,7 +412,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     void (async () => {
       const cachedDataPromise = loadCachedData();
       const metaPromise = loadSyncMeta();
-      const [{ catalog: cachedCatalog, tags: cachedTags, history: cachedHistory, recommendationFeatures: cachedRecommendationFeatures }, meta] = await Promise.all([
+      const [{ catalog: cachedCatalog, tags: cachedTags, history: cachedHistory }, meta] = await Promise.all([
         cachedDataPromise,
         metaPromise,
       ]);
@@ -439,7 +441,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         setCatalog(cachedCatalog);
         setTags(cachedTags);
         setHistory(cachedHistory);
-        setRecommendationFeatures(cachedRecommendationFeatures);
+        setRecommendationFeatures([]);
         setSyncMeta(meta);
         setReady(true);
       } else if (hasUsableCache && remote?.versionHash && meta?.versionHash && remote.versionHash !== meta.versionHash) {
@@ -503,7 +505,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           setCatalog(synced.catalog);
           setTags(synced.tags);
           setHistory(synced.history);
-          setRecommendationFeatures(synced.recommendationFeatures);
+          setRecommendationFeatures([]);
         });
         setSyncStatus("Sync complete");
       } catch (error) {

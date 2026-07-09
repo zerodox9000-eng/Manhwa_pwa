@@ -177,6 +177,10 @@ async function downloadChunk(base: string, chunk: ChunkDescriptor) {
   return JSON.parse(decodeJsonBytes(bytes)) as unknown;
 }
 
+interface ChunkedFetchOptions {
+  includeRecommendations?: boolean;
+}
+
 async function loadDataset(base: string, name: DatasetName, descriptor: DatasetDescriptor) {
   const chunks = await mapWithConcurrency(
     descriptor.chunks,
@@ -216,6 +220,7 @@ async function loadDataset(base: string, name: DatasetName, descriptor: DatasetD
 export async function fetchChunkedFrontendData(
   base: string,
   onProgress?: (message: string) => void,
+  options: ChunkedFetchOptions = {},
 ): Promise<ChunkedFrontendData> {
   const manifestResponse = await fetch(`${base}/meta/data-manifest.json`, { cache: "no-cache" });
   if (!manifestResponse.ok) {
@@ -243,12 +248,15 @@ export async function fetchChunkedFrontendData(
     throw new Error("History validation dropped one or more tracks.");
   }
 
-  onProgress?.("Downloading chunked recommendation features");
-  const recommendationFeatures = parseRecommendationFeatures(
-    await loadDataset(base, "recommendations", manifest.datasets.recommendations),
-  );
-  if (recommendationFeatures.length !== manifest.datasets.recommendations.count) {
-    throw new Error("Recommendation validation dropped one or more records.");
+  let recommendationFeatures: RecommendationFeature[] = [];
+  if (options.includeRecommendations !== false) {
+    onProgress?.("Downloading chunked recommendation features");
+    recommendationFeatures = parseRecommendationFeatures(
+      await loadDataset(base, "recommendations", manifest.datasets.recommendations),
+    );
+    if (recommendationFeatures.length !== manifest.datasets.recommendations.count) {
+      throw new Error("Recommendation validation dropped one or more records.");
+    }
   }
 
   return {

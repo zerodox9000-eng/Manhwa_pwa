@@ -2,7 +2,7 @@ import { db, saveSyncMeta } from "../db/appDb";
 import { DATA_SOURCE_CANDIDATES } from "../domain/defaults";
 import { normalizeCatalog, resolveDisplayTitle } from "../domain/catalog";
 import type { RecommendationFeature, SeriesCatalog, SeriesDetail, SyncMeta } from "../domain/types";
-import { parseCatalogList, parseDetail, parseHistory, parseRecommendationFeatures, parseTags } from "../domain/validation";
+import { parseCatalogList, parseDetail, parseHistory, parseTags } from "../domain/validation";
 import { decodeJsonBytes, fetchChunkedFrontendData, parseFrontendDataManifest } from "./chunkedData";
 
 async function fetchJson<T>(base: string, path: string, preferGzip = true): Promise<T> {
@@ -196,7 +196,7 @@ export async function syncFrontendData(
 
   try {
     onProgress?.("Loading versioned backend data");
-    chunkedData = await fetchChunkedFrontendData(source, onProgress);
+    chunkedData = await fetchChunkedFrontendData(source, onProgress, { includeRecommendations: false });
   } catch {
     onProgress?.("Using compatible backend data");
   }
@@ -226,16 +226,7 @@ export async function syncFrontendData(
     chunkedData?.history ??
     parseHistory(await fetchJson<unknown>(source, "stats/history.json", true));
 
-  onProgress?.("Downloading recommendation features");
-
-  let recommendationFeatures: RecommendationFeature[] = chunkedData?.recommendationFeatures ?? [];
-  if (!chunkedData) {
-    try {
-      recommendationFeatures = parseRecommendationFeatures(await fetchJson<unknown>(source, "recommendations/features.json", true));
-    } catch {
-      recommendationFeatures = [];
-    }
-  }
+  const recommendationFeatures: RecommendationFeature[] = [];
 
   onProgress?.("Saving offline data");
 
@@ -291,11 +282,10 @@ export async function syncFrontendData(
 }
 
 export async function loadCachedData() {
-  const [catalog, tags, historyRows, recommendationFeatures] = await Promise.all([
+  const [catalog, tags, historyRows] = await Promise.all([
     db.catalog.toArray(),
     db.tags.toArray(),
     db.history.toArray(),
-    db.recommendationFeatures.toArray(),
   ]);
 
   const history = parseHistory(Object.fromEntries(historyRows.map((row) => [row.id, row.entries])));
@@ -304,7 +294,7 @@ export async function loadCachedData() {
     catalog: parseCatalogList(catalog),
     tags: parseTags(tags),
     history,
-    recommendationFeatures: parseRecommendationFeatures(recommendationFeatures),
+    recommendationFeatures: [],
   };
 }
 

@@ -19,7 +19,6 @@ import {
   Library,
   ListFilter,
   Plus,
-  Sparkles,
   Search,
   Settings,
   Share2,
@@ -35,6 +34,7 @@ import ReactMarkdown from "react-markdown";
 import {
   HashRouter,
   Link,
+  Navigate,
   NavLink,
   Route,
   Routes,
@@ -76,7 +76,6 @@ const NAV_ITEMS = [
   { id: "home", to: "/", label: "Home", icon: Home },
   { id: "feeds", to: "/feeds", label: "Feeds", icon: ListFilter },
   { id: "search", to: "/search", label: "Search", icon: Search },
-  { id: "recommendations", to: "/recommendations", label: "Recs", icon: Sparkles },
   { id: "settings", to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -366,8 +365,7 @@ function AppFrame() {
             <Routes>
               <Route path="/feeds" element={<FeedsPage />} />
               <Route path="/search" element={<SearchPage />} />
-              <Route path="/recommendations" element={<RecommendationsPage />} />
-              <Route path="/recommendations/:id" element={<RecommendationsPage />} />
+              <Route path="/recommendations/*" element={<Navigate to="/" replace />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/learn" element={<LearnPage />} />
               <Route path="/import" element={<ImportPage />} />
@@ -2738,6 +2736,9 @@ function RecommendationShelfEditor({
     </div>
   );
 }
+
+// Kept as dormant source for the eventual recommendation rebuild; no route mounts it while suspended.
+void [RecommendationsPage, RecommendationResults, recommendationItems, RecommendationShelfEditor];
 
 function SettingsPage() {
   const store = useAppStore();

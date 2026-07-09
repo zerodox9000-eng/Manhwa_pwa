@@ -97,6 +97,25 @@ describe("chunked frontend data", () => {
     expect(data.recommendationFeatures.map((item) => item.id)).toEqual([1]);
   });
 
+  it("skips recommendation chunks when the feature is suspended", async () => {
+    const { files, manifest } = await fixture();
+    const fetchMock = vi.fn(async (url: string | URL) => {
+      const href = String(url);
+      if (href.endsWith("/meta/data-manifest.json")) {
+        return new Response(JSON.stringify(manifest), { status: 200 });
+      }
+      const body = files.get(href);
+      return body
+        ? new Response(new Uint8Array(body).buffer, { status: 200 })
+        : new Response("missing", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const data = await fetchChunkedFrontendData(base, undefined, { includeRecommendations: false });
+    expect(data.recommendationFeatures).toEqual([]);
+    expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => url.includes("/recommendations/"))).toBe(false);
+  });
+
   it("rejects unsafe chunk paths before downloading them", async () => {
     const { manifest } = await fixture();
     const invalid = structuredClone(manifest);
