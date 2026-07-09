@@ -1181,6 +1181,7 @@ function FeedsPage() {
   const [segmentGhost, setSegmentGhost] = useState<{ segment: FeedSegment; count: number; x: number; y: number } | null>(null);
   const [renamingSegmentId, setRenamingSegmentId] = useState<string | null>(null);
   const [segmentNameDraft, setSegmentNameDraft] = useState("");
+  const [deleteSegmentTarget, setDeleteSegmentTarget] = useState<{ segment: FeedSegment; count: number } | null>(null);
   const [coverMap, setCoverMap] = useState<Map<string, SeriesCatalog[]>>(new Map());
   const [coversLoading, setCoversLoading] = useState(true);
   const autoScrollFrameRef = useRef<number | null>(null);
@@ -1295,6 +1296,7 @@ function FeedsPage() {
             return feed ? [feed] : [];
           });
           const canDelete = segment.id !== "unsegmented" && segmentFeeds.length === 0;
+          const canDeleteWithFeeds = segment.id !== "unsegmented" && segmentFeeds.length > 0;
           const isRenaming = renamingSegmentId === segment.id;
           return (
             <section
@@ -1404,6 +1406,16 @@ function FeedsPage() {
                     <Trash2 size={18} />
                   </button>
                 )}
+                {canDeleteWithFeeds && (
+                  <button
+                    className="icon-button danger"
+                    type="button"
+                    onClick={() => setDeleteSegmentTarget({ segment, count: segmentFeeds.length })}
+                    aria-label={`Delete ${segment.name} with feeds`}
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                )}
               </div>
               {!segment.collapsed && (
                 <div className="feed-cover-grid">
@@ -1486,6 +1498,38 @@ function FeedsPage() {
               setEditorFeed(null);
             }}
           />
+        )}
+      </BottomDrawer>
+      <BottomDrawer
+        title="Delete segment"
+        open={Boolean(deleteSegmentTarget)}
+        onOpenChange={(open) => !open && setDeleteSegmentTarget(null)}
+      >
+        {deleteSegmentTarget && (
+          <div className="setting-stack">
+            <div>
+              <strong>Delete {deleteSegmentTarget.segment.name}?</strong>
+              <p className="muted">
+                This will also delete {deleteSegmentTarget.count.toLocaleString()} feed{deleteSegmentTarget.count === 1 ? "" : "s"} inside it.
+              </p>
+            </div>
+            <div className="toolbar">
+              <button className="button" type="button" onClick={() => setDeleteSegmentTarget(null)}>
+                Cancel
+              </button>
+              <span className="spacer" />
+              <button
+                className="button danger"
+                type="button"
+                onClick={() => {
+                  store.deleteFeedSegmentWithFeeds(deleteSegmentTarget.segment.id);
+                  setDeleteSegmentTarget(null);
+                }}
+              >
+                <Trash2 size={16} /> Delete segment and feeds
+              </button>
+            </div>
+          </div>
         )}
       </BottomDrawer>
     </div>

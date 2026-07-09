@@ -1,5 +1,6 @@
 import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS, makeId } from "../domain/defaults";
+import defaultFeedSegmentsJson from "../domain/defaultFeedSegments.generated.json";
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import { feedUsesAniListOnlyParameters } from "../domain/query";
 import { parseAppStateSnapshot, parseSettings } from "../domain/validation";
@@ -51,6 +52,7 @@ interface StoreState {
   createFeedSegment: (name?: string) => void;
   updateFeedSegment: (id: string, patch: Partial<Pick<FeedSegment, "name" | "collapsed" | "hiddenFromHome">>) => void;
   deleteFeedSegment: (id: string) => void;
+  deleteFeedSegmentWithFeeds: (id: string) => void;
   moveFeedSegment: (id: string, targetId: string) => void;
   upsertFolder: (folder: Folder) => void;
   deleteFolder: (id: string) => void;
@@ -297,7 +299,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   });
   const [feedSegments, setFeedSegments] = useState<FeedSegment[]>(() => normalizeFeedSegments(
     (hasSavedState ? local.feeds ?? [] : (defaultFeedsJson as Feed[])).map((feed) => normalizeFeed(feed)),
-    local.feedSegments,
+    hasSavedState ? local.feedSegments : (defaultFeedSegmentsJson as FeedSegment[]),
   ));
   const [folders, setFolders] = useState<Folder[]>(local.folders ?? []);
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
@@ -518,6 +520,16 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setFeedSegments((current) => current.filter((segment) => segment.id !== id || segment.feedIds.length > 0));
   }, []);
 
+  const deleteFeedSegmentWithFeeds = useCallback((id: string) => {
+    if (id === UNSEGMENTED_FEED_SEGMENT_ID) return;
+    const segment = feedSegments.find((item) => item.id === id);
+    if (!segment) return;
+    const removedFeedIds = new Set(segment.feedIds);
+    setFeedSegments((current) => current.filter((item) => item.id !== id));
+    setFeeds((current) => current.filter((feed) => !removedFeedIds.has(feed.id)));
+    setActiveFeedId((current) => (current && removedFeedIds.has(current) ? null : current));
+  }, [feedSegments]);
+
   const moveFeedSegment = useCallback((id: string, targetId: string) => {
     setFeedSegments((current) => {
       const from = current.findIndex((segment) => segment.id === id);
@@ -625,6 +637,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       createFeedSegment,
       updateFeedSegment,
       deleteFeedSegment,
+      deleteFeedSegmentWithFeeds,
       moveFeedSegment,
       upsertFolder,
       deleteFolder,
@@ -657,6 +670,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       createFeedSegment,
       updateFeedSegment,
       deleteFeedSegment,
+      deleteFeedSegmentWithFeeds,
       moveFeedSegment,
       upsertFolder,
       deleteFolder,

@@ -1,0 +1,124 @@
+[
+  {
+    "id": "f4da5512-aa3e-48bf-9f3d-a0afd14b8e56",
+    "name": "TRENDING",
+    "feedIds": [
+      "3557ab43-3ca8-4214-a4e8-fae07f1571b6",
+      "default-feed-5",
+      "default-feed-6",
+      "default-feed-7",
+      "default-feed-8"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": false,
+    "createdAt": "2026-07-09T19:08:34.135Z",
+    "updatedAt": "2026-07-09T19:09:01.218Z"
+  },
+  {
+    "id": "2f19120b-0507-428d-9207-762d8726439e",
+    "name": "UPDATES",
+    "feedIds": [
+      "3511ae36-01bd-432b-9287-b1afdf85869a",
+      "5be53571-49c2-404f-8379-c7516fa6e979",
+      "089d6f0f-cd06-4e94-9d43-d80071d427fb"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": false,
+    "createdAt": "2026-07-09T19:09:03.599Z",
+    "updatedAt": "2026-07-09T19:09:31.905Z"
+  },
+  {
+    "id": "f90877c1-e055-44a9-beaf-22f57345fcef",
+    "name": "DEMOGRAPHICS TRENDS",
+    "feedIds": [
+      "default-feed-13",
+      "default-feed-15",
+      "default-feed-14",
+      "default-feed-16"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": false,
+    "createdAt": "2026-07-09T19:09:35.037Z",
+    "updatedAt": "2026-07-09T19:10:34.346Z"
+  },
+  {
+    "id": "603daa76-e824-4bb6-be96-06588debd39e",
+    "name": "DISCOVER",
+    "feedIds": [
+      "7e25d1e5-2781-431d-a2c3-24e46aa9dee4",
+      "6d7ccd05-d6b3-4ec5-8fa3-1306b79e28cc",
+      "b35b87f1-92e1-4c5d-a744-a252e83080c0",
+      "98baa3ee-b1ff-404a-9878-b834aa7ea95b",
+      "default-feed-12"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": false,
+    "createdAt": "2026-07-09T19:11:34.924Z",
+    "updatedAt": "2026-07-09T19:12:05.834Z"
+  },
+  {
+    "id": "8e59f651-ff3e-4c02-8c41-0a5e93e359ae",
+    "name": "UNDERRATED",
+    "feedIds": [
+      "0c96761d-09d2-423a-a959-b2c3e451f739",
+      "99609e6f-9bd7-4d8c-9885-de48718fc051",
+      "c456f0dd-adf8-4acc-8394-d2467ab5dcf8"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": false,
+    "createdAt": "2026-07-09T19:12:21.289Z",
+    "updatedAt": "2026-07-09T19:12:46.287Z"
+  },
+  {
+    "id": "58de72e7-a56c-4c6a-9acc-3b7ac588551f",
+    "name": "RANKINGS",
+    "feedIds": [
+      "default-feed-1",
+      "default-feed-2",
+      "afe79c8e-8c5d-401b-a3b5-91ac87a28706",
+      "11765c56-471e-402d-9968-4b4a632b941d",
+      "3fccd0bf-0222-43d5-b33b-48cffec57657"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": true,
+    "createdAt": "2026-07-09T19:12:22.452Z",
+    "updatedAt": "2026-07-09T19:13:49.234Z"
+  },
+  {
+    "id": "d9eb80bc-3a5f-4d06-8bb0-cf2841f75625",
+    "name": "RISING",
+    "feedIds": [
+      "e4799e4f-ece2-4be6-8c32-b734be0a3027",
+      "default-feed-3",
+      "default-feed-4",
+      "f3079264-e31f-4f45-adf5-2832cd0ae864",
+      "21f450c5-8d68-4f68-85bf-444fc4e66a83"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": true,
+    "createdAt": "2026-07-09T19:10:42.522Z",
+    "updatedAt": "2026-07-09T19:13:41.401Z"
+  },
+  {
+    "id": "1adf71d3-8fe8-4c9c-b758-01226da09a63",
+    "name": "GROWTH",
+    "feedIds": [
+      "8516ca4b-7481-4b2e-aa19-5953e8951851",
+      "81420e4c-491c-49fb-a29f-357f01cbb5ed",
+      "f8a0b826-7a99-4616-8b24-79745c879e6c"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": true,
+    "createdAt": "2026-07-09T19:11:10.856Z",
+    "updatedAt": "2026-07-09T19:13:40.840Z"
+  },
+  {
+    "id": "unsegmented",
+    "name": "Unsegmented",
+    "feedIds": [],
+    "collapsed": true,
+    "hiddenFromHome": false,
+    "createdAt": "2026-07-09T19:04:46.328Z",
+    "updatedAt": "2026-07-09T19:13:16.699Z"
+  }
+]
