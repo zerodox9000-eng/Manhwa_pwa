@@ -28,6 +28,7 @@ Owns the frontend application source: React routes, UI, domain rules, data loadi
 - Route/detail navigation should respond immediately, even if details or recommendations are still loading.
 - If title drag/drop is added later, gate only that mode by disabling horizontal Home swipe while dragging; do not rewrite pager ownership.
 - If changing feed settings, custom feeds, folders, or profiles, update migration and serialization paths together.
+- Built-in sensitive feed segments are installed once without replacing saved feeds. Their Feeds-page visibility follows the existing BL/GL and Smut/Hentai search toggles, and they remain excluded from Home by default.
 - Search should remain stable while typing and deleting; debounce expensive work instead of blocking input.
 
 ## Verification

@@ -4,6 +4,7 @@ import defaultFeedSegmentsJson from "../domain/defaultFeedSegments.generated.jso
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import defaultSettingsJson from "../domain/defaultSettings.generated.json";
 import { feedUsesAniListOnlyParameters } from "../domain/query";
+import { builtInSensitiveFeeds, builtInSensitiveSegments, mergeBuiltInSensitiveDefaults } from "../domain/sensitiveFeedSegments";
 import { parseAppStateSnapshot, parseSettings } from "../domain/validation";
 import type {
   AppSettings,
@@ -25,6 +26,8 @@ const STORAGE_KEY = "manhwa-library-state-v1";
 const THREE_COLUMN_FEEDS_MIGRATION_KEY = "manhwa-three-column-feeds-v1";
 const DEFAULT_FEED_LIBRARY_VERSION_KEY = "manhwa-default-feed-library-version";
 const DEFAULT_FEED_LIBRARY_VERSION = "backup-4-segmented-v4";
+const SENSITIVE_FEED_SEGMENTS_VERSION_KEY = "manhwa-sensitive-feed-segments-version";
+const SENSITIVE_FEED_SEGMENTS_VERSION = "v1";
 export const UNSEGMENTED_FEED_SEGMENT_ID = "unsegmented";
 
 function shortDataVersion(versionHash: string | null | undefined) {
@@ -279,11 +282,13 @@ function orderFeedsBySegments(feeds: Feed[], segments: FeedSegment[]) {
 }
 
 function defaultFeeds() {
-  return (defaultFeedsJson as Feed[]).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true, preserveFeedSettings: true }));
+  return [...(defaultFeedsJson as Feed[]), ...builtInSensitiveFeeds()].map((feed) =>
+    normalizeFeed(feed, { preserveMetricSlots: true, preserveFeedSettings: true }),
+  );
 }
 
 function defaultFeedSegments(feeds: Feed[]) {
-  return normalizeFeedSegments(feeds, defaultFeedSegmentsJson as FeedSegment[]);
+  return normalizeFeedSegments(feeds, [...(defaultFeedSegmentsJson as FeedSegment[]), ...builtInSensitiveSegments()]);
 }
 
 function defaultSettings() {
@@ -304,11 +309,20 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     () => shouldReplaceSavedFeeds(hasSavedState),
     [hasSavedState],
   );
+  const shouldInstallSensitiveFeedSegments = useMemo(
+    () => hasSavedState && !replaceDefaultLikeSavedFeeds && localStorage.getItem(SENSITIVE_FEED_SEGMENTS_VERSION_KEY) !== SENSITIVE_FEED_SEGMENTS_VERSION,
+    [hasSavedState, replaceDefaultLikeSavedFeeds],
+  );
   const initialFeeds = useMemo(
-    () => replaceDefaultLikeSavedFeeds || !hasSavedState
-      ? defaultFeeds()
-      : (local.feeds ?? []).map((feed) => normalizeFeed(feed)),
-    [hasSavedState, local.feeds, replaceDefaultLikeSavedFeeds],
+    () => {
+      if (replaceDefaultLikeSavedFeeds || !hasSavedState) return defaultFeeds();
+      const savedFeeds = (local.feeds ?? []).map((feed) => normalizeFeed(feed));
+      const merged = shouldInstallSensitiveFeedSegments
+        ? mergeBuiltInSensitiveDefaults(savedFeeds, local.feedSegments ?? []).feeds
+        : savedFeeds;
+      return merged.map((feed) => normalizeFeed(feed, { preserveMetricSlots: true, preserveFeedSettings: true }));
+    },
+    [hasSavedState, local.feedSegments, local.feeds, replaceDefaultLikeSavedFeeds, shouldInstallSensitiveFeedSegments],
   );
   const shouldMigrateFeedsToThreeColumns = useMemo(
     () => localStorage.getItem(THREE_COLUMN_FEEDS_MIGRATION_KEY) !== "1",
@@ -325,10 +339,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (!shouldMigrateFeedsToThreeColumns || replaceDefaultLikeSavedFeeds || !hasSavedState) return normalizedFeeds;
     return normalizedFeeds.map((feed) => ({ ...feed, view: { ...feed.view, gridColumns: 3 } }));
   });
-  const [feedSegments, setFeedSegments] = useState<FeedSegment[]>(() => normalizeFeedSegments(
-    initialFeeds,
-    replaceDefaultLikeSavedFeeds || !hasSavedState ? (defaultFeedSegmentsJson as FeedSegment[]) : local.feedSegments,
-  ));
+  const [feedSegments, setFeedSegments] = useState<FeedSegment[]>(() => {
+    if (replaceDefaultLikeSavedFeeds || !hasSavedState) return defaultFeedSegments(initialFeeds);
+    const sourceSegments = shouldInstallSensitiveFeedSegments
+      ? mergeBuiltInSensitiveDefaults(initialFeeds, local.feedSegments ?? []).segments
+      : local.feedSegments;
+    return normalizeFeedSegments(initialFeeds, sourceSegments);
+  });
   const [folders, setFolders] = useState<Folder[]>(local.folders ?? []);
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
   const [settings, setSettings] = useState<AppSettings>(() =>
@@ -348,7 +365,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (replaceDefaultLikeSavedFeeds || !hasSavedState) {
       localStorage.setItem(DEFAULT_FEED_LIBRARY_VERSION_KEY, DEFAULT_FEED_LIBRARY_VERSION);
     }
-  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldMigrateFeedsToThreeColumns]);
+    if (shouldInstallSensitiveFeedSegments || !hasSavedState) {
+      localStorage.setItem(SENSITIVE_FEED_SEGMENTS_VERSION_KEY, SENSITIVE_FEED_SEGMENTS_VERSION);
+    }
+  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldInstallSensitiveFeedSegments, shouldMigrateFeedsToThreeColumns]);
 
   useEffect(() => {
     void (async () => {
@@ -611,6 +631,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setSettings(defaultSettings());
     setActiveFeedId(nextFeeds[0]?.id ?? null);
     localStorage.setItem(DEFAULT_FEED_LIBRARY_VERSION_KEY, DEFAULT_FEED_LIBRARY_VERSION);
+    localStorage.setItem(SENSITIVE_FEED_SEGMENTS_VERSION_KEY, SENSITIVE_FEED_SEGMENTS_VERSION);
   }, []);
 
   const importSnapshot = useCallback((snapshot: Partial<AppStateSnapshot>, mode: "merge" | "replace") => {

@@ -1,0 +1,193 @@
+{
+  "feeds": [
+    {
+      "id": "d518b2c2-2755-4cf6-ac5d-645f97adb171",
+      "name": "YURI SMUT ",
+      "description": "Ranked by Engagement ",
+      "showDescription": true,
+      "createdAt": "2026-07-09T20:18:10.178Z",
+      "updatedAt": "2026-07-09T20:18:35.084Z",
+      "filters": {
+        "sourceMode": "anilist",
+        "sourceModes": [
+          "anilist"
+        ],
+        "query": "",
+        "includeTagIds": [
+          4
+        ],
+        "excludeTagIds": [
+          180,
+          41,
+          10
+        ],
+        "tagMatch": "any",
+        "contentRatings": [
+          "pornographic",
+          "erotica"
+        ],
+        "statuses": [],
+        "minChapters": null,
+        "maxChapters": null,
+        "minYear": null,
+        "maxYear": null,
+        "minPopularity": null,
+        "maxPopularity": null,
+        "minFavourites": null,
+        "maxFavourites": null,
+        "minMeanScore": null,
+        "maxMeanScore": null,
+        "metricRanges": [],
+        "includeEstimatedDates": true,
+        "dateField": "none",
+        "rolling": {
+          "mode": "none",
+          "amount": 7,
+          "unit": "days"
+        },
+        "labelIds": []
+      },
+      "sort": [
+        {
+          "id": "3b11932f-9820-4fea-b4e4-a68fdc0df090",
+          "metric": "fanFavouriteDiscoveryPercentile",
+          "direction": "desc"
+        }
+      ],
+      "view": {
+        "mode": "grid",
+        "gridColumns": 3,
+        "gridDensity": "standard",
+        "listCoverSize": "medium",
+        "listDensity": "standard",
+        "metricSlots": [
+          "fanFavouriteDiscoveryPercentile"
+        ],
+        "visible": {
+          "cover": true,
+          "title": true,
+          "rank": true,
+          "genreChips": true,
+          "status": false,
+          "year": false,
+          "chapters": false,
+          "contentRating": false,
+          "popularity": true,
+          "favourites": true,
+          "meanScore": false,
+          "fanFavouriteRatio": false,
+          "discoveryScore": false,
+          "growthDelta": false,
+          "labels": false,
+          "sourceBadges": false,
+          "quickActions": false,
+          "description": false,
+          "links": false
+        }
+      },
+      "coverTitleIds": []
+    },
+    {
+      "id": "a6b3692d-f4bf-4b6b-86fb-2d151371d60b",
+      "name": "YAOI SMUT",
+      "description": "Ranked by Engagement ",
+      "showDescription": true,
+      "createdAt": "2026-07-09T20:19:00.418Z",
+      "updatedAt": "2026-07-09T20:19:25.060Z",
+      "filters": {
+        "sourceMode": "anilist",
+        "sourceModes": [
+          "anilist"
+        ],
+        "query": "",
+        "includeTagIds": [
+          180
+        ],
+        "excludeTagIds": [
+          4,
+          41,
+          10
+        ],
+        "tagMatch": "any",
+        "contentRatings": [
+          "pornographic",
+          "erotica"
+        ],
+        "statuses": [],
+        "minChapters": null,
+        "maxChapters": null,
+        "minYear": null,
+        "maxYear": null,
+        "minPopularity": null,
+        "maxPopularity": null,
+        "minFavourites": null,
+        "maxFavourites": null,
+        "minMeanScore": null,
+        "maxMeanScore": null,
+        "metricRanges": [],
+        "includeEstimatedDates": true,
+        "dateField": "none",
+        "rolling": {
+          "mode": "none",
+          "amount": 7,
+          "unit": "days"
+        },
+        "labelIds": []
+      },
+      "sort": [
+        {
+          "id": "e1f4b252-e308-4f25-8e04-d257cdda4331",
+          "metric": "fanFavouriteDiscoveryPercentile",
+          "direction": "desc"
+        }
+      ],
+      "view": {
+        "mode": "grid",
+        "gridColumns": 3,
+        "gridDensity": "standard",
+        "listCoverSize": "medium",
+        "listDensity": "standard",
+        "metricSlots": [
+          "fanFavouriteDiscoveryPercentile"
+        ],
+        "visible": {
+          "cover": true,
+          "title": true,
+          "rank": true,
+          "genreChips": true,
+          "status": false,
+          "year": false,
+          "chapters": false,
+          "contentRating": false,
+          "popularity": true,
+          "favourites": true,
+          "meanScore": false,
+          "fanFavouriteRatio": false,
+          "discoveryScore": false,
+          "growthDelta": false,
+          "labels": false,
+          "sourceBadges": false,
+          "quickActions": false,
+          "description": false,
+          "links": false
+        }
+      },
+      "coverTitleIds": []
+    }
+  ],
+  "feedSegments": [
+    {
+      "id": "d50f2a28-f923-4148-a39f-67f1b17882b4",
+      "name": "SMUT YURI & YAOI",
+      "feedIds": [
+        "d518b2c2-2755-4cf6-ac5d-645f97adb171",
+        "a6b3692d-f4bf-4b6b-86fb-2d151371d60b"
+      ],
+      "collapsed": true,
+      "hiddenFromHome": false,
+      "createdAt": "2026-07-09T20:19:52.840Z",
+      "updatedAt": "2026-07-09T20:20:25.312Z"
+    }
+  ],
+  "activeFeedId": "d518b2c2-2755-4cf6-ac5d-645f97adb171"
+}

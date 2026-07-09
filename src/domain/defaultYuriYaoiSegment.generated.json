@@ -1,0 +1,193 @@
+{
+  "feeds": [
+    {
+      "id": "3c19ced0-28e6-4059-a66a-7a25a20e91fd",
+      "name": "YURI RANKED",
+      "description": "Ranked by Engagement ",
+      "showDescription": true,
+      "createdAt": "2026-07-09T20:10:13.658Z",
+      "updatedAt": "2026-07-09T20:13:35.268Z",
+      "filters": {
+        "sourceMode": "anilist",
+        "sourceModes": [
+          "anilist"
+        ],
+        "query": "",
+        "includeTagIds": [
+          4
+        ],
+        "excludeTagIds": [
+          180,
+          41,
+          10
+        ],
+        "tagMatch": "any",
+        "contentRatings": [
+          "safe",
+          "suggestive"
+        ],
+        "statuses": [],
+        "minChapters": null,
+        "maxChapters": null,
+        "minYear": null,
+        "maxYear": null,
+        "minPopularity": null,
+        "maxPopularity": null,
+        "minFavourites": null,
+        "maxFavourites": null,
+        "minMeanScore": null,
+        "maxMeanScore": null,
+        "metricRanges": [],
+        "includeEstimatedDates": true,
+        "dateField": "none",
+        "rolling": {
+          "mode": "none",
+          "amount": 7,
+          "unit": "days"
+        },
+        "labelIds": []
+      },
+      "sort": [
+        {
+          "id": "97044ecd-713d-4f22-8786-547a830315b5",
+          "metric": "fanFavouriteDiscoveryPercentile",
+          "direction": "desc"
+        }
+      ],
+      "view": {
+        "mode": "grid",
+        "gridColumns": 3,
+        "gridDensity": "standard",
+        "listCoverSize": "medium",
+        "listDensity": "standard",
+        "metricSlots": [
+          "fanFavouriteDiscoveryPercentile"
+        ],
+        "visible": {
+          "cover": true,
+          "title": true,
+          "rank": true,
+          "genreChips": true,
+          "status": false,
+          "year": false,
+          "chapters": false,
+          "contentRating": false,
+          "popularity": true,
+          "favourites": true,
+          "meanScore": false,
+          "fanFavouriteRatio": false,
+          "discoveryScore": false,
+          "growthDelta": false,
+          "labels": false,
+          "sourceBadges": false,
+          "quickActions": false,
+          "description": false,
+          "links": false
+        }
+      },
+      "coverTitleIds": []
+    },
+    {
+      "id": "07610cfc-3e1a-4463-92fa-cfb62ddecec8",
+      "name": "YAOI RANKED ",
+      "description": "Ranked by Engagement ",
+      "showDescription": true,
+      "createdAt": "2026-07-09T20:16:39.540Z",
+      "updatedAt": "2026-07-09T20:17:07.067Z",
+      "filters": {
+        "sourceMode": "anilist",
+        "sourceModes": [
+          "anilist"
+        ],
+        "query": "",
+        "includeTagIds": [
+          180
+        ],
+        "excludeTagIds": [
+          4,
+          41,
+          10
+        ],
+        "tagMatch": "any",
+        "contentRatings": [
+          "safe",
+          "suggestive"
+        ],
+        "statuses": [],
+        "minChapters": null,
+        "maxChapters": null,
+        "minYear": null,
+        "maxYear": null,
+        "minPopularity": null,
+        "maxPopularity": null,
+        "minFavourites": null,
+        "maxFavourites": null,
+        "minMeanScore": null,
+        "maxMeanScore": null,
+        "metricRanges": [],
+        "includeEstimatedDates": true,
+        "dateField": "none",
+        "rolling": {
+          "mode": "none",
+          "amount": 7,
+          "unit": "days"
+        },
+        "labelIds": []
+      },
+      "sort": [
+        {
+          "id": "00d4710f-3d2e-4d3e-ba0a-2a78b9c1f297",
+          "metric": "fanFavouriteDiscoveryPercentile",
+          "direction": "desc"
+        }
+      ],
+      "view": {
+        "mode": "grid",
+        "gridColumns": 3,
+        "gridDensity": "standard",
+        "listCoverSize": "medium",
+        "listDensity": "standard",
+        "metricSlots": [
+          "fanFavouriteDiscoveryPercentile"
+        ],
+        "visible": {
+          "cover": true,
+          "title": true,
+          "rank": true,
+          "genreChips": true,
+          "status": false,
+          "year": false,
+          "chapters": false,
+          "contentRating": false,
+          "popularity": true,
+          "favourites": true,
+          "meanScore": false,
+          "fanFavouriteRatio": false,
+          "discoveryScore": false,
+          "growthDelta": false,
+          "labels": false,
+          "sourceBadges": false,
+          "quickActions": false,
+          "description": false,
+          "links": false
+        }
+      },
+      "coverTitleIds": []
+    }
+  ],
+  "feedSegments": [
+    {
+      "id": "425682ab-52c3-41b6-bd6c-02dfd28a2903",
+      "name": "YURI & YAOI",
+      "feedIds": [
+        "3c19ced0-28e6-4059-a66a-7a25a20e91fd",
+        "07610cfc-3e1a-4463-92fa-cfb62ddecec8"
+      ],
+      "collapsed": true,
+      "hiddenFromHome": false,
+      "createdAt": "2026-07-09T20:10:58.832Z",
+      "updatedAt": "2026-07-09T20:20:24.488Z"
+    }
+  ],
+  "activeFeedId": "3c19ced0-28e6-4059-a66a-7a25a20e91fd"
+}

@@ -46,6 +46,7 @@ import {
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
+import { isBuiltInSensitiveSegment, isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments";
 import { resolveRollingWindow } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
@@ -244,7 +245,7 @@ function orderedFeedsForSegments(feeds: Feed[], segments: FeedSegment[], options
   const seen = new Set<string>();
   const ordered: Feed[] = [];
   for (const segment of segments) {
-    if (options.homeOnly && segment.hiddenFromHome) continue;
+    if (options.homeOnly && (segment.hiddenFromHome || isBuiltInSensitiveSegment(segment))) continue;
     for (const feedId of segment.feedIds) {
       const feed = byId.get(feedId);
       if (!feed || seen.has(feedId)) continue;
@@ -1187,6 +1188,11 @@ function FeedsPage() {
   const autoScrollFrameRef = useRef<number | null>(null);
   const autoScrollYRef = useRef(0);
   const feedsById = useMemo(() => new Map(store.feeds.map((feed) => [feed.id, feed])), [store.feeds]);
+  const { searchAdultTags, searchRelationshipTags } = store.settings;
+  const visibleSegments = useMemo(
+    () => store.feedSegments.filter((segment) => isBuiltInSensitiveSegmentVisible(segment, { searchAdultTags, searchRelationshipTags })),
+    [searchAdultTags, searchRelationshipTags, store.feedSegments],
+  );
 
   const stopDragAutoScroll = useCallback(() => {
     if (autoScrollFrameRef.current !== null) {
@@ -1290,7 +1296,7 @@ function FeedsPage() {
       </div>
       <p className="muted tiny">Hold the grip and drag feeds between segments. Segment drag moves the whole block in Home order.</p>
       <div className="feed-segment-list">
-        {store.feedSegments.map((segment) => {
+        {visibleSegments.map((segment) => {
           const segmentFeeds = segment.feedIds.flatMap((feedId) => {
             const feed = feedsById.get(feedId);
             return feed ? [feed] : [];
@@ -2663,13 +2669,13 @@ function SettingsPage() {
       <SettingsSection title="Search">
         <ToggleRow
           label="Show BL / GL families"
-          description="Global title search includes Boys Love, Girls Love, Yaoi, Yuri, and child tags only when this is on."
+          description="Global title search includes Boys Love, Girls Love, Yaoi, Yuri, and child tags. It also reveals the Yuri & Yaoi built-in segment in Feeds."
           value={store.settings.searchRelationshipTags}
           onChange={(searchRelationshipTags) => store.updateSettings({ searchRelationshipTags })}
         />
         <ToggleRow
           label="Show Smut / Hentai"
-          description="Global title search includes Smut, Hentai, and child tags only when this is on."
+          description="Global title search includes Smut, Hentai, and child tags. It also reveals the Smut built-in segment in Feeds."
           value={store.settings.searchAdultTags}
           onChange={(searchAdultTags) => store.updateSettings({ searchAdultTags })}
         />

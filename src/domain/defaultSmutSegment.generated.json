@@ -1,0 +1,283 @@
+{
+  "feeds": [
+    {
+      "id": "64633318-2d77-4e02-90a4-450cfd60b491",
+      "name": "SMUT RANKED ",
+      "description": "Ranked by Engagement ",
+      "showDescription": true,
+      "createdAt": "2026-07-09T19:58:58.024Z",
+      "updatedAt": "2026-07-09T20:09:08.266Z",
+      "filters": {
+        "sourceMode": "anilist",
+        "sourceModes": [
+          "anilist"
+        ],
+        "query": "",
+        "includeTagIds": [
+          41,
+          10
+        ],
+        "excludeTagIds": [
+          4,
+          180
+        ],
+        "tagMatch": "any",
+        "contentRatings": [
+          "erotica",
+          "pornographic"
+        ],
+        "statuses": [],
+        "minChapters": null,
+        "maxChapters": null,
+        "minYear": null,
+        "maxYear": null,
+        "minPopularity": null,
+        "maxPopularity": null,
+        "minFavourites": null,
+        "maxFavourites": null,
+        "minMeanScore": null,
+        "maxMeanScore": null,
+        "metricRanges": [],
+        "includeEstimatedDates": true,
+        "dateField": "none",
+        "rolling": {
+          "mode": "none",
+          "amount": 7,
+          "unit": "days"
+        },
+        "labelIds": []
+      },
+      "sort": [
+        {
+          "id": "a7f766e7-ea6f-44e8-be74-a9bcbcb7a5fa",
+          "metric": "fanFavouriteDiscoveryPercentile",
+          "direction": "desc"
+        }
+      ],
+      "view": {
+        "mode": "grid",
+        "gridColumns": 3,
+        "gridDensity": "standard",
+        "listCoverSize": "medium",
+        "listDensity": "standard",
+        "metricSlots": [
+          "fanFavouriteDiscoveryPercentile"
+        ],
+        "visible": {
+          "cover": true,
+          "title": true,
+          "rank": true,
+          "genreChips": true,
+          "status": false,
+          "year": false,
+          "chapters": false,
+          "contentRating": false,
+          "popularity": true,
+          "favourites": true,
+          "meanScore": false,
+          "fanFavouriteRatio": false,
+          "discoveryScore": false,
+          "growthDelta": false,
+          "labels": false,
+          "sourceBadges": false,
+          "quickActions": false,
+          "description": false,
+          "links": false
+        }
+      },
+      "coverTitleIds": []
+    },
+    {
+      "id": "36f3b483-cec5-4dbc-9923-f5637864ed3c",
+      "name": "NEW RELEASES",
+      "description": "Smut | 1 Year Rolling Period ",
+      "showDescription": true,
+      "createdAt": "2026-07-09T20:03:19.374Z",
+      "updatedAt": "2026-07-09T20:08:55.179Z",
+      "filters": {
+        "sourceMode": "anilist",
+        "sourceModes": [
+          "anilist"
+        ],
+        "query": "",
+        "includeTagIds": [
+          41,
+          10
+        ],
+        "excludeTagIds": [
+          4,
+          180
+        ],
+        "tagMatch": "any",
+        "contentRatings": [
+          "erotica",
+          "pornographic"
+        ],
+        "statuses": [],
+        "minChapters": null,
+        "maxChapters": null,
+        "minYear": null,
+        "maxYear": null,
+        "minPopularity": null,
+        "maxPopularity": null,
+        "minFavourites": null,
+        "maxFavourites": null,
+        "minMeanScore": null,
+        "maxMeanScore": null,
+        "metricRanges": [],
+        "includeEstimatedDates": true,
+        "dateField": "release",
+        "rolling": {
+          "mode": "last",
+          "amount": 1,
+          "unit": "years"
+        },
+        "labelIds": []
+      },
+      "sort": [
+        {
+          "id": "b14997cb-65c5-4d5a-89d9-c19c296ce863",
+          "metric": "releaseDate",
+          "direction": "desc"
+        }
+      ],
+      "view": {
+        "mode": "grid",
+        "gridColumns": 3,
+        "gridDensity": "standard",
+        "listCoverSize": "medium",
+        "listDensity": "standard",
+        "metricSlots": [
+          "releaseDate"
+        ],
+        "visible": {
+          "cover": true,
+          "title": true,
+          "rank": true,
+          "genreChips": true,
+          "status": false,
+          "year": false,
+          "chapters": false,
+          "contentRating": false,
+          "popularity": true,
+          "favourites": true,
+          "meanScore": false,
+          "fanFavouriteRatio": false,
+          "discoveryScore": false,
+          "growthDelta": false,
+          "labels": false,
+          "sourceBadges": false,
+          "quickActions": false,
+          "description": false,
+          "links": false
+        }
+      },
+      "coverTitleIds": []
+    },
+    {
+      "id": "6de95f8c-2e0a-49bf-a346-b1a64ee409b6",
+      "name": "RECENTLY COMPLETED",
+      "description": "Smut | 1 Year Rolling Period ",
+      "showDescription": true,
+      "createdAt": "2026-07-09T20:07:15.779Z",
+      "updatedAt": "2026-07-09T20:08:18.219Z",
+      "filters": {
+        "sourceMode": "anilist",
+        "sourceModes": [
+          "anilist"
+        ],
+        "query": "",
+        "includeTagIds": [
+          41,
+          10
+        ],
+        "excludeTagIds": [
+          4,
+          180
+        ],
+        "tagMatch": "any",
+        "contentRatings": [
+          "erotica",
+          "pornographic"
+        ],
+        "statuses": [
+          "completed"
+        ],
+        "minChapters": null,
+        "maxChapters": null,
+        "minYear": null,
+        "maxYear": null,
+        "minPopularity": null,
+        "maxPopularity": null,
+        "minFavourites": null,
+        "maxFavourites": null,
+        "minMeanScore": null,
+        "maxMeanScore": null,
+        "metricRanges": [],
+        "includeEstimatedDates": true,
+        "dateField": "end",
+        "rolling": {
+          "mode": "last",
+          "amount": 1,
+          "unit": "years"
+        },
+        "labelIds": []
+      },
+      "sort": [
+        {
+          "id": "c916cadc-1b57-47c3-a086-0ac2a360e955",
+          "metric": "endDate",
+          "direction": "desc"
+        }
+      ],
+      "view": {
+        "mode": "grid",
+        "gridColumns": 3,
+        "gridDensity": "standard",
+        "listCoverSize": "medium",
+        "listDensity": "standard",
+        "metricSlots": [
+          "endDate"
+        ],
+        "visible": {
+          "cover": true,
+          "title": true,
+          "rank": true,
+          "genreChips": true,
+          "status": false,
+          "year": false,
+          "chapters": false,
+          "contentRating": false,
+          "popularity": true,
+          "favourites": true,
+          "meanScore": false,
+          "fanFavouriteRatio": false,
+          "discoveryScore": false,
+          "growthDelta": false,
+          "labels": false,
+          "sourceBadges": false,
+          "quickActions": false,
+          "description": false,
+          "links": false
+        }
+      },
+      "coverTitleIds": []
+    }
+  ],
+  "feedSegments": [
+    {
+      "id": "e362a18b-4a6c-42d7-85f8-f499ba2d195e",
+      "name": "SMUT",
+      "feedIds": [
+        "64633318-2d77-4e02-90a4-450cfd60b491",
+        "36f3b483-cec5-4dbc-9923-f5637864ed3c",
+        "6de95f8c-2e0a-49bf-a346-b1a64ee409b6"
+      ],
+      "collapsed": true,
+      "hiddenFromHome": true,
+      "createdAt": "2026-07-09T19:58:46.789Z",
+      "updatedAt": "2026-07-09T20:10:01.298Z"
+    }
+  ],
+  "activeFeedId": "64633318-2d77-4e02-90a4-450cfd60b491"
+}
