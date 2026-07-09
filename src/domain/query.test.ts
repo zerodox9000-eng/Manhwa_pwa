@@ -311,15 +311,19 @@ describe("runFeedQuery", () => {
           ...baseSeries[2],
           id: 91,
           display_title: "Non AniList rank two",
+          cover: "https://cdn.mangabaka.dev/covers/non-anilist-rank-two.webp",
           stats: { popularity: null, favourites: null, meanScore: null },
           mangabaka_latest_rank: 2,
+          source: { mangaupdates: { id: "rank-two", url: "https://www.mangaupdates.com/series/rank-two" } },
         },
         {
           ...baseSeries[2],
           id: 92,
           display_title: "Non AniList rank four",
+          cover: "https://cdn.mangabaka.dev/covers/non-anilist-rank-four.webp",
           stats: { popularity: null, favourites: null, meanScore: null },
           mangabaka_latest_rank: 4,
+          source: { mangaupdates: { id: "rank-four", url: "https://www.mangaupdates.com/series/rank-four" } },
         },
       ],
       tags,
@@ -330,6 +334,58 @@ describe("runFeedQuery", () => {
       metaHistoryLast: null,
     });
     expect(result.items.map((item) => item.id)).toEqual([90, 91, 92]);
+  });
+
+  it("keeps Non-AniList Add results to MangaUpdates-backed entries with real covers", () => {
+    const feed = createFeed("non anilist add hygiene");
+    feed.filters.sourceMode = "non-anilist";
+    feed.filters.sourceModes = ["non-anilist"];
+    feed.sort = [{ id: "mb", metric: "mangabakaLatestRank", direction: "asc" }];
+    feed.view.metricSlots = ["year", "chapters"];
+    const result = runFeedQuery({
+      feed,
+      series: [
+        {
+          ...baseSeries[2],
+          id: 130,
+          display_title: "Good MangaUpdates Cover",
+          cover: "https://cdn.mangabaka.dev/imgproxy/plain/x350@1/aHR0cHM6Ly9jZG4ubWFuZ2F1cGRhdGVzLmNvbS9pbWFnZS9nb29kLmpwZw",
+          mangabaka_latest_rank: 1,
+          source: { mangaupdates: { id: "good", url: "https://www.mangaupdates.com/series/good" } },
+        },
+        {
+          ...baseSeries[2],
+          id: 131,
+          display_title: "No Cover",
+          cover: null,
+          mangabaka_latest_rank: 2,
+          source: { mangaupdates: { id: "no-cover", url: "https://www.mangaupdates.com/series/no-cover" } },
+        },
+        {
+          ...baseSeries[2],
+          id: 132,
+          display_title: "Anime Planet Proxy Cover",
+          cover: "https://cdn.mangabaka.dev/imgproxy/plain/x350@1/aHR0cHM6Ly9hcC1wcm94eS5tYW5nYWJha2EuZGV2L3Byb3h5LnBocA",
+          mangabaka_latest_rank: 3,
+          source: { mangaupdates: { id: "proxy", url: "https://www.mangaupdates.com/series/proxy" } },
+        },
+        {
+          ...baseSeries[2],
+          id: 133,
+          display_title: "Anime Planet Only",
+          cover: "https://cdn.mangabaka.dev/covers/ap-only.webp",
+          mangabaka_latest_rank: 4,
+          source: { animeplanet: { id: "ap-only", url: "https://www.anime-planet.com/manga/ap-only" } },
+        },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: { ...DEFAULT_SETTINGS, nonAniListPlacement: "mixed" },
+      metaHistoryFirst: null,
+      metaHistoryLast: null,
+    });
+    expect(result.items.map((item) => item.id)).toEqual([130]);
   });
 
   it("uses AniList first-seen ordering for Add in AniList-only feeds", () => {

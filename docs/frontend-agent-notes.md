@@ -33,6 +33,7 @@ This repo is the PWA frontend for `zerodox9000-eng/manhwa_db`. Keep changes here
 - The home screen is feed-first and remembers scroll position per feed and layout.
 - Home paging uses the protected `9f16d14` native scroll-snap behavior plus chunked backend loading. Treat this as the stable baseline.
 - Feed headers use a fixed two-lane layout: the title stays on one line and can shrink before ellipsizing, while the description gets its own glass block with a stable two-line footprint.
+- Non-AniList entries shown by the `Add` / MangaBaka latest sort must have a cover and a MangaUpdates source link. Do not reject all MangaBaka `imgproxy` covers; reject only missing covers and covers that decode to Anime-Planet/AP-proxy images.
 - Title detail pages do not render embedded recommendation shelves; keep detail back/navigation free from recommendation ranking or loading work.
 - Title detail descriptions must not silently disappear because of stale cache. If cached or first fresh detail data lacks a description, retry fresh detail JSON before accepting the missing synopsis as final.
 - Double-tapping the Home feed title opens that feed's existing settings drawer. Keep this shortcut scoped to the header; it must not change pager ownership.

@@ -131,6 +131,37 @@ function anilistFirstAddedValue(series: SeriesCatalog) {
   return dateTimeValue(series.anilist_first_seen_at ?? series.first_seen_at ?? series.created_at ?? series.added_at ?? series.last_updated_at);
 }
 
+function hasMangaUpdates(series: SeriesCatalog) {
+  return Boolean(series.source?.mangaupdates?.id || series.source?.mangaupdates?.url);
+}
+
+function decodeProxyCoverUrl(value: string) {
+  try {
+    const encoded = value.split("/").at(-1);
+    if (!encoded) return "";
+    return globalThis.atob(encoded.replace(/-/g, "+").replace(/_/g, "/")).toLocaleLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isAnimePlanetProxyCover(cover: string) {
+  const normalized = cover.toLocaleLowerCase();
+  if (normalized.includes("anime-planet.com") || normalized.includes("ap-proxy.mangabaka.dev/proxy")) return true;
+  const decoded = decodeProxyCoverUrl(cover);
+  return decoded.includes("anime-planet.com") || decoded.includes("ap-proxy.mangabaka.dev/proxy");
+}
+
+function hasUsableMangaBakaCover(series: SeriesCatalog) {
+  const cover = series.cover?.trim();
+  if (!cover) return false;
+  return !isAnimePlanetProxyCover(cover);
+}
+
+function isNonAniListAddCandidate(series: SeriesCatalog) {
+  return hasUsableMangaBakaCover(series) && hasMangaUpdates(series);
+}
+
 function sourceModesFromFilters(feed: Feed) {
   const filters = feed.filters;
   return (
@@ -232,6 +263,7 @@ export function runFeedQuery(args: {
   let limitedHistory = false;
   let missingDateData = false;
   let candidates = series;
+  const usesLatestAddedSort = feed.sort.some((rule) => rule.metric === "mangabakaLatestRank");
 
   if (filters.query.trim()) {
     const q = filters.query.trim().toLocaleLowerCase();
@@ -271,6 +303,7 @@ export function runFeedQuery(args: {
     const ani = hasAniList(item);
     const sourceModes = effectiveSourceModesForFeed(feed);
     if (!sourceModes.includes(ani ? "anilist" : "non-anilist")) return false;
+    if (!ani && usesLatestAddedSort && !isNonAniListAddCandidate(item)) return false;
 
     if (filters.statuses.length > 0 && (!item.status || !filters.statuses.includes(item.status))) return false;
     if (filters.includeEstimatedDates === false && !displayReleaseDate(item)) return false;
@@ -323,7 +356,6 @@ export function runFeedQuery(args: {
     return true;
   });
 
-  const usesLatestAddedSort = feed.sort.some((rule) => rule.metric === "mangabakaLatestRank");
   const effectiveSourceModes = effectiveSourceModesForFeed(feed);
   const usesAniListAddedSort = usesLatestAddedSort && effectiveSourceModes.length === 1 && effectiveSourceModes[0] === "anilist";
   const sorted = [...result].sort((a, b) => {
