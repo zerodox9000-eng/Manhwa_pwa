@@ -24,7 +24,7 @@ import { checkFrontendDataVersion, loadCachedData, syncFrontendData } from "../s
 const STORAGE_KEY = "manhwa-library-state-v1";
 const THREE_COLUMN_FEEDS_MIGRATION_KEY = "manhwa-three-column-feeds-v1";
 const DEFAULT_FEED_LIBRARY_VERSION_KEY = "manhwa-default-feed-library-version";
-const DEFAULT_FEED_LIBRARY_VERSION = "backup-4-segmented-v3";
+const DEFAULT_FEED_LIBRARY_VERSION = "backup-4-segmented-v4";
 export const UNSEGMENTED_FEED_SEGMENT_ID = "unsegmented";
 
 function shortDataVersion(versionHash: string | null | undefined) {
