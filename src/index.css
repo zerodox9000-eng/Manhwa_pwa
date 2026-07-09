@@ -1011,7 +1011,8 @@ select {
 }
 
 .feed-segment-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: 32px 32px minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
   min-height: 42px;
@@ -1037,10 +1038,11 @@ select {
 }
 
 .feed-segment-title {
-  display: inline-flex;
+  display: flex;
   align-items: baseline;
   gap: 8px;
   min-width: 0;
+  width: 100%;
   border: 0;
   background: transparent;
   color: var(--text);
@@ -1049,6 +1051,8 @@ select {
 }
 
 .feed-segment-title span {
+  min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   font-size: 18px;
   font-weight: 850;
@@ -1058,6 +1062,7 @@ select {
 }
 
 .feed-segment-title b {
+  flex: 0 0 auto;
   color: var(--muted);
   font-size: 12px;
   font-weight: 750;
@@ -1073,6 +1078,12 @@ select {
   padding-block: 6px;
   font-size: 18px;
   font-weight: 850;
+}
+
+.feed-segment-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 7px;
 }
 
 .feed-segment-empty {

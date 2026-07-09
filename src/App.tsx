@@ -1469,38 +1469,39 @@ function FeedsPage() {
                     <b>{segmentFeeds.length}</b>
                   </button>
                 )}
-                <span className="spacer" />
-                <button
-                  className="icon-button"
-                  type="button"
-                  onClick={() => store.updateFeedSegment(segment.id, { hiddenFromHome: !segment.hiddenFromHome })}
-                  aria-label={segment.hiddenFromHome ? `Show ${segment.name} in Home` : `Hide ${segment.name} from Home`}
-                >
-                  {segment.hiddenFromHome ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-                <button
-                  className="icon-button"
-                  type="button"
-                  onClick={() => downloadSegmentBackup(segment, segmentFeeds)}
-                  aria-label={`Download ${segment.name}`}
-                >
-                  <Download size={18} />
-                </button>
-                {canDelete && (
-                  <button className="icon-button danger" type="button" onClick={() => store.deleteFeedSegment(segment.id)} aria-label={`Delete ${segment.name}`}>
-                    <Trash2 size={18} />
-                  </button>
-                )}
-                {canDeleteWithFeeds && (
+                <div className="feed-segment-actions">
                   <button
-                    className="icon-button danger"
+                    className="icon-button"
                     type="button"
-                    onClick={() => setDeleteSegmentTarget({ segment, count: segmentFeeds.length })}
-                    aria-label={`Delete ${segment.name} with feeds`}
+                    onClick={() => store.updateFeedSegment(segment.id, { hiddenFromHome: !segment.hiddenFromHome })}
+                    aria-label={segment.hiddenFromHome ? `Show ${segment.name} in Home` : `Hide ${segment.name} from Home`}
                   >
-                    <Trash2 size={18} />
+                    {segment.hiddenFromHome ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
-                )}
+                  <button
+                    className="icon-button"
+                    type="button"
+                    onClick={() => downloadSegmentBackup(segment, segmentFeeds)}
+                    aria-label={`Download ${segment.name}`}
+                  >
+                    <Download size={18} />
+                  </button>
+                  {canDelete && (
+                    <button className="icon-button danger" type="button" onClick={() => store.deleteFeedSegment(segment.id)} aria-label={`Delete ${segment.name}`}>
+                      <Trash2 size={18} />
+                    </button>
+                  )}
+                  {canDeleteWithFeeds && (
+                    <button
+                      className="icon-button danger"
+                      type="button"
+                      onClick={() => setDeleteSegmentTarget({ segment, count: segmentFeeds.length })}
+                      aria-label={`Delete ${segment.name} with feeds`}
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  )}
+                </div>
               </div>
               {!segment.collapsed && (
                 <div className="feed-cover-grid">
