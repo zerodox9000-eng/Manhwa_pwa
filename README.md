@@ -4,7 +4,7 @@ Mobile-first local PWA for building custom manhwa discovery grids from the `zero
 
 ## Live App
 
-[Open Aeon](https://zerodox9000-eng.github.io/Aeon/)
+[Open Aeon](https://zerodox9000-eng.github.io/Manhwa_pwa/)
 
 ## What This Frontend Does
 
