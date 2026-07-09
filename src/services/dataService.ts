@@ -318,37 +318,49 @@ function hasDetailDescription(detail: SeriesDetail | null | undefined) {
   return Boolean(detail?.description?.trim());
 }
 
+function delay(ms: number) {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
+}
+
+async function fetchRawDetail(source: string, id: number, attempt: number) {
+  const suffix = attempt > 0 ? `?detailRetry=${Date.now()}-${attempt}` : "";
+  const response = await fetch(`${source}/details/${id}.json${suffix}`, { cache: "no-store" });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return response.json() as Promise<unknown>;
+}
+
+async function fetchFreshSeriesDetail(source: string, id: number, attempts = 3, requireDescription = false) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const rawDetail = await fetchRawDetail(source, id, attempt);
+      const detail = fixMangaBakaLink(parseDetail(rawDetail) ?? (rawDetail as SeriesDetail));
+      if (requireDescription && !hasDetailDescription(detail) && attempt < attempts - 1) {
+        lastError = new Error("Description missing from detail response");
+        await delay(attempt === 0 ? 250 : 700);
+        continue;
+      }
+      await db.details.put(detail);
+      return detail;
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts - 1) await delay(attempt === 0 ? 250 : 700);
+    }
+  }
+  throw lastError;
+}
+
 export async function fetchSeriesDetail(source: string, id: number) {
   const cached = await db.details.get(id);
   if (cached) {
     if (!hasDetailDescription(cached)) {
-      try {
-        const rawDetail = await fetchJson<unknown>(source, `details/${id}.json`, false);
-        const detail = fixMangaBakaLink(parseDetail(rawDetail) ?? (rawDetail as SeriesDetail));
-        await db.details.put(detail);
-        return detail;
-      } catch {
-        return cached;
-      }
+      return fetchFreshSeriesDetail(source, id, 3, true);
     }
-    void fetchJson<unknown>(source, `details/${id}.json`, false)
-      .then((detail) => {
-        const parsed = parseDetail(detail);
-        if (parsed) return db.details.put(fixMangaBakaLink(parsed));
-        return undefined;
-      })
+    void fetchFreshSeriesDetail(source, id, 1)
       .catch(() => {
         // Cached detail keeps route changes instant; refresh failures can wait for the next sync.
       });
     return cached;
   }
-  try {
-    const rawDetail = await fetchJson<unknown>(source, `details/${id}.json`, false);
-    const detail = fixMangaBakaLink(parseDetail(rawDetail) ?? (rawDetail as SeriesDetail));
-    await db.details.put(detail);
-    return detail;
-  } catch (error) {
-    if (cached) return cached;
-    throw error;
-  }
+  return fetchFreshSeriesDetail(source, id, 3, true);
 }

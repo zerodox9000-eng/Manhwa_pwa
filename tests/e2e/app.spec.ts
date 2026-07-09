@@ -3,6 +3,7 @@ import { gzipSync } from "node:zlib";
 
 async function mockBackendData(page: Page) {
   const gzipJson = (value: unknown) => gzipSync(Buffer.from(JSON.stringify(value)));
+  const detailAttempts = new Map<number, number>();
   const catalog = [
     {
       id: 1252,
@@ -64,9 +65,12 @@ async function mockBackendData(page: Page) {
   await page.route("**/details/*.json", async (route) => {
     const id = Number(route.request().url().match(/details\/(\d+)\.json/)?.[1]);
     const item = catalog.find((series) => series.id === id);
+    const attempt = (detailAttempts.get(id) ?? 0) + 1;
+    detailAttempts.set(id, attempt);
+    const description = id === 1252 && attempt === 1 ? null : "QA detail description.";
     await route.fulfill({
       status: item ? 200 : 404,
-      json: item ? { ...item, description: "QA detail description." } : { error: "missing" },
+      json: item ? { ...item, description } : { error: "missing" },
     });
   });
   await page.route("**/meta/tags.json.gz", async (route) => {
@@ -123,9 +127,14 @@ async function mockBackendData(page: Page) {
 
 test.beforeEach(async ({ page }) => {
   await mockBackendData(page);
-  await page.addInitScript(() => {
+  await page.addInitScript(async () => {
     localStorage.clear();
-    indexedDB.deleteDatabase("manhwa-library");
+    await new Promise<void>((resolve) => {
+      const request = indexedDB.deleteDatabase("manhwa-library");
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+      request.onblocked = () => resolve();
+    });
   });
 });
 
