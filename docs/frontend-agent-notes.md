@@ -31,6 +31,7 @@ This repo is the PWA frontend for `zerodox9000-eng/manhwa_db`. Keep changes here
 - Import links always open a preview before applying anything.
 - Search is title-only; filtering still honors content ratings and sensitive-tag toggles.
 - The home screen is feed-first and remembers scroll position per feed and layout.
+- Feeds page grouping uses flat feed segments, not folders. Segments are headings/separators with ordered feed IDs, collapse state for Feeds only, and a Home visibility toggle. Dragging a segment moves all feeds inside it; segment drag previews stay collapsed/compact.
 - Home paging uses the protected `a1a1446` native scroll-snap behavior plus chunked backend loading. Treat this as the stable baseline for feed memory and return behavior.
 - Feed headers use a fixed two-lane layout: the title stays on one line and can shrink before ellipsizing, while the description gets its own glass block with a stable two-line footprint.
 - Non-AniList entries shown by the `Add` / MangaBaka latest sort must have a cover and a MangaUpdates source link. Do not reject all MangaBaka `imgproxy` covers; reject only missing covers and covers that decode to Anime-Planet/AP-proxy images.

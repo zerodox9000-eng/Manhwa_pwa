@@ -287,6 +287,18 @@ const folderSchema = z
   })
   .passthrough();
 
+const feedSegmentSchema = z
+  .object({
+    id: z.string(),
+    name: z.string().optional(),
+    feedIds: z.array(z.string()).optional(),
+    collapsed: z.boolean().optional(),
+    hiddenFromHome: z.boolean().optional(),
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional(),
+  })
+  .passthrough();
+
 const labelSchema = z
   .object({
     id: z.string(),
@@ -356,6 +368,7 @@ const appSettingsSchema = z
 const appStateSnapshotSchema = z
   .object({
     feeds: z.array(feedSchema).optional(),
+    feedSegments: z.array(feedSegmentSchema).optional(),
     folders: z.array(folderSchema).optional(),
     labels: z.array(labelSchema).optional(),
     settings: appSettingsSchema.optional(),

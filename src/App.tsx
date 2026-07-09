@@ -2,11 +2,15 @@ import * as Dialog from "@radix-ui/react-dialog";
 import * as Switch from "@radix-ui/react-switch";
 import {
   ArrowLeft,
+  ChevronDown,
+  ChevronRight,
   Check,
   Copy,
   Database,
   Download,
   EllipsisVertical,
+  Eye,
+  EyeOff,
   Filter,
   GripVertical,
   Home,
@@ -41,7 +45,7 @@ import {
 } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT } from "./domain/defaults";
+import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
 import { resolveRollingWindow } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
@@ -53,6 +57,7 @@ import type {
   AppStateSnapshot,
   ContentRating,
   Feed,
+  FeedSegment,
   FeedViewSettings,
   HistoryMap,
   MetricId,
@@ -64,7 +69,7 @@ import type {
   TagNode,
 } from "./domain/types";
 import { fetchSeriesDetail } from "./services/dataService";
-import { AppStoreProvider, useAppStore } from "./store/useAppStore";
+import { AppStoreProvider, UNSEGMENTED_FEED_SEGMENT_ID, useAppStore } from "./store/useAppStore";
 
 const NAV_ITEMS = [
   { id: "home", to: "/", label: "Home", icon: Home },
@@ -83,6 +88,8 @@ const HOME_FEED_INITIAL_RENDER_RADIUS = 4;
 const HOME_FEED_RENDER_RADIUS = 4;
 const FEED_TITLE_EXPANDED_MAX = 140;
 const FEED_DESCRIPTION_EXPANDED_MAX = 260;
+const FEEDS_DRAG_EDGE_SIZE = 92;
+const FEEDS_DRAG_MAX_SCROLL_SPEED = 18;
 const PWA_CHROME_THEME_COLOR = "#11131a";
 const ACCENT_COLORS = [
   { name: "Rose", value: "#ff3b81" },
@@ -230,6 +237,27 @@ function restoreHomeScroll(feed: Feed | null) {
     return;
   }
   container.scrollTo({ top: target, behavior: "auto" });
+}
+
+function orderedFeedsForSegments(feeds: Feed[], segments: FeedSegment[], options: { homeOnly?: boolean } = {}) {
+  const byId = new Map(feeds.map((feed) => [feed.id, feed]));
+  const seen = new Set<string>();
+  const ordered: Feed[] = [];
+  for (const segment of segments) {
+    if (options.homeOnly && segment.hiddenFromHome) continue;
+    for (const feedId of segment.feedIds) {
+      const feed = byId.get(feedId);
+      if (!feed || seen.has(feedId)) continue;
+      seen.add(feedId);
+      ordered.push(feed);
+    }
+  }
+  if (!options.homeOnly) {
+    for (const feed of feeds) {
+      if (!seen.has(feed.id)) ordered.push(feed);
+    }
+  }
+  return ordered;
 }
 
 function formatStatusLabel(value: string | null | undefined) {
@@ -496,7 +524,11 @@ function HomePage() {
   const renderCenterIndexRef = useRef(-1);
   const warmFeedIdsRef = useRef(new Set<string>());
   const didInitialPagerAlignRef = useRef(false);
-  const { feeds, activeFeedId, setActiveFeedId } = store;
+  const feeds = useMemo(
+    () => orderedFeedsForSegments(store.feeds, store.feedSegments, { homeOnly: true }),
+    [store.feeds, store.feedSegments],
+  );
+  const { activeFeedId, setActiveFeedId } = store;
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
   const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
 
@@ -621,7 +653,7 @@ function HomePage() {
           <strong>Loading local library</strong>
           <span className="muted">{store.syncStatus || "Opening IndexedDB cache"}</span>
         </div>
-      ) : !activeFeed ? (
+      ) : store.feeds.length === 0 ? (
         <div className="empty-state">
           <Library size={34} />
           <h1>Build your first feed</h1>
@@ -632,10 +664,19 @@ function HomePage() {
             <Plus size={18} /> Create feed
           </button>
         </div>
+      ) : !activeFeed ? (
+        <div className="empty-state">
+          <Library size={34} />
+          <h1>No visible Home segments</h1>
+          <p className="muted">Unhide a segment from Feeds to bring its feeds back to Home.</p>
+          <Link className="button primary" to="/feeds">
+            Manage feeds
+          </Link>
+        </div>
       ) : (
         <div className="feed-pager" ref={pagerRef} aria-label="Home feeds" onScroll={warmFeedsAroundScrollPosition}>
           <div className="feed-pager-track">
-            {store.feeds.map((feed, index) => {
+            {feeds.map((feed, index) => {
               const isActive = index === activeFeedIndex;
               const renderOriginIndex = renderCenterIndex >= 0 ? renderCenterIndex : activeFeedIndex;
               const renderRadius = returningFromTitle
@@ -1133,9 +1174,57 @@ function FeedsPage() {
   const [editorFeed, setEditorFeed] = useState<Feed | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  const [overSegmentId, setOverSegmentId] = useState<string | null>(null);
+  const [draggingSegmentId, setDraggingSegmentId] = useState<string | null>(null);
+  const [overDraggingSegmentId, setOverDraggingSegmentId] = useState<string | null>(null);
   const [dragGhost, setDragGhost] = useState<{ feed: Feed; covers: SeriesCatalog[]; x: number; y: number } | null>(null);
+  const [segmentGhost, setSegmentGhost] = useState<{ segment: FeedSegment; count: number; x: number; y: number } | null>(null);
+  const [renamingSegmentId, setRenamingSegmentId] = useState<string | null>(null);
+  const [segmentNameDraft, setSegmentNameDraft] = useState("");
   const [coverMap, setCoverMap] = useState<Map<string, SeriesCatalog[]>>(new Map());
   const [coversLoading, setCoversLoading] = useState(true);
+  const autoScrollFrameRef = useRef<number | null>(null);
+  const autoScrollYRef = useRef(0);
+  const feedsById = useMemo(() => new Map(store.feeds.map((feed) => [feed.id, feed])), [store.feeds]);
+
+  const stopDragAutoScroll = useCallback(() => {
+    if (autoScrollFrameRef.current !== null) {
+      cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
+    }
+  }, []);
+
+  const dragEdgeSpeed = useCallback((clientY: number) => {
+    if (clientY < FEEDS_DRAG_EDGE_SIZE) {
+      const pressure = (FEEDS_DRAG_EDGE_SIZE - clientY) / FEEDS_DRAG_EDGE_SIZE;
+      return -Math.max(4, Math.round(pressure * FEEDS_DRAG_MAX_SCROLL_SPEED));
+    }
+    const bottomEdge = window.innerHeight - FEEDS_DRAG_EDGE_SIZE;
+    if (clientY > bottomEdge) {
+      const pressure = (clientY - bottomEdge) / FEEDS_DRAG_EDGE_SIZE;
+      return Math.max(4, Math.round(pressure * FEEDS_DRAG_MAX_SCROLL_SPEED));
+    }
+    return 0;
+  }, []);
+
+  const updateDragAutoScroll = useCallback((clientY: number) => {
+    autoScrollYRef.current = clientY;
+    if (dragEdgeSpeed(clientY) === 0) {
+      stopDragAutoScroll();
+      return;
+    }
+    if (autoScrollFrameRef.current !== null) return;
+    const tick = () => {
+      const speed = dragEdgeSpeed(autoScrollYRef.current);
+      if (speed === 0) {
+        autoScrollFrameRef.current = null;
+        return;
+      }
+      window.scrollBy({ top: speed, behavior: "auto" });
+      autoScrollFrameRef.current = requestAnimationFrame(tick);
+    };
+    autoScrollFrameRef.current = requestAnimationFrame(tick);
+  }, [dragEdgeSpeed, stopDragAutoScroll]);
 
   useEffect(() => {
     const target = Number(sessionStorage.getItem(FEEDS_SCROLL_KEY));
@@ -1184,52 +1273,193 @@ function FeedsPage() {
     };
   }, [store.catalog, store.feeds, store.history, store.labels, store.settings, store.syncMeta, store.tags]);
 
+  useEffect(() => stopDragAutoScroll, [stopDragAutoScroll]);
+
   return (
     <div className="page">
       <div className="row">
         <h1>Feeds</h1>
         <span className="spacer" />
+        <button className="button ghost compact-action" type="button" onClick={() => store.createFeedSegment()} aria-label="Create segment">
+          <Plus size={16} /> Segment
+        </button>
         <button className="icon-button" type="button" onClick={() => setEditorFeed(createFeed("New Feed"))} aria-label="Create feed">
           <Plus size={18} />
         </button>
       </div>
-      <p className="muted tiny">Hold the grip and drag a feed to change Home swipe order.</p>
-      <div className="feed-cover-grid">
-        {store.feeds.map((feed) => {
-          const covers = coverMap.get(feed.id) ?? [];
+      <p className="muted tiny">Hold the grip and drag feeds between segments. Segment drag moves the whole block in Home order.</p>
+      <div className="feed-segment-list">
+        {store.feedSegments.map((segment) => {
+          const segmentFeeds = segment.feedIds.flatMap((feedId) => {
+            const feed = feedsById.get(feedId);
+            return feed ? [feed] : [];
+          });
+          const canDelete = segment.id !== "unsegmented" && segmentFeeds.length === 0;
+          const isRenaming = renamingSegmentId === segment.id;
           return (
-            <FeedCoverCard
-              key={feed.id}
-              feed={feed}
-              covers={covers}
-              loading={coversLoading && covers.length === 0}
-              dragging={draggingId === feed.id}
-              over={overId === feed.id}
-              onOpen={() => {
-                store.setActiveFeedId(feed.id);
-              }}
-              onEdit={() => setEditorFeed(feed)}
-              onDelete={() => store.deleteFeed(feed.id)}
-              onDragStart={(event) => {
-                event.currentTarget.setPointerCapture(event.pointerId);
-                setDraggingId(feed.id);
-                setOverId(feed.id);
-                setDragGhost({ feed, covers, x: event.clientX, y: event.clientY });
-              }}
-              onDragMove={(event) => {
-                if (!draggingId && !dragGhost) return;
-                setDragGhost((current) => current && { ...current, x: event.clientX, y: event.clientY });
-                const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-feed-id]");
-                if (target?.dataset.feedId) setOverId(target.dataset.feedId);
-              }}
-              onDragEnd={(event) => {
-                if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-                if (draggingId && overId) store.moveFeed(draggingId, overId);
-                setDraggingId(null);
-                setOverId(null);
-                setDragGhost(null);
-              }}
-            />
+            <section
+              key={segment.id}
+              className={`feed-segment ${draggingSegmentId === segment.id ? "dragging" : ""} ${overDraggingSegmentId === segment.id ? "drag-over" : ""} ${overSegmentId === segment.id ? "feed-over" : ""}`}
+              data-segment-id={segment.id}
+            >
+              <div className="feed-segment-header">
+                <button
+                  className="feed-segment-drag-handle"
+                  type="button"
+                  aria-label={`Move segment ${segment.name}`}
+                  onPointerDown={(event) => {
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    setDraggingSegmentId(segment.id);
+                    setOverDraggingSegmentId(segment.id);
+                    setSegmentGhost({ segment, count: segmentFeeds.length, x: event.clientX, y: event.clientY });
+                    updateDragAutoScroll(event.clientY);
+                  }}
+                  onPointerMove={(event) => {
+                    if (!draggingSegmentId && !segmentGhost) return;
+                    setSegmentGhost((current) => current && { ...current, x: event.clientX, y: event.clientY });
+                    updateDragAutoScroll(event.clientY);
+                    const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-segment-id]");
+                    if (target?.dataset.segmentId) setOverDraggingSegmentId(target.dataset.segmentId);
+                  }}
+                  onPointerUp={(event) => {
+                    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                    if (draggingSegmentId && overDraggingSegmentId) store.moveFeedSegment(draggingSegmentId, overDraggingSegmentId);
+                    setDraggingSegmentId(null);
+                    setOverDraggingSegmentId(null);
+                    setSegmentGhost(null);
+                    stopDragAutoScroll();
+                  }}
+                  onPointerCancel={(event) => {
+                    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                    setDraggingSegmentId(null);
+                    setOverDraggingSegmentId(null);
+                    setSegmentGhost(null);
+                    stopDragAutoScroll();
+                  }}
+                >
+                  <GripVertical size={18} />
+                </button>
+                <button
+                  className="feed-segment-collapse"
+                  type="button"
+                  onClick={() => store.updateFeedSegment(segment.id, { collapsed: !segment.collapsed })}
+                  aria-label={segment.collapsed ? `Expand ${segment.name}` : `Collapse ${segment.name}`}
+                >
+                  {segment.collapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                </button>
+                {isRenaming && segment.id !== "unsegmented" ? (
+                  <input
+                    className="input feed-segment-name-input"
+                    value={segmentNameDraft}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    onChange={(event) => setSegmentNameDraft(event.target.value)}
+                    onBlur={() => {
+                      const name = segmentNameDraft.trim();
+                      if (name) store.updateFeedSegment(segment.id, { name });
+                      setRenamingSegmentId(null);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                      if (event.key === "Escape") setRenamingSegmentId(null);
+                    }}
+                    autoFocus
+                  />
+                ) : (
+                  <button
+                    className="feed-segment-title"
+                    type="button"
+                    disabled={segment.id === UNSEGMENTED_FEED_SEGMENT_ID}
+                    onClick={() => {
+                      if (segment.id === UNSEGMENTED_FEED_SEGMENT_ID) return;
+                      setRenamingSegmentId(segment.id);
+                      setSegmentNameDraft(segment.name);
+                    }}
+                  >
+                    <span>{segment.name}</span>
+                    <b>{segmentFeeds.length}</b>
+                  </button>
+                )}
+                <span className="spacer" />
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={() => store.updateFeedSegment(segment.id, { hiddenFromHome: !segment.hiddenFromHome })}
+                  aria-label={segment.hiddenFromHome ? `Show ${segment.name} in Home` : `Hide ${segment.name} from Home`}
+                >
+                  {segment.hiddenFromHome ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={() => downloadSegmentBackup(segment, segmentFeeds)}
+                  aria-label={`Download ${segment.name}`}
+                >
+                  <Download size={18} />
+                </button>
+                {canDelete && (
+                  <button className="icon-button danger" type="button" onClick={() => store.deleteFeedSegment(segment.id)} aria-label={`Delete ${segment.name}`}>
+                    <Trash2 size={18} />
+                  </button>
+                )}
+              </div>
+              {!segment.collapsed && (
+                <div className="feed-cover-grid">
+                  {segmentFeeds.map((feed) => {
+                    const covers = coverMap.get(feed.id) ?? [];
+                    return (
+                      <FeedCoverCard
+                        key={feed.id}
+                        feed={feed}
+                        covers={covers}
+                        loading={coversLoading && covers.length === 0}
+                        dragging={draggingId === feed.id}
+                        over={overId === feed.id}
+                        onOpen={() => {
+                          store.setActiveFeedId(feed.id);
+                        }}
+                        onEdit={() => setEditorFeed(feed)}
+                        onDelete={() => store.deleteFeed(feed.id)}
+                        onDragStart={(event) => {
+                          event.currentTarget.setPointerCapture(event.pointerId);
+                          setDraggingId(feed.id);
+                          setOverId(feed.id);
+                          setOverSegmentId(segment.id);
+                          setDragGhost({ feed, covers, x: event.clientX, y: event.clientY });
+                          updateDragAutoScroll(event.clientY);
+                        }}
+                        onDragMove={(event) => {
+                          if (!draggingId && !dragGhost) return;
+                          setDragGhost((current) => current && { ...current, x: event.clientX, y: event.clientY });
+                          updateDragAutoScroll(event.clientY);
+                          const element = document.elementFromPoint(event.clientX, event.clientY);
+                          const targetFeed = element?.closest<HTMLElement>("[data-feed-id]");
+                          const targetSegment = element?.closest<HTMLElement>("[data-segment-id]");
+                          if (targetFeed?.dataset.feedId) setOverId(targetFeed.dataset.feedId);
+                          else setOverId(null);
+                          if (targetSegment?.dataset.segmentId) setOverSegmentId(targetSegment.dataset.segmentId);
+                        }}
+                        onDragEnd={(event) => {
+                          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                          if (draggingId && overId) store.moveFeed(draggingId, overId);
+                          else if (draggingId && overSegmentId) store.moveFeedToSegment(draggingId, overSegmentId);
+                          setDraggingId(null);
+                          setOverId(null);
+                          setOverSegmentId(null);
+                          setDragGhost(null);
+                          stopDragAutoScroll();
+                        }}
+                      />
+                    );
+                  })}
+                  {segmentFeeds.length === 0 && (
+                    <div className="feed-segment-empty">Drop feeds here</div>
+                  )}
+                </div>
+              )}
+            </section>
           );
         })}
       </div>
@@ -1237,6 +1467,13 @@ function FeedsPage() {
         <div className="feed-drag-ghost" style={{ left: dragGhost.x, top: dragGhost.y }}>
           <MosaicCover items={dragGhost.covers} title={dragGhost.feed.name} />
           <strong>{dragGhost.feed.name}</strong>
+        </div>
+      )}
+      {segmentGhost && (
+        <div className="segment-drag-ghost" style={{ left: segmentGhost.x, top: segmentGhost.y }}>
+          <GripVertical size={16} />
+          <strong>{segmentGhost.segment.name}</strong>
+          <span>{segmentGhost.count} feeds</span>
         </div>
       )}
       <BottomDrawer title={editorFeed?.name ?? "Feed"} open={Boolean(editorFeed)} onOpenChange={(open) => !open && setEditorFeed(null)}>
@@ -2323,8 +2560,8 @@ function SettingsPage() {
     try {
       const snapshot = JSON.parse(await file.text()) as Partial<AppStateSnapshot>;
       if (!Array.isArray(snapshot.feeds)) throw new Error("This file does not contain a feeds backup.");
-      store.importSnapshot(snapshot, "replace");
-      setBackupStatus(`Imported ${snapshot.feeds.length.toLocaleString()} feeds.`);
+      store.importSnapshot(snapshot, "merge");
+      setBackupStatus(`Added ${snapshot.feeds.length.toLocaleString()} feeds.`);
     } catch (error) {
       setBackupStatus(error instanceof Error ? error.message : "Could not import this backup.");
     } finally {
@@ -3006,10 +3243,26 @@ function SharePanel({ payload }: { payload: SharePayload }) {
 function makeSnapshot(store: ReturnType<typeof useAppStore>) {
   return {
     feeds: store.feeds,
+    feedSegments: store.feedSegments,
     settings: store.settings,
     activeFeedId: store.activeFeedId,
     lastRoute: window.location.hash,
   };
+}
+
+function downloadSegmentBackup(segment: FeedSegment, feeds: Feed[]) {
+  const feedIdMap = new Map(feeds.map((feed) => [feed.id, makeId()]));
+  const exportedFeeds = feeds.map((feed) => ({ ...feed, id: feedIdMap.get(feed.id) ?? makeId() }));
+  const snapshot: Partial<AppStateSnapshot> = {
+    feeds: exportedFeeds,
+    feedSegments: [{ ...segment, id: makeId(), feedIds: exportedFeeds.map((feed) => feed.id) }],
+    activeFeedId: exportedFeeds[0]?.id ?? null,
+  };
+  downloadText(`${safeFilename(segment.name)}-segment.json`, JSON.stringify(snapshot, null, 2));
+}
+
+function safeFilename(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "segment";
 }
 
 function downloadText(filename: string, text: string) {

@@ -238,6 +238,16 @@ export interface Feed {
   coverTitleIds: number[];
 }
 
+export interface FeedSegment {
+  id: string;
+  name: string;
+  feedIds: string[];
+  collapsed: boolean;
+  hiddenFromHome: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Folder {
   id: string;
   name: string;
@@ -330,6 +340,7 @@ export interface SyncMeta {
 
 export interface AppStateSnapshot {
   feeds: Feed[];
+  feedSegments?: FeedSegment[];
   folders?: Folder[];
   labels?: UserLabel[];
   settings: AppSettings;

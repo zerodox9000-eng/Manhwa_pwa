@@ -1,5 +1,5 @@
 import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS } from "../domain/defaults";
+import { DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS, makeId } from "../domain/defaults";
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import { feedUsesAniListOnlyParameters } from "../domain/query";
 import { parseAppStateSnapshot, parseSettings } from "../domain/validation";
@@ -7,6 +7,7 @@ import type {
   AppSettings,
   AppStateSnapshot,
   Feed,
+  FeedSegment,
   Folder,
   HistoryMap,
   RecommendationFeature,
@@ -20,6 +21,7 @@ import { checkFrontendDataVersion, loadBundledCatalog, loadCachedData, syncFront
 
 const STORAGE_KEY = "manhwa-library-state-v1";
 const THREE_COLUMN_FEEDS_MIGRATION_KEY = "manhwa-three-column-feeds-v1";
+export const UNSEGMENTED_FEED_SEGMENT_ID = "unsegmented";
 
 function shortDataVersion(versionHash: string | null | undefined) {
   if (!versionHash) return "none";
@@ -34,6 +36,7 @@ interface StoreState {
   recommendationFeatures: RecommendationFeature[];
   syncMeta: SyncMeta | null;
   feeds: Feed[];
+  feedSegments: FeedSegment[];
   folders: Folder[];
   labels: UserLabel[];
   settings: AppSettings;
@@ -44,6 +47,11 @@ interface StoreState {
   upsertFeed: (feed: Feed) => void;
   deleteFeed: (id: string) => void;
   moveFeed: (id: string, targetId: string) => void;
+  moveFeedToSegment: (id: string, segmentId: string) => void;
+  createFeedSegment: (name?: string) => void;
+  updateFeedSegment: (id: string, patch: Partial<Pick<FeedSegment, "name" | "collapsed" | "hiddenFromHome">>) => void;
+  deleteFeedSegment: (id: string) => void;
+  moveFeedSegment: (id: string, targetId: string) => void;
   upsertFolder: (folder: Folder) => void;
   deleteFolder: (id: string) => void;
   upsertLabel: (label: UserLabel) => void;
@@ -185,6 +193,86 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
   return normalized;
 }
 
+function createSegment(name = "New Segment", feedIds: string[] = []): FeedSegment {
+  const now = new Date().toISOString();
+  return {
+    id: makeId(),
+    name,
+    feedIds,
+    collapsed: false,
+    hiddenFromHome: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function unsegmentedSegment(feedIds: string[] = []): FeedSegment {
+  const now = new Date().toISOString();
+  return {
+    id: UNSEGMENTED_FEED_SEGMENT_ID,
+    name: "Unsegmented",
+    feedIds,
+    collapsed: false,
+    hiddenFromHome: false,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function normalizeFeedSegments(feeds: Feed[], segments?: FeedSegment[]): FeedSegment[] {
+  const feedIdSet = new Set(feeds.map((feed) => feed.id));
+  const assigned = new Set<string>();
+  const normalized: FeedSegment[] = [];
+  const source = segments?.length ? segments : [unsegmentedSegment(feeds.map((feed) => feed.id))];
+  let hasUnsegmented = false;
+
+  for (const segment of source) {
+    const id = segment.id || makeId();
+    const feedIds: string[] = [];
+    for (const feedId of segment.feedIds ?? []) {
+      if (!feedIdSet.has(feedId) || assigned.has(feedId)) continue;
+      assigned.add(feedId);
+      feedIds.push(feedId);
+    }
+    if (id === UNSEGMENTED_FEED_SEGMENT_ID) hasUnsegmented = true;
+    normalized.push({
+      id,
+      name: id === UNSEGMENTED_FEED_SEGMENT_ID ? "Unsegmented" : segment.name || "New Segment",
+      feedIds,
+      collapsed: Boolean(segment.collapsed),
+      hiddenFromHome: Boolean(segment.hiddenFromHome),
+      createdAt: segment.createdAt || new Date().toISOString(),
+      updatedAt: segment.updatedAt || segment.createdAt || new Date().toISOString(),
+    });
+  }
+
+  if (!hasUnsegmented) normalized.unshift(unsegmentedSegment());
+  const unsegmented = normalized.find((segment) => segment.id === UNSEGMENTED_FEED_SEGMENT_ID) ?? normalized[0];
+  for (const feed of feeds) {
+    if (!assigned.has(feed.id)) unsegmented.feedIds.push(feed.id);
+  }
+
+  return normalized;
+}
+
+function orderFeedsBySegments(feeds: Feed[], segments: FeedSegment[]) {
+  const byId = new Map(feeds.map((feed) => [feed.id, feed]));
+  const seen = new Set<string>();
+  const ordered: Feed[] = [];
+  for (const segment of segments) {
+    for (const feedId of segment.feedIds) {
+      const feed = byId.get(feedId);
+      if (!feed || seen.has(feedId)) continue;
+      seen.add(feedId);
+      ordered.push(feed);
+    }
+  }
+  for (const feed of feeds) {
+    if (!seen.has(feed.id)) ordered.push(feed);
+  }
+  return ordered;
+}
+
 const AppStoreContext = createContext<StoreState | null>(null);
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
@@ -207,6 +295,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (!shouldMigrateFeedsToThreeColumns) return normalizedFeeds;
     return normalizedFeeds.map((feed) => ({ ...feed, view: { ...feed.view, gridColumns: 3 } }));
   });
+  const [feedSegments, setFeedSegments] = useState<FeedSegment[]>(() => normalizeFeedSegments(
+    (hasSavedState ? local.feeds ?? [] : (defaultFeedsJson as Feed[])).map((feed) => normalizeFeed(feed)),
+    local.feedSegments,
+  ));
   const [folders, setFolders] = useState<Folder[]>(local.folders ?? []);
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
   const [settings, setSettings] = useState<AppSettings>(mergeSettings(parseSettings(local.settings) ?? local.settings));
@@ -299,8 +391,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    setFeedSegments((current) => normalizeFeedSegments(feeds, current));
+  }, [feeds]);
+
+  useEffect(() => {
     const snapshot: AppStateSnapshot = {
       feeds,
+      feedSegments,
       folders,
       labels,
       settings,
@@ -308,7 +405,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       lastRoute: window.location.hash,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-  }, [feeds, folders, labels, settings, activeFeedId]);
+  }, [feeds, feedSegments, folders, labels, settings, activeFeedId]);
 
   const refreshData = useCallback((options?: { force?: boolean }) => {
     if (syncInFlightRef.current) return syncInFlightRef.current;
@@ -360,23 +457,103 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const exists = current.some((item) => item.id === feed.id);
       return exists ? current.map((item) => (item.id === feed.id ? updated : item)) : [...current, updated];
     });
+    setFeedSegments((current) => {
+      if (current.some((segment) => segment.feedIds.includes(updated.id))) return current;
+      const normalized = current.length ? current : [unsegmentedSegment()];
+      const targetIndex = Math.max(0, normalized.length - 1);
+      return normalized.map((segment, index) =>
+        index === targetIndex ? { ...segment, feedIds: [...segment.feedIds, updated.id], updatedAt: new Date().toISOString() } : segment,
+      );
+    });
     setActiveFeedId((current) => current ?? updated.id);
   }, []);
 
   const deleteFeed = useCallback((id: string) => {
     setFeeds((current) => current.filter((feed) => feed.id !== id));
+    setFeedSegments((current) =>
+      current.map((segment) => ({ ...segment, feedIds: segment.feedIds.filter((feedId) => feedId !== id) })),
+    );
     setActiveFeedId((current) => (current === id ? null : current));
   }, []);
 
   const moveFeed = useCallback((id: string, targetId: string) => {
-    setFeeds((current) => {
-      const index = current.findIndex((feed) => feed.id === id);
-      const targetIndex = current.findIndex((feed) => feed.id === targetId);
-      if (index < 0 || targetIndex < 0 || index === targetIndex) return current;
-      const copy = [...current];
-      const [moved] = copy.splice(index, 1);
-      copy.splice(targetIndex, 0, moved);
-      return copy;
+    setFeedSegments((current) => {
+      let sourceIndex = -1;
+      let targetIndex = -1;
+      current.forEach((segment, index) => {
+        if (segment.feedIds.includes(id)) sourceIndex = index;
+        if (segment.feedIds.includes(targetId)) targetIndex = index;
+      });
+      if (sourceIndex < 0 || targetIndex < 0 || id === targetId) return current;
+      const sourceLocalIndex = current[sourceIndex].feedIds.indexOf(id);
+      const targetLocalIndex = current[targetIndex].feedIds.indexOf(targetId);
+      const next = current.map((segment) => ({ ...segment, feedIds: segment.feedIds.filter((feedId) => feedId !== id) }));
+      const insertAt = sourceIndex === targetIndex && sourceLocalIndex < targetLocalIndex
+        ? targetLocalIndex
+        : next[targetIndex].feedIds.indexOf(targetId);
+      next[targetIndex] = {
+        ...next[targetIndex],
+        feedIds: [
+          ...next[targetIndex].feedIds.slice(0, insertAt < 0 ? next[targetIndex].feedIds.length : insertAt),
+          id,
+          ...next[targetIndex].feedIds.slice(insertAt < 0 ? next[targetIndex].feedIds.length : insertAt),
+        ],
+        updatedAt: new Date().toISOString(),
+      };
+      setFeeds((feedsCurrent) => orderFeedsBySegments(feedsCurrent, next));
+      return next;
+    });
+  }, []);
+
+  const moveFeedToSegment = useCallback((id: string, segmentId: string) => {
+    setFeedSegments((current) => {
+      const targetIndex = current.findIndex((segment) => segment.id === segmentId);
+      if (targetIndex < 0) return current;
+      const next = current.map((segment) => ({ ...segment, feedIds: segment.feedIds.filter((feedId) => feedId !== id) }));
+      next[targetIndex] = {
+        ...next[targetIndex],
+        feedIds: [...next[targetIndex].feedIds, id],
+        updatedAt: new Date().toISOString(),
+      };
+      setFeeds((feedsCurrent) => orderFeedsBySegments(feedsCurrent, next));
+      return next;
+    });
+  }, []);
+
+  const createFeedSegment = useCallback((name = "New Segment") => {
+    setFeedSegments((current) => [...normalizeFeedSegments(feeds, current), createSegment(name)]);
+  }, [feeds]);
+
+  const updateFeedSegment = useCallback((id: string, patch: Partial<Pick<FeedSegment, "name" | "collapsed" | "hiddenFromHome">>) => {
+    setFeedSegments((current) =>
+      current.map((segment) =>
+        segment.id === id
+          ? {
+              ...segment,
+              ...patch,
+              name: segment.id === UNSEGMENTED_FEED_SEGMENT_ID ? "Unsegmented" : patch.name ?? segment.name,
+              updatedAt: new Date().toISOString(),
+            }
+          : segment,
+      ),
+    );
+  }, []);
+
+  const deleteFeedSegment = useCallback((id: string) => {
+    if (id === UNSEGMENTED_FEED_SEGMENT_ID) return;
+    setFeedSegments((current) => current.filter((segment) => segment.id !== id || segment.feedIds.length > 0));
+  }, []);
+
+  const moveFeedSegment = useCallback((id: string, targetId: string) => {
+    setFeedSegments((current) => {
+      const from = current.findIndex((segment) => segment.id === id);
+      const to = current.findIndex((segment) => segment.id === targetId);
+      if (from < 0 || to < 0 || from === to) return current;
+      const next = [...current];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      setFeeds((feedsCurrent) => orderFeedsBySegments(feedsCurrent, next));
+      return next;
     });
   }, []);
 
@@ -406,6 +583,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(STORAGE_KEY);
     await db.details.clear();
     setFeeds([]);
+    setFeedSegments([unsegmentedSegment()]);
     setFolders([]);
     setLabels([]);
     setSettings(DEFAULT_SETTINGS);
@@ -415,23 +593,39 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const importSnapshot = useCallback((snapshot: Partial<AppStateSnapshot>, mode: "merge" | "replace") => {
     const safeSnapshot = parseAppStateSnapshot(snapshot) ?? snapshot;
     if (mode === "replace") {
-      setFeeds((safeSnapshot.feeds ?? []).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true })));
+      const nextFeeds = (safeSnapshot.feeds ?? []).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true }));
+      setFeeds(nextFeeds);
+      setFeedSegments(normalizeFeedSegments(nextFeeds, safeSnapshot.feedSegments));
       setFolders(safeSnapshot.folders ?? []);
       setLabels(safeSnapshot.labels ?? []);
       setSettings(mergeSettings(safeSnapshot.settings ? parseSettings(safeSnapshot.settings) ?? safeSnapshot.settings : undefined));
       setActiveFeedId(safeSnapshot.activeFeedId ?? null);
       return;
     }
-    setFeeds((current) => [
-      ...current,
-      ...(safeSnapshot.feeds ?? []).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true })),
-    ]);
+    const sourceFeeds = (safeSnapshot.feeds ?? []).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true }));
+    const importedIdMap = new Map(sourceFeeds.map((feed) => [feed.id, makeId()]));
+    const incomingFeeds = sourceFeeds.map((feed) => ({ ...feed, id: importedIdMap.get(feed.id) ?? makeId() }));
+    const incomingSegments = safeSnapshot.feedSegments?.length
+      ? safeSnapshot.feedSegments.map((segment) => ({
+          ...segment,
+          id: makeId(),
+          feedIds: (segment.feedIds ?? []).flatMap((feedId) => {
+            const nextId = importedIdMap.get(feedId);
+            return nextId ? [nextId] : [];
+          }),
+        }))
+      : [createSegment("Imported", incomingFeeds.map((feed) => feed.id))];
+    setFeeds((current) => [...current, ...incomingFeeds]);
+    setFeedSegments((current) => {
+      const normalized = current.length ? current : [unsegmentedSegment()];
+      return normalizeFeedSegments([...feeds, ...incomingFeeds], [...normalized, ...incomingSegments]);
+    });
     setFolders((current) => [...current, ...(safeSnapshot.folders ?? [])]);
     setLabels((current) => [...current, ...(safeSnapshot.labels ?? [])]);
-    if (safeSnapshot.settings) {
+    if (safeSnapshot.settings && incomingFeeds.length === 0 && incomingSegments.every((segment) => segment.feedIds.length === 0)) {
       setSettings((current) => mergeSettings({ ...current, ...(parseSettings(safeSnapshot.settings) ?? safeSnapshot.settings) }));
     }
-  }, []);
+  }, [feeds]);
 
   const value = useMemo<StoreState>(
     () => ({
@@ -442,6 +636,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       recommendationFeatures,
       syncMeta,
       feeds,
+      feedSegments,
       folders,
       labels,
       settings,
@@ -452,6 +647,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       upsertFeed,
       deleteFeed,
       moveFeed,
+      moveFeedToSegment,
+      createFeedSegment,
+      updateFeedSegment,
+      deleteFeedSegment,
+      moveFeedSegment,
       upsertFolder,
       deleteFolder,
       upsertLabel,
@@ -468,6 +668,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       recommendationFeatures,
       syncMeta,
       feeds,
+      feedSegments,
       folders,
       labels,
       settings,
@@ -478,6 +679,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       upsertFeed,
       deleteFeed,
       moveFeed,
+      moveFeedToSegment,
+      createFeedSegment,
+      updateFeedSegment,
+      deleteFeedSegment,
+      moveFeedSegment,
       upsertFolder,
       deleteFolder,
       upsertLabel,
