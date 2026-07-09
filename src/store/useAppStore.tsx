@@ -23,7 +23,7 @@ import { checkFrontendDataVersion, loadCachedData, syncFrontendData } from "../s
 const STORAGE_KEY = "manhwa-library-state-v1";
 const THREE_COLUMN_FEEDS_MIGRATION_KEY = "manhwa-three-column-feeds-v1";
 const DEFAULT_FEED_LIBRARY_VERSION_KEY = "manhwa-default-feed-library-version";
-const DEFAULT_FEED_LIBRARY_VERSION = "backup-4-segmented";
+const DEFAULT_FEED_LIBRARY_VERSION = "backup-4-segmented-v2";
 export const UNSEGMENTED_FEED_SEGMENT_ID = "unsegmented";
 
 function shortDataVersion(versionHash: string | null | undefined) {
@@ -140,7 +140,7 @@ function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
   };
 }
 
-export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boolean } = {}): Feed {
+export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boolean; preserveFeedSettings?: boolean } = {}): Feed {
   const excludeTagIds = feed.filters.excludeTagIds?.length
     ? feed.filters.excludeTagIds
     : DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS;
@@ -168,8 +168,8 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
       metricRanges: feed.filters.metricRanges ?? [],
       includeEstimatedDates: feed.filters.includeEstimatedDates ?? true,
       excludeTagIds,
-      labelIds: [],
-      query: "",
+      labelIds: options.preserveFeedSettings ? feed.filters.labelIds ?? [] : [],
+      query: options.preserveFeedSettings ? feed.filters.query ?? "" : "",
     },
     sort: feed.sort?.length ? feed.sort : [],
     view: {
@@ -180,7 +180,7 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
       visible: {
         ...DEFAULT_SETTINGS.defaultFeedView.visible,
         ...feed.view?.visible,
-        labels: false,
+        labels: options.preserveFeedSettings ? feed.view?.visible?.labels ?? false : false,
       },
     },
   };
@@ -278,7 +278,7 @@ function orderFeedsBySegments(feeds: Feed[], segments: FeedSegment[]) {
 }
 
 function defaultFeeds() {
-  return (defaultFeedsJson as Feed[]).map((feed) => normalizeFeed(feed));
+  return (defaultFeedsJson as Feed[]).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true, preserveFeedSettings: true }));
 }
 
 function defaultFeedSegments(feeds: Feed[]) {
@@ -317,7 +317,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [syncMeta, setSyncMeta] = useState<SyncMeta | null>(null);
   const [feeds, setFeeds] = useState<Feed[]>(() => {
     const normalizedFeeds = initialFeeds;
-    if (!shouldMigrateFeedsToThreeColumns || replaceDefaultLikeSavedFeeds) return normalizedFeeds;
+    if (!shouldMigrateFeedsToThreeColumns || replaceDefaultLikeSavedFeeds || !hasSavedState) return normalizedFeeds;
     return normalizedFeeds.map((feed) => ({ ...feed, view: { ...feed.view, gridColumns: 3 } }));
   });
   const [feedSegments, setFeedSegments] = useState<FeedSegment[]>(() => normalizeFeedSegments(
