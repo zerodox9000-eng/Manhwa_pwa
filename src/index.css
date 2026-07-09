@@ -2285,14 +2285,6 @@ textarea,
   margin-bottom: 0;
 }
 
-.detail-rec-section h3 {
-  margin: 2px 0 12px;
-  color: rgba(236, 240, 249, 0.9);
-  font-size: 15px;
-  line-height: 1.2;
-  font-weight: 650;
-}
-
 .rich-description {
   display: grid;
   gap: 12px;
@@ -2313,11 +2305,6 @@ textarea,
 
 .rich-description a:hover {
   text-decoration: underline;
-}
-
-.detail-rec-section > h3 {
-  margin: 20px 0 10px;
-  font-size: 15px;
 }
 
 .detail-toggle-list .setting-row {
@@ -3466,6 +3453,20 @@ textarea,
   min-height: 59px;
   font-size: 27.5px;
   transform: none;
+}
+
+.feed-summary-card.expanded .feed-bar-cover-wash {
+  min-height: 0;
+}
+
+.feed-description-text.expanded {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .settings-page,

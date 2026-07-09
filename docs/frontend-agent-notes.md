@@ -33,6 +33,7 @@ This repo is the PWA frontend for `zerodox9000-eng/manhwa_db`. Keep changes here
 - The home screen is feed-first and remembers scroll position per feed and layout.
 - Home paging uses the protected `9f16d14` native scroll-snap behavior plus chunked backend loading. Treat this as the stable baseline.
 - Feed headers use a fixed two-lane layout: the title stays on one line and can shrink before ellipsizing, while the description gets its own glass block with a stable two-line footprint.
+- Title detail pages do not render embedded recommendation shelves; keep detail back/navigation free from recommendation ranking or loading work.
 - Double-tapping the Home feed title opens that feed's existing settings drawer. Keep this shortcut scoped to the header; it must not change pager ownership.
 - Restore keys for Home should stay scoped to feed id plus grid columns and density, otherwise 4/5-grid back navigation will drift.
 - Blacklist `6b05599 Improve navigation and loading responsiveness`: do not reintroduce `HOME_FEED_PREVIEW_TITLES = 18`, delayed route wrappers, hidden-pane vertical restore, or post-swipe scroll correction.

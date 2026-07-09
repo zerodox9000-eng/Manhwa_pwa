@@ -715,7 +715,7 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
   );
   const hasDescription = feed.showDescription && Boolean(feed.description.trim());
   const titleCanExpand = feed.name.trim().length > 34;
-  const descriptionCanExpand = hasDescription && feed.description.trim().length > 72;
+  const descriptionCanExpand = hasDescription;
   const descriptionText = hasDescription ? cappedText(feed.description, FEED_DESCRIPTION_EXPANDED_MAX) : "";
   return (
     <>
@@ -746,9 +746,8 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
                 <button
                   className={`feed-description-button ${descriptionCanExpand ? "expandable" : ""}`}
                   type="button"
-                  onClick={() => descriptionCanExpand && setDescriptionExpanded((expanded) => !expanded)}
+                  onClick={() => setDescriptionExpanded((expanded) => !expanded)}
                   aria-expanded={descriptionCanExpand ? descriptionExpanded : undefined}
-                  aria-disabled={!descriptionCanExpand}
                 >
                   <span className={`feed-description-text ${descriptionExpanded ? "expanded" : ""}`}>{descriptionText}</span>
                 </button>
@@ -2092,41 +2091,6 @@ function RecommendationsPage() {
   );
 }
 
-function recommendationItems(base: SeriesCatalog, shelf: RecommendationShelf, store: ReturnType<typeof useAppStore>) {
-  const buildPool = (metricRanges: RecommendationShelf["metricRanges"]) => {
-    const filterFeed = createFeed(shelf.name);
-    filterFeed.filters.sourceModes = shelf.sourceModes;
-    filterFeed.filters.sourceMode = shelf.sourceModes.length === 2 ? "mixed" : shelf.sourceModes[0];
-    filterFeed.filters.contentRatings = ["safe", "suggestive"];
-    filterFeed.filters.metricRanges = metricRanges;
-    return runFeedQuery({
-      feed: filterFeed,
-      series: store.catalog,
-      tags: store.tags,
-      history: store.history,
-      labels: store.labels,
-      settings: store.settings,
-      metaHistoryFirst: store.syncMeta?.historyFirstDate,
-      metaHistoryLast: store.syncMeta?.historyLastDate,
-    }).items.filter((item) => item.id !== base.id);
-  };
-
-  const rankPool = (pool: SeriesCatalog[]) =>
-    rankRecommendations({
-      base,
-      candidates: pool,
-      tags: store.tags,
-      features: store.recommendationFeatures,
-      shelf,
-      history: store.history,
-      latestDate: store.syncMeta?.historyLastDate,
-    });
-
-  const ranked = rankPool(buildPool(shelf.metricRanges));
-  if (ranked.length || !shelf.metricRanges.length) return ranked;
-  return rankPool(buildPool([]));
-}
-
 function RecommendationResults({
   base,
   shelf,
@@ -2178,6 +2142,41 @@ function RecommendationResults({
   }
 
   return <TitleCollection items={items} feed={feed} history={store.history} latestDate={store.syncMeta?.historyLastDate} />;
+}
+
+function recommendationItems(base: SeriesCatalog, shelf: RecommendationShelf, store: ReturnType<typeof useAppStore>) {
+  const buildPool = (metricRanges: RecommendationShelf["metricRanges"]) => {
+    const filterFeed = createFeed(shelf.name);
+    filterFeed.filters.sourceModes = shelf.sourceModes;
+    filterFeed.filters.sourceMode = shelf.sourceModes.length === 2 ? "mixed" : shelf.sourceModes[0];
+    filterFeed.filters.contentRatings = ["safe", "suggestive"];
+    filterFeed.filters.metricRanges = metricRanges;
+    return runFeedQuery({
+      feed: filterFeed,
+      series: store.catalog,
+      tags: store.tags,
+      history: store.history,
+      labels: store.labels,
+      settings: store.settings,
+      metaHistoryFirst: store.syncMeta?.historyFirstDate,
+      metaHistoryLast: store.syncMeta?.historyLastDate,
+    }).items.filter((item) => item.id !== base.id);
+  };
+
+  const rankPool = (pool: SeriesCatalog[]) =>
+    rankRecommendations({
+      base,
+      candidates: pool,
+      tags: store.tags,
+      features: store.recommendationFeatures,
+      shelf,
+      history: store.history,
+      latestDate: store.syncMeta?.historyLastDate,
+    });
+
+  const ranked = rankPool(buildPool(shelf.metricRanges));
+  if (ranked.length || !shelf.metricRanges.length) return ranked;
+  return rankPool(buildPool([]));
 }
 
 function RecommendationShelfEditor({
@@ -2458,20 +2457,20 @@ function TitleDetailPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("Loading detail");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [showAllRecommendations, setShowAllRecommendations] = useState(false);
-  const [showRecommendations, setShowRecommendations] = useState(false);
   const detailLayoutKey = `manhwa-detail-layout:${store.activeFeedId ?? "default"}`;
   const [visible, setVisible] = useState(() => {
     try {
       return {
         ...DEFAULT_DETAIL_VISIBLE,
         description: true,
-        authorsArtists: true,
         links: true,
         ...JSON.parse(localStorage.getItem(detailLayoutKey) ?? "{}"),
+        cover: true,
+        title: true,
+        authorsArtists: true,
       };
     } catch {
-      return { ...DEFAULT_DETAIL_VISIBLE, description: true, authorsArtists: true, links: true };
+      return { ...DEFAULT_DETAIL_VISIBLE, description: true, links: true, cover: true, title: true, authorsArtists: true };
     }
   });
   const tagsById = useMemo(() => new Map(store.tags.map((tag) => [tag.id, tag])), [store.tags]);
@@ -2489,7 +2488,6 @@ function TitleDetailPage() {
     setDetail(null);
     setLoading(true);
     setStatus("Loading detail");
-    setShowRecommendations(false);
     if (invalidRoute) {
       setStatus("Invalid title route");
       setLoading(false);
@@ -2506,6 +2504,12 @@ function TitleDetailPage() {
       })
       .catch((error) => {
         if (!cancelled) {
+          if (catalogItem) {
+            setDetail({ ...catalogItem, description: null });
+            setLoading(false);
+            setStatus(error instanceof Error ? error.message : "Could not load detail");
+            return;
+          }
           setStatus(error instanceof Error ? error.message : "Could not load detail");
           setLoading(false);
         }
@@ -2515,7 +2519,7 @@ function TitleDetailPage() {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [id, invalidRoute, store.settings.dataSourceUrl]);
+  }, [catalogItem, id, invalidRoute, store.settings.dataSourceUrl]);
 
   const series = useMemo(() => {
     if (!detail || detail.id !== id) return null;
@@ -2538,12 +2542,6 @@ function TitleDetailPage() {
 
   const loadingDetail = !invalidRoute && (loading || Boolean(detail && detail.id !== id));
   const showError = invalidRoute || (!loading && !detail && status && status !== "Loading detail");
-
-  useEffect(() => {
-    if (loadingDetail || showError || !series) return;
-    const handle = window.setTimeout(() => setShowRecommendations(true), 32);
-    return () => window.clearTimeout(handle);
-  }, [loadingDetail, series, showError]);
 
   return (
     <div className="detail-page">
@@ -2626,33 +2624,6 @@ function TitleDetailPage() {
               </div>
             </section>
           )}
-          {showRecommendations && (
-            <section className="detail-block detail-recommendations">
-              <div className="row">
-                <h2 className="section-title">Recommendations</h2>
-                <span className="spacer" />
-                <button className="button ghost" type="button" onClick={() => setShowAllRecommendations((value) => !value)}>
-                  {showAllRecommendations ? "Show less" : "Show more"}
-                </button>
-              </div>
-              {store.settings.recommendationShelves.slice(0, showAllRecommendations ? undefined : 1).map((shelf) => {
-                const recFeed = createFeed(shelf.name);
-                recFeed.id = `detail-rec-${series!.id}-${shelf.id}`;
-                recFeed.view.gridColumns = 3;
-                return (
-                  <div className="detail-rec-section" key={shelf.id}>
-                    <h3>{shelf.name}</h3>
-                    <RecommendationResults
-                      base={series}
-                      shelf={shelf}
-                      feed={recFeed}
-                      limit={showAllRecommendations ? RECOMMENDATION_MAX_RESULTS : RECOMMENDATION_DEFAULT_RESULTS}
-                    />
-                  </div>
-                );
-              })}
-            </section>
-          )}
         </>
       ) : showError ? (
         <div className="detail-error">
@@ -2718,16 +2689,6 @@ function DetailSkeleton({ series }: { series: SeriesCatalog | null }) {
           <span className="chip link-chip skeleton-chip" />
           <span className="chip link-chip skeleton-chip" />
           <span className="chip link-chip skeleton-chip" />
-        </div>
-      </section>
-      <section className="detail-block detail-recommendations" aria-hidden="true">
-        <div className="row">
-          <h2 className="section-title">Recommendations</h2>
-        </div>
-        <div className="title-grid columns-3 recommendation-picker detail-skeleton-rec-grid">
-          {Array.from({ length: RECOMMENDATION_DEFAULT_RESULTS }).map((_, index) => (
-            <div className="recommendation-pick skeleton-rec" key={index} />
-          ))}
         </div>
       </section>
     </>
@@ -2846,12 +2807,9 @@ function DetailSettingsDrawer({
   onChange: React.Dispatch<React.SetStateAction<AppSettings["detailVisible"]>>;
 }) {
   const fields: [keyof AppSettings["detailVisible"], string, string][] = [
-    ["cover", "Cover", "Show the title artwork."],
-    ["title", "Title", "Show the primary title."],
     ["description", "Description", "Show the full available synopsis."],
     ["genreTags", "Genres", "Show the main genre row."],
     ["allTags", "All tags", "Show every catalog tag."],
-    ["authorsArtists", "Creators", "Show authors and artists."],
     ["links", "External links", "Show MangaBaka, AniList, and other sources."],
     ["discoveryMetrics", "Fan Rank", "Show Fan Rank in the stat row."],
     ["popularity", "Popularity", "Show AniList popularity."],

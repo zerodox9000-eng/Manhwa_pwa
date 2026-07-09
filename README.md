@@ -13,7 +13,7 @@ Mobile-first local PWA for building custom manhwa discovery grids from the `zero
 - Stores catalog, tags, history, details, recommendation features, feeds, labels, and settings in IndexedDB for offline use.
 - Home is feed-driven and mobile-first, with a native scroll-snap horizontal pager, per-feed scroll restore, and per-feed grid settings.
 - Feeds support AniList and non-AniList filtering, content ratings, status, chapter/year/popularity/favourites/score bounds, tag include/exclude, rolling date windows, labels, and custom sort rules.
-- Title detail pages include external links, creator metadata, markdown description rendering, configurable stat blocks, and embedded recommendations.
+- Title detail pages include external links, creator metadata, markdown description rendering, and configurable stat blocks; recommendations live on the dedicated Recommendations page.
 - Search is title-only with local recent-search history and sensitive-tag filtering controls.
 - Recommendations use editable shelves, source-mode toggles, tag-match scoring, and metric ranges.
 - Share links are compressed and same-domain, and import links open a preview before anything is applied.
