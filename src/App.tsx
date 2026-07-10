@@ -49,6 +49,7 @@ import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, make
 import { isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments";
 import { resolveRollingWindow } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
+import { matchesSearchTextWords, searchTextWordPosition, searchWords, seriesSearchText } from "./domain/search";
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
@@ -2324,6 +2325,10 @@ function SearchPage() {
       }),
     [store.catalog],
   );
+  const searchTextById = useMemo(
+    () => new Map(store.catalog.map((item) => [item.id, seriesSearchText(item)])),
+    [store.catalog],
+  );
   const results = useMemo(() => {
     const term = deferredQuery.trim();
     if (!term) return [];
@@ -2335,12 +2340,23 @@ function SearchPage() {
         .sort((a, b) => getTitle(a).localeCompare(getTitle(b)))
         .slice(0, 60);
     }
-    return searchIndex
+    const words = searchWords(term);
+    const directMatches = store.catalog
+      .filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds))
+      .filter((item) => matchesSearchTextWords(searchTextById.get(item.id) ?? "", words))
+      .sort(
+        (left, right) =>
+          searchTextWordPosition(searchTextById.get(left.id) ?? "", words) -
+          searchTextWordPosition(searchTextById.get(right.id) ?? "", words),
+      );
+    const directMatchIds = new Set(directMatches.map((item) => item.id));
+    const fuzzyMatches = searchIndex
       .search(term, { limit: 180 })
       .map((result) => result.item)
       .filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds))
-      .slice(0, 60);
-  }, [deferredQuery, getTitle, searchIndex, sensitiveTagIds, store.catalog, store.settings]);
+      .filter((item) => !directMatchIds.has(item.id));
+    return [...directMatches, ...fuzzyMatches].slice(0, 60);
+  }, [deferredQuery, getTitle, searchIndex, searchTextById, sensitiveTagIds, store.catalog, store.settings]);
   useEffect(() => {
     sessionStorage.setItem("manhwa-search-query", inputQuery);
   }, [inputQuery]);
