@@ -3418,6 +3418,14 @@ function LearnPage() {
           Release and completion windows use confirmed dates only; estimated dates do not qualify. Growth values
           compare available history snapshots, so longer windows improve as more backend history accumulates.
         </LearnItem>
+        <LearnItem title="Gestures">
+          Double-tap Home to return to the first visible feed at its top. On Home, double-tap a feed title to open
+          that feed&apos;s settings, or double-tap the surrounding header card to search titles already inside that feed.
+        </LearnItem>
+        <LearnItem title="Segments">
+          The eye control in Feeds hides a segment from Home without deleting its feeds. Smut/Hentai and BL/GL
+          segments also stay unavailable until their matching Settings search toggle is enabled.
+        </LearnItem>
         <LearnItem title="Additional sources">
           When available, title identity and links are cross-checked with{" "}
           <a href="https://www.mangaupdates.com" target="_blank" rel="noreferrer">MangaUpdates</a> and{" "}
