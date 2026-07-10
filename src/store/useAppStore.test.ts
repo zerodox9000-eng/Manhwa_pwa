@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createFeed } from "../domain/defaults";
 import type { FeedSegment } from "../domain/types";
-import { addNewFeedToUnsegmentedSegment, normalizeFeed, UNSEGMENTED_FEED_SEGMENT_ID } from "./useAppStore";
+import { addNewFeedToUnsegmentedSegment, correctDefaultFeedDescriptions, normalizeFeed, UNSEGMENTED_FEED_SEGMENT_ID } from "./useAppStore";
 
 const now = "2026-07-10T00:00:00.000Z";
 
@@ -50,5 +50,24 @@ describe("new feed segment placement", () => {
 
     expect(next[0]?.id).toBe(UNSEGMENTED_FEED_SEGMENT_ID);
     expect(next[0]?.feedIds).toEqual(["new-feed"]);
+  });
+});
+
+describe("default feed description fixes", () => {
+  it("corrects only the two unchanged underrated descriptions", () => {
+    const mostUnderrated = createFeed("Most underrated");
+    mostUnderrated.id = "0c96761d-09d2-423a-a959-b2c3e451f739";
+    mostUnderrated.description = "Fan Loved but Less Popular | Filter : 70% < Popularity & 10% < Underrated ";
+    const underrated = createFeed("Underrated");
+    underrated.id = "99609e6f-9bd7-4d8c-9885-de48718fc051";
+    underrated.description = "Deserve More Spotlight | Filter : 70% < Popularity & 5% < Underrated < 10%";
+    const custom = createFeed("Custom");
+    custom.description = "My own wording";
+
+    const corrected = correctDefaultFeedDescriptions([mostUnderrated, underrated, custom]);
+
+    expect(corrected[0].description).toContain("50% < Popularity");
+    expect(corrected[1].description).toContain("50% < Popularity");
+    expect(corrected[2]).toBe(custom);
   });
 });

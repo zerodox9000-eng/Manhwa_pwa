@@ -559,7 +559,6 @@ function HomePage() {
   const renderCenterIndexRef = useRef(-1);
   const warmFeedIdsRef = useRef(new Set<string>());
   const didInitialPagerAlignRef = useRef(false);
-  const handledHomeResetNonceRef = useRef(0);
   const previewSegment = useMemo(() => {
     const segment = store.feedSegments.find((item) => item.id === store.homePreviewSegmentId) ?? null;
     if (!segment || !isBuiltInSensitiveSegmentVisible(segment, store.settings)) return null;
@@ -577,7 +576,7 @@ function HomePage() {
       return feed ? [feed] : [];
     });
   }, [previewSegment, store.feedSegments, store.feeds, store.settings]);
-  const { activeFeedId, setActiveFeedId } = store;
+  const { activeFeedId, completeHomeReset, setActiveFeedId } = store;
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
   const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
 
@@ -592,26 +591,26 @@ function HomePage() {
   }, [activeFeedId, feeds, setActiveFeedId]);
 
   useLayoutEffect(() => {
-    if (!store.homeResetNonce || handledHomeResetNonceRef.current === store.homeResetNonce || feeds.length === 0) return;
+    if (!store.homeResetRequested || feeds.length === 0) return;
     const firstFeed = feeds[0];
     if (activeFeedId !== firstFeed.id) {
       setActiveFeedId(firstFeed.id);
       return;
     }
-    handledHomeResetNonceRef.current = store.homeResetNonce;
     const firstFeedIndex = 0;
     renderCenterIndexRef.current = firstFeedIndex;
     setRenderCenterIndex(firstFeedIndex);
-    const pane = paneRefs.current.get(firstFeed.id);
-    if (!pane) return;
     const frame = window.requestAnimationFrame(() => {
+      const pane = paneRefs.current.get(firstFeed.id);
+      if (!pane) return;
       pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
       const scroller = pane.querySelector<HTMLElement>(".feed-pane-scroll");
       scroller?.scrollTo({ top: 0, behavior: "auto" });
       localStorage.setItem(homeScrollKey(firstFeed), "0");
+      completeHomeReset();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [activeFeedId, feeds, setActiveFeedId, store.homeResetNonce]);
+  }, [activeFeedId, completeHomeReset, feeds, setActiveFeedId, store.homeResetRequested]);
 
   useEffect(() => {
     if (activeFeedIndex < 0 || renderCenterIndexRef.current >= 0) return;

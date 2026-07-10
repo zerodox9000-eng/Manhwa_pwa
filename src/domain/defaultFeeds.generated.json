@@ -1603,7 +1603,7 @@
   {
     "id": "0c96761d-09d2-423a-a959-b2c3e451f739",
     "name": "MOST UNDERRATED ",
-    "description": "Fan Loved but Less Popular | Filter : 70% < Popularity & 10% < Underrated ",
+    "description": "Fan Loved but Less Popular | Filter : 50% < Popularity & 10% < Underrated ",
     "showDescription": true,
     "createdAt": "2026-06-21T21:25:26.388Z",
     "updatedAt": "2026-07-09T05:33:50.790Z",
@@ -1696,7 +1696,7 @@
   {
     "id": "99609e6f-9bd7-4d8c-9885-de48718fc051",
     "name": "UNDERRATED ",
-    "description": "Deserve More Spotlight | Filter : 70% < Popularity & 5% < Underrated < 10%",
+    "description": "Deserve More Spotlight | Filter : 50% < Popularity & 5% < Underrated < 10%",
     "showDescription": true,
     "createdAt": "2026-06-22T08:07:16.995Z",
     "updatedAt": "2026-07-09T05:34:03.307Z",

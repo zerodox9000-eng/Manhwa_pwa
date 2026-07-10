@@ -28,9 +28,22 @@ const DEFAULT_FEED_LIBRARY_VERSION_KEY = "manhwa-default-feed-library-version";
 const DEFAULT_FEED_LIBRARY_VERSION = "backup-4-segmented-v4";
 const SENSITIVE_FEED_SEGMENTS_VERSION_KEY = "manhwa-sensitive-feed-segments-version";
 const SENSITIVE_FEED_SEGMENTS_VERSION = "v1";
+const DEFAULT_FEED_DESCRIPTION_FIX_VERSION_KEY = "manhwa-default-feed-description-fix";
+const DEFAULT_FEED_DESCRIPTION_FIX_VERSION = "v1";
 const LEGACY_APP_NAME = "Manhwa Lib";
 const DEFAULT_APP_NAME = "Aeon";
 export const UNSEGMENTED_FEED_SEGMENT_ID = "unsegmented";
+
+const DEFAULT_FEED_DESCRIPTION_FIXES = new Map([
+  ["0c96761d-09d2-423a-a959-b2c3e451f739", {
+    from: "Fan Loved but Less Popular | Filter : 70% < Popularity & 10% < Underrated ",
+    to: "Fan Loved but Less Popular | Filter : 50% < Popularity & 10% < Underrated ",
+  }],
+  ["99609e6f-9bd7-4d8c-9885-de48718fc051", {
+    from: "Deserve More Spotlight | Filter : 70% < Popularity & 5% < Underrated < 10%",
+    to: "Deserve More Spotlight | Filter : 50% < Popularity & 5% < Underrated < 10%",
+  }],
+]);
 
 function shortDataVersion(versionHash: string | null | undefined) {
   if (!versionHash) return "none";
@@ -53,11 +66,12 @@ interface StoreState {
   syncStatus: string;
   syncInFlight: boolean;
   homePreviewSegmentId: string | null;
-  homeResetNonce: number;
+  homeResetRequested: boolean;
   setActiveFeedId: (id: string | null) => void;
   openFeedInHome: (feedId: string, segmentId: string | null) => void;
   exitHomePreview: () => void;
   requestHomeReset: () => void;
+  completeHomeReset: () => void;
   upsertFeed: (feed: Feed) => void;
   deleteFeed: (id: string) => void;
   moveFeed: (id: string, targetId: string) => void;
@@ -310,6 +324,13 @@ function defaultFeeds() {
   );
 }
 
+export function correctDefaultFeedDescriptions(feeds: Feed[]) {
+  return feeds.map((feed) => {
+    const fix = DEFAULT_FEED_DESCRIPTION_FIXES.get(feed.id);
+    return fix && feed.description === fix.from ? { ...feed, description: fix.to } : feed;
+  });
+}
+
 const BUILT_IN_DEFAULT_FEED_IDS = new Set([
   ...(defaultFeedsJson as Feed[]).map((feed) => feed.id),
   ...builtInSensitiveFeeds().map((feed) => feed.id),
@@ -345,16 +366,21 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     () => hasSavedState && !replaceDefaultLikeSavedFeeds && localStorage.getItem(SENSITIVE_FEED_SEGMENTS_VERSION_KEY) !== SENSITIVE_FEED_SEGMENTS_VERSION,
     [hasSavedState, replaceDefaultLikeSavedFeeds],
   );
+  const shouldCorrectDefaultFeedDescriptions = useMemo(
+    () => hasSavedState && localStorage.getItem(DEFAULT_FEED_DESCRIPTION_FIX_VERSION_KEY) !== DEFAULT_FEED_DESCRIPTION_FIX_VERSION,
+    [hasSavedState],
+  );
   const initialFeeds = useMemo(
     () => {
       if (replaceDefaultLikeSavedFeeds || !hasSavedState) return defaultFeeds();
       const savedFeeds = (local.feeds ?? []).map((feed) => normalizeFeed(feed));
+      const correctedFeeds = shouldCorrectDefaultFeedDescriptions ? correctDefaultFeedDescriptions(savedFeeds) : savedFeeds;
       const merged = shouldInstallSensitiveFeedSegments
-        ? mergeBuiltInSensitiveDefaults(savedFeeds, local.feedSegments ?? []).feeds
-        : savedFeeds;
+        ? mergeBuiltInSensitiveDefaults(correctedFeeds, local.feedSegments ?? []).feeds
+        : correctedFeeds;
       return merged.map((feed) => normalizeFeed(feed, { preserveMetricSlots: true, preserveFeedSettings: true }));
     },
-    [hasSavedState, local.feedSegments, local.feeds, replaceDefaultLikeSavedFeeds, shouldInstallSensitiveFeedSegments],
+    [hasSavedState, local.feedSegments, local.feeds, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallSensitiveFeedSegments],
   );
   const shouldMigrateFeedsToThreeColumns = useMemo(
     () => localStorage.getItem(THREE_COLUMN_FEEDS_MIGRATION_KEY) !== "1",
@@ -387,7 +413,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   );
   const [activeFeedId, setActiveFeedId] = useState<string | null>(local.activeFeedId ?? null);
   const [homePreviewSegmentId, setHomePreviewSegmentId] = useState<string | null>(null);
-  const [homeResetNonce, setHomeResetNonce] = useState(0);
+  const [homeResetRequested, setHomeResetRequested] = useState(false);
   const [syncStatus, setSyncStatus] = useState("");
   const [syncInFlight, setSyncInFlight] = useState(false);
   const syncInFlightRef = useRef<Promise<void> | null>(null);
@@ -406,7 +432,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (shouldInstallSensitiveFeedSegments || !hasSavedState) {
       localStorage.setItem(SENSITIVE_FEED_SEGMENTS_VERSION_KEY, SENSITIVE_FEED_SEGMENTS_VERSION);
     }
-  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldInstallSensitiveFeedSegments, shouldMigrateFeedsToThreeColumns]);
+    if (shouldCorrectDefaultFeedDescriptions || !hasSavedState) {
+      localStorage.setItem(DEFAULT_FEED_DESCRIPTION_FIX_VERSION_KEY, DEFAULT_FEED_DESCRIPTION_FIX_VERSION);
+    }
+  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallSensitiveFeedSegments, shouldMigrateFeedsToThreeColumns]);
 
   useEffect(() => {
     void (async () => {
@@ -542,7 +571,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const requestHomeReset = useCallback(() => {
-    setHomeResetNonce((current) => current + 1);
+    setHomeResetRequested(true);
+  }, []);
+
+  const completeHomeReset = useCallback(() => {
+    setHomeResetRequested(false);
   }, []);
 
   const deleteFeed = useCallback((id: string) => {
@@ -734,11 +767,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       syncStatus,
       syncInFlight,
       homePreviewSegmentId,
-      homeResetNonce,
+      homeResetRequested,
       setActiveFeedId,
       openFeedInHome,
       exitHomePreview,
       requestHomeReset,
+      completeHomeReset,
       upsertFeed,
       deleteFeed,
       moveFeed,
@@ -772,11 +806,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       syncStatus,
       syncInFlight,
       homePreviewSegmentId,
-      homeResetNonce,
+      homeResetRequested,
       setActiveFeedId,
       openFeedInHome,
       exitHomePreview,
       requestHomeReset,
+      completeHomeReset,
       upsertFeed,
       deleteFeed,
       moveFeed,
