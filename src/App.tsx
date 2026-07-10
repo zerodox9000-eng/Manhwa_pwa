@@ -3,6 +3,7 @@ import * as Switch from "@radix-ui/react-switch";
 import {
   ArrowLeft,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Check,
   Copy,
@@ -92,6 +93,23 @@ const FEED_DESCRIPTION_EXPANDED_MAX = 260;
 const FEEDS_DRAG_EDGE_SIZE = 92;
 const FEEDS_DRAG_MAX_SCROLL_SPEED = 18;
 const PWA_CHROME_THEME_COLOR = "#11131a";
+const DESKTOP_GRID_OPTIONS = [6, 7, 8] as const;
+
+function resolvedDesktopGridColumns(view: FeedViewSettings) {
+  return view.desktopGridColumns ?? (view.gridColumns >= 5 ? 8 : view.gridColumns === 4 ? 7 : 6);
+}
+
+function useDesktopLayout() {
+  const [desktop, setDesktop] = useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches);
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 768px)");
+    const update = () => setDesktop(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return desktop;
+}
 const ACCENT_COLORS = [
   { name: "Rose", value: "#ff3b81" },
   { name: "Blue", value: "#4f8cff" },
@@ -714,6 +732,20 @@ function HomePage() {
     [],
   );
 
+  const goToFeed = useCallback(
+    (index: number) => {
+      const targetFeed = feeds[index];
+      const pane = targetFeed ? paneRefs.current.get(targetFeed.id) : null;
+      if (!targetFeed || !pane) return;
+      warmFeedAt(index);
+      renderCenterIndexRef.current = index;
+      setRenderCenterIndex(index);
+      setActiveFeedId(targetFeed.id);
+      pane.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
+    },
+    [feeds, setActiveFeedId, warmFeedAt],
+  );
+
   useEffect(() => {
     const feed = feeds.find((item) => item.id === activeFeedId) ?? feeds[0] ?? null;
     const pane = feed ? paneRefs.current.get(feed.id) : null;
@@ -751,8 +783,18 @@ function HomePage() {
           </Link>
         </div>
       ) : (
-        <div className="feed-pager" ref={pagerRef} aria-label="Home feeds" onScroll={warmFeedsAroundScrollPosition}>
-          <div className="feed-pager-track">
+        <div className="feed-pager-shell">
+          <button
+            className="desktop-feed-pager-button previous"
+            type="button"
+            onClick={() => goToFeed(activeFeedIndex - 1)}
+            disabled={activeFeedIndex <= 0}
+            aria-label="Previous feed"
+          >
+            <ChevronLeft size={28} />
+          </button>
+          <div className="feed-pager" ref={pagerRef} aria-label="Home feeds" onScroll={warmFeedsAroundScrollPosition}>
+            <div className="feed-pager-track">
             {feeds.map((feed, index) => {
               const isActive = index === activeFeedIndex;
               const renderOriginIndex = renderCenterIndex >= 0 ? renderCenterIndex : activeFeedIndex;
@@ -783,7 +825,17 @@ function HomePage() {
                 </div>
               );
             })}
+            </div>
           </div>
+          <button
+            className="desktop-feed-pager-button next"
+            type="button"
+            onClick={() => goToFeed(activeFeedIndex + 1)}
+            disabled={activeFeedIndex >= feeds.length - 1}
+            aria-label="Next feed"
+          >
+            <ChevronRight size={28} />
+          </button>
         </div>
       )}
       <BottomDrawer title="Create Feed" open={editorOpen} onOpenChange={setEditorOpen}>
@@ -1011,7 +1063,10 @@ function TitleCollection({
     <>
       <div
         className={`title-grid columns-${feed.view.gridColumns} density-${feed.view.gridDensity}`}
-        style={{ "--grid-columns": feed.view.gridColumns } as React.CSSProperties}
+        style={{
+          "--grid-columns": feed.view.gridColumns,
+          "--desktop-grid-columns": resolvedDesktopGridColumns(feed.view),
+        } as React.CSSProperties}
       >
         {visibleItems.map((series, index) => (
           <MemoTitleCard
@@ -1686,6 +1741,7 @@ function FeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (f
 }
 
 function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Feed) => void; onCancel: () => void }) {
+  const isDesktop = useDesktopLayout();
   const [view, setView] = useState<FeedViewSettings>(() => structuredClone(feed.view));
   const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : ["fanFavouriteDiscoveryPercentile"]);
   const coverStatsVisible = view.metricSlots.length > 0;
@@ -1703,12 +1759,14 @@ function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onS
       <div className="field">
         <label>Grid columns</label>
         <div className="segmented compact-segments">
-          {[1, 2, 3, 4, 5].map((columns) => (
+          {(isDesktop ? DESKTOP_GRID_OPTIONS : [1, 2, 3, 4, 5]).map((columns) => (
             <button
-              className={`segment ${view.gridColumns === columns ? "active" : ""}`}
+              className={`segment ${(isDesktop ? resolvedDesktopGridColumns(view) : view.gridColumns) === columns ? "active" : ""}`}
               type="button"
               key={columns}
-              onClick={() => setView((current) => ({ ...current, gridColumns: columns as FeedViewSettings["gridColumns"] }))}
+              onClick={() => setView((current) => isDesktop
+                ? { ...current, desktopGridColumns: columns as FeedViewSettings["desktopGridColumns"] }
+                : { ...current, gridColumns: columns as FeedViewSettings["gridColumns"] })}
             >
               {columns}
             </button>
@@ -1741,6 +1799,7 @@ function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onS
 }
 
 function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Feed) => void; onCancel: () => void }) {
+  const isDesktop = useDesktopLayout();
   const store = useAppStore();
   const [draft, setDraft] = useState<Feed>(() => structuredClone(feed));
   const [tagSearch, setTagSearch] = useState("");
@@ -2054,12 +2113,14 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
         <div className="field">
           <label>Grid columns</label>
           <div className="segmented compact-segments">
-            {[1, 2, 3, 4, 5].map((value) => (
+            {(isDesktop ? DESKTOP_GRID_OPTIONS : [1, 2, 3, 4, 5]).map((value) => (
               <button
-                className={`segment ${draft.view.gridColumns === value ? "active" : ""}`}
+                className={`segment ${(isDesktop ? resolvedDesktopGridColumns(draft.view) : draft.view.gridColumns) === value ? "active" : ""}`}
                 type="button"
                 key={value}
-                onClick={() => updateView({ gridColumns: value as FeedViewSettings["gridColumns"] })}
+                onClick={() => updateView(isDesktop
+                  ? { desktopGridColumns: value as FeedViewSettings["desktopGridColumns"] }
+                  : { gridColumns: value as FeedViewSettings["gridColumns"] })}
               >
                 {value}
               </button>

@@ -149,6 +149,10 @@ export async function resolveDataSource(preferred?: string) {
   throw new Error("No working data source found.");
 }
 
+export function detailSourceCandidates(preferred?: string) {
+  return [...new Set([preferred, ...DATA_SOURCE_CANDIDATES].filter(Boolean) as string[])];
+}
+
 export async function checkFrontendDataVersion(preferred?: string) {
   const candidates = [preferred, ...DATA_SOURCE_CANDIDATES].filter(Boolean) as string[];
   const seen = new Set<string>();
@@ -322,20 +326,21 @@ async function fetchRawDetail(source: string, id: number, attempt: number) {
 async function fetchFreshSeriesDetail(source: string, id: number, attempts = 3, requireDescription = false) {
   let lastError: unknown;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      const rawDetail = await fetchRawDetail(source, id, attempt);
-      const detail = fixMangaBakaLink(parseDetail(rawDetail) ?? (rawDetail as SeriesDetail));
-      if (requireDescription && !hasDetailDescription(detail) && attempt < attempts - 1) {
-        lastError = new Error("Description missing from detail response");
-        await delay(attempt === 0 ? 250 : 700);
-        continue;
+    for (const candidate of detailSourceCandidates(source)) {
+      try {
+        const rawDetail = await fetchRawDetail(candidate, id, attempt);
+        const detail = fixMangaBakaLink(parseDetail(rawDetail) ?? (rawDetail as SeriesDetail));
+        if (requireDescription && !hasDetailDescription(detail) && attempt < attempts - 1) {
+          lastError = new Error("Description missing from detail response");
+          continue;
+        }
+        await db.details.put(detail);
+        return detail;
+      } catch (error) {
+        lastError = error;
       }
-      await db.details.put(detail);
-      return detail;
-    } catch (error) {
-      lastError = error;
-      if (attempt < attempts - 1) await delay(attempt === 0 ? 250 : 700);
     }
+    if (attempt < attempts - 1) await delay(attempt === 0 ? 250 : 700);
   }
   throw lastError;
 }

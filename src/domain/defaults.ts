@@ -45,6 +45,7 @@ export const DEFAULT_VISIBLE_TITLE_FIELDS: VisibleTitleFields = {
 export const DEFAULT_FEED_VIEW: FeedViewSettings = {
   mode: "grid",
   gridColumns: 3,
+  desktopGridColumns: 6,
   gridDensity: "standard",
   listCoverSize: "medium",
   listDensity: "standard",

@@ -218,6 +218,7 @@ export interface VisibleTitleFields {
 export interface FeedViewSettings {
   mode: ViewMode;
   gridColumns: 1 | 2 | 3 | 4 | 5;
+  desktopGridColumns?: 6 | 7 | 8;
   gridDensity: GridDensity;
   listCoverSize: ListCoverSize;
   listDensity: ListDensity;

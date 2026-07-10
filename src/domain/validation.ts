@@ -244,6 +244,7 @@ const feedViewSettingsSchema = z
   .object({
     mode: z.enum(["grid", "list"]).optional(),
     gridColumns: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
+    desktopGridColumns: z.union([z.literal(6), z.literal(7), z.literal(8)]).optional(),
     gridDensity: z.enum(["comfortable", "standard", "compact"]).optional(),
     listCoverSize: z.enum(["small", "medium", "large"]).optional(),
     listDensity: z.enum(["compact", "standard", "detailed"]).optional(),

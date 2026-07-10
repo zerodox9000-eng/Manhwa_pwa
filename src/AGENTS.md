@@ -35,6 +35,9 @@ Owns the frontend application source: React routes, UI, domain rules, data loadi
 - Double-tapping the Home navigation item clears any temporary segment preview and sends one consumable reset command to Home, which resets to the first currently visible feed at its top. It must work even when Home is already active and must never replay after later feed-card navigation.
 - Search should remain stable while typing and deleting; debounce expensive work instead of blocking input. Search covers display/source/native/romanized titles, every stored title alias, and author/artist names. Any order of complete query words must match before fuzzy fallback, then Fuse relevance order is preserved after sensitive-content filtering. Search displays up to 120 results.
 - Mobile is the primary interface. Desktop presentation must use desktop-only media queries and must not alter phone layout, navigation geometry, Home pager behavior, or touch interactions below the desktop breakpoint.
+- Detail loading must try the active data source first and then configured frontend-data fallbacks. A missing Pages detail endpoint must not leave title opening dependent on repeated failed requests.
+- Desktop uses cheap translucent fills instead of large blur/filter compositor layers; the mobile glass treatment remains unchanged.
+- Desktop is production-preview tested separately from mobile: use a wide 1360px maximum layout, reserve Home side gutters for previous/next feed controls, and use separately saved 6/7/8 desktop grid settings without changing the phone grid. Size title/rank/cover-stat text for those columns. None of these rules may apply below the 768px desktop breakpoint.
 
 ## Verification
 
