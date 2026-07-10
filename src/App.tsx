@@ -869,6 +869,8 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
   const store = useAppStore();
   const [titleExpanded, setTitleExpanded] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [localSearchOpen, setLocalSearchOpen] = useState(false);
+  const [localSearchQuery, setLocalSearchQuery] = useState("");
   const lastTitleTapRef = useRef(0);
   const query = useMemo(
     () =>
@@ -888,10 +890,20 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
   const titleCanExpand = feed.name.trim().length > 34;
   const descriptionCanExpand = hasDescription;
   const descriptionText = hasDescription ? cappedText(feed.description, FEED_DESCRIPTION_EXPANDED_MAX) : "";
+  const deferredLocalSearchQuery = useDeferredValue(localSearchQuery);
+  const originalRanks = useMemo(() => new Map(query.items.map((item, index) => [item.id, index + 1])), [query.items]);
+  const displayedItems = useMemo(() => {
+    const words = searchWords(deferredLocalSearchQuery);
+    if (words.length === 0) return query.items;
+    return query.items.filter((item) => matchesSearchTextWords(seriesSearchText(item), words));
+  }, [deferredLocalSearchQuery, query.items]);
   return (
     <>
       <section className="section feed-summary-section">
-        <div className={`feed-summary-card ${titleExpanded || descriptionExpanded ? "expanded" : ""}`}>
+        <div
+          className={`feed-summary-card ${titleExpanded || descriptionExpanded ? "expanded" : ""}`}
+          onDoubleClick={() => setLocalSearchOpen(true)}
+        >
           <FeedBarCoverWash items={query.items.slice(0, 3)} />
           <div className="feed-summary-content">
             <button
@@ -907,6 +919,7 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
                 lastTitleTapRef.current = now;
                 if (titleCanExpand) setTitleExpanded((expanded) => !expanded);
               }}
+              onDoubleClick={(event) => event.stopPropagation()}
               aria-expanded={titleCanExpand ? titleExpanded : undefined}
               aria-disabled={!titleCanExpand}
             >
@@ -927,11 +940,36 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
           </div>
         </div>
       </section>
+      {localSearchOpen ? (
+        <div className="feed-local-search">
+          <input
+            className="input"
+            type="search"
+            value={localSearchQuery}
+            onChange={(event) => setLocalSearchQuery(event.target.value)}
+            placeholder="Search this feed"
+            autoFocus
+          />
+          <span className="feed-local-search-count">{displayedItems.length} results</span>
+          <button
+            className="icon-button"
+            type="button"
+            onClick={() => {
+              setLocalSearchQuery("");
+              setLocalSearchOpen(false);
+            }}
+            aria-label="Close feed search"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      ) : null}
       <TitleCollection
-        items={query.items}
+        items={displayedItems}
         feed={feed}
         history={store.history}
         latestDate={store.syncMeta?.historyLastDate}
+        rankById={originalRanks}
       />
     </>
   );
@@ -1025,12 +1063,14 @@ function TitleCollection({
   feed,
   history,
   latestDate,
+  rankById,
   loading = false,
 }: {
   items: SeriesCatalog[];
   feed: Feed;
   history: HistoryMap;
   latestDate?: string | null;
+  rankById?: ReadonlyMap<number, number>;
   loading?: boolean;
 }) {
   const pageSize = feed.view.gridColumns >= 5 ? 60 : feed.view.gridColumns === 4 ? 72 : 120;
@@ -1072,7 +1112,7 @@ function TitleCollection({
           <MemoTitleCard
             key={series.id}
             series={series}
-            rank={index + 1}
+            rank={rankById?.get(series.id) ?? index + 1}
             view={feed.view}
             feed={feed}
             history={history}

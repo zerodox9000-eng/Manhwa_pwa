@@ -515,6 +515,25 @@ a {
   max-width: 560px;
 }
 
+.feed-local-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 16px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(19, 21, 29, 0.8);
+}
+
+.feed-local-search-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
 .feed-view-header {
   min-width: 0;
 }

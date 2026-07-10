@@ -38,6 +38,7 @@ Owns the frontend application source: React routes, UI, domain rules, data loadi
 - Detail loading must try the active data source first and then configured frontend-data fallbacks. A missing Pages detail endpoint must not leave title opening dependent on repeated failed requests.
 - Desktop uses cheap translucent fills instead of large blur/filter compositor layers; the mobile glass treatment remains unchanged.
 - Desktop is production-preview tested separately from mobile: use a wide 1360px maximum layout, reserve Home side gutters for previous/next feed controls, and use separately saved 6/7/8 desktop grid settings without changing the phone grid. Size title/rank/cover-stat text for those columns. None of these rules may apply below the 768px desktop breakpoint.
+- Double-tapping the surrounding Home feed header card opens a local search for that feed. It filters only its current results and preserves each title's original feed rank; the title button's existing double-tap Feed Settings shortcut remains unchanged.
 
 ## Verification
 
