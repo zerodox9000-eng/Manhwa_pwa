@@ -168,9 +168,8 @@ function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
 }
 
 export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boolean; preserveFeedSettings?: boolean } = {}): Feed {
-  const excludeTagIds = feed.filters.excludeTagIds?.length
-    ? feed.filters.excludeTagIds
-    : DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS;
+  // An empty array is an intentional user choice; only legacy feeds missing this field get the safe defaults.
+  const excludeTagIds = feed.filters.excludeTagIds ?? DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS;
   const rawMetricSlots = feed.view?.metricSlots ?? DEFAULT_SETTINGS.defaultFeedView.metricSlots;
   const metricSlots = (options.preserveMetricSlots
     ? rawMetricSlots

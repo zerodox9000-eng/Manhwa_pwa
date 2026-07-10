@@ -32,6 +32,20 @@ describe("normalizeFeed", () => {
 
     expect(normalized.view.metricSlots).toEqual(["mangabakaLatestRank", "popularity", "favourites"]);
   });
+
+  it("preserves an explicitly cleared sensitive exclusion list", () => {
+    const feed = createFeed("allow sensitive tags");
+    feed.filters.excludeTagIds = [];
+
+    expect(normalizeFeed(feed).filters.excludeTagIds).toEqual([]);
+  });
+
+  it("keeps existing sensitive exclusions unchanged", () => {
+    const feed = createFeed("safe feed");
+    const savedExclusions = [...feed.filters.excludeTagIds];
+
+    expect(normalizeFeed(feed).filters.excludeTagIds).toEqual(savedExclusions);
+  });
 });
 
 describe("new feed segment placement", () => {
