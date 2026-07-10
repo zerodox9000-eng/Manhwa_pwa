@@ -2312,13 +2312,14 @@ function SearchPage() {
         minMatchCharLength: 2,
         threshold: 0.28,
         keys: [
-          { name: "display_title", weight: 0.55 },
-          { name: "animeplanet_title", weight: 0.5 },
-          { name: "mangabaka_title", weight: 0.2 },
-          { name: "native_title", weight: 0.18 },
-          { name: "romanized_title", weight: 0.18 },
-          { name: "authors", weight: 0.1 },
-          { name: "artists", weight: 0.1 },
+          { name: "display_title", weight: 0.5 },
+          { name: "titles.title", weight: 0.42 },
+          { name: "animeplanet_title", weight: 0.3 },
+          { name: "mangabaka_title", weight: 0.24 },
+          { name: "native_title", weight: 0.22 },
+          { name: "romanized_title", weight: 0.22 },
+          { name: "authors", weight: 0.2 },
+          { name: "artists", weight: 0.18 },
         ],
       }),
     [store.catalog],
@@ -2335,10 +2336,10 @@ function SearchPage() {
         .slice(0, 60);
     }
     return searchIndex
-      .search(term, { limit: 60 })
+      .search(term, { limit: 180 })
       .map((result) => result.item)
       .filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds))
-      .sort((a, b) => getTitle(a).localeCompare(getTitle(b)));
+      .slice(0, 60);
   }, [deferredQuery, getTitle, searchIndex, sensitiveTagIds, store.catalog, store.settings]);
   useEffect(() => {
     sessionStorage.setItem("manhwa-search-query", inputQuery);
@@ -2354,13 +2355,13 @@ function SearchPage() {
     <div className="page">
       <h1>Search</h1>
       <form className="field" onSubmit={(event) => { event.preventDefault(); remember(); }}>
-        <label>Title</label>
+        <label>Title or creator</label>
         <div className="search-input-wrap">
           <input
             className="input"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search titles"
+            placeholder="Titles, aliases, creators"
             autoComplete="off"
           />
           {query && (
