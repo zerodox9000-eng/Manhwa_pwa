@@ -3767,3 +3767,73 @@ textarea,
     height: 38px;
   }
 }
+
+/* Desktop-only shell: preserve the phone-first layout below 768px. */
+@media (min-width: 768px) {
+  .page:not(.home-page) {
+    padding: 28px 24px 118px;
+  }
+
+  .page h1 {
+    font-size: 40px;
+  }
+
+  .home-page {
+    width: min(1240px, 100%);
+  }
+
+  .feed-pane-scroll {
+    padding: 24px 24px 124px;
+  }
+
+  .feed-summary-section,
+  .title-grid,
+  .feed-pane-scroll > .empty-state,
+  .feed-pane-scroll > .toolbar {
+    width: min(1180px, 100%);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .feed-summary-section {
+    margin-top: 0;
+    margin-bottom: 28px;
+  }
+
+  .feed-bar-cover-wash {
+    height: clamp(174px, 17vw, 232px);
+  }
+
+  .feed-summary-content {
+    gap: 12px;
+    padding: 16px 24px;
+  }
+
+  .single-line-title {
+    font-size: clamp(32px, 3vw, 42px);
+  }
+
+  .feed-description-text {
+    font-size: 16px;
+  }
+
+  .bottom-nav {
+    left: 50%;
+    right: auto;
+    bottom: 18px;
+    width: min(680px, calc(100vw - 48px)) !important;
+    max-width: calc(100vw - 48px);
+    transform: translateX(-50%);
+    padding: 6px 8px;
+  }
+
+  .bottom-nav .nav-item {
+    min-height: 52px;
+    font-size: 12px;
+  }
+
+  .bottom-nav .nav-item svg {
+    width: 21px;
+    height: 21px;
+  }
+}
