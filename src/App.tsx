@@ -2338,7 +2338,7 @@ function SearchPage() {
         .filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds))
         .filter((item) => item.tag_ids.some((tagId) => sensitiveFamily.has(tagId)))
         .sort((a, b) => getTitle(a).localeCompare(getTitle(b)))
-        .slice(0, 60);
+        .slice(0, 120);
     }
     const words = searchWords(term);
     const directMatches = store.catalog
@@ -2355,7 +2355,7 @@ function SearchPage() {
       .map((result) => result.item)
       .filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds))
       .filter((item) => !directMatchIds.has(item.id));
-    return [...directMatches, ...fuzzyMatches].slice(0, 60);
+    return [...directMatches, ...fuzzyMatches].slice(0, 120);
   }, [deferredQuery, getTitle, searchIndex, searchTextById, sensitiveTagIds, store.catalog, store.settings]);
   useEffect(() => {
     sessionStorage.setItem("manhwa-search-query", inputQuery);
