@@ -1039,7 +1039,7 @@ select {
 }
 
 .feed-segment-drag-handle,
-.feed-segment-collapse {
+.feed-segment-rename {
   display: grid;
   width: 32px;
   height: 32px;
@@ -1087,8 +1087,8 @@ select {
   font-weight: 750;
 }
 
-.feed-segment-title:disabled {
-  opacity: 1;
+.feed-segment-rename:disabled {
+  opacity: 0.4;
 }
 
 .feed-segment-name-input {

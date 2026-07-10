@@ -39,6 +39,7 @@ Owns the frontend application source: React routes, UI, domain rules, data loadi
 - Desktop uses cheap translucent fills instead of large blur/filter compositor layers; the mobile glass treatment remains unchanged.
 - Desktop is production-preview tested separately from mobile: use a wide 1360px maximum layout, reserve Home side gutters for previous/next feed controls, and use separately saved 6/7/8 desktop grid settings without changing the phone grid. Size title/rank/cover-stat text for those columns. None of these rules may apply below the 768px desktop breakpoint.
 - Double-tapping the surrounding Home feed header card opens a local search for that feed. It filters only its current results and preserves each title's original feed rank; the title button's existing double-tap Feed Settings shortcut remains unchanged.
+- In Feeds, tapping a segment name toggles that segment's block. Its adjacent circular control opens rename mode instead; UNSEGMENTED remains collapsible but cannot be renamed.
 
 ## Verification
 

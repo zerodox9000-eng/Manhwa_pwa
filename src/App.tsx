@@ -19,6 +19,7 @@ import {
   Info,
   Library,
   ListFilter,
+  Pencil,
   Plus,
   Search,
   Settings,
@@ -1521,12 +1522,17 @@ function FeedsPage() {
                   <GripVertical size={18} />
                 </button>
                 <button
-                  className="feed-segment-collapse"
+                  className="feed-segment-rename"
                   type="button"
-                  onClick={() => store.updateFeedSegment(segment.id, { collapsed: !segment.collapsed })}
-                  aria-label={segment.collapsed ? `Expand ${segment.name}` : `Collapse ${segment.name}`}
+                  disabled={segment.id === UNSEGMENTED_FEED_SEGMENT_ID}
+                  onClick={() => {
+                    if (segment.id === UNSEGMENTED_FEED_SEGMENT_ID) return;
+                    setRenamingSegmentId(segment.id);
+                    setSegmentNameDraft(segment.name);
+                  }}
+                  aria-label={`Rename ${segment.name}`}
                 >
-                  {segment.collapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
+                  <Pencil size={17} />
                 </button>
                 {isRenaming && segment.id !== "unsegmented" ? (
                   <input
@@ -1552,15 +1558,12 @@ function FeedsPage() {
                   <button
                     className="feed-segment-title"
                     type="button"
-                    disabled={segment.id === UNSEGMENTED_FEED_SEGMENT_ID}
-                    onClick={() => {
-                      if (segment.id === UNSEGMENTED_FEED_SEGMENT_ID) return;
-                      setRenamingSegmentId(segment.id);
-                      setSegmentNameDraft(segment.name);
-                    }}
+                    onClick={() => store.updateFeedSegment(segment.id, { collapsed: !segment.collapsed })}
+                    aria-expanded={!segment.collapsed}
                   >
                     <span>{segment.name}</span>
                     <b>{segmentFeeds.length}</b>
+                    {segment.collapsed ? <ChevronRight size={18} /> : <ChevronDown size={18} />}
                   </button>
                 )}
                 <div className="feed-segment-actions">
