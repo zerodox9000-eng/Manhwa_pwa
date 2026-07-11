@@ -70,6 +70,27 @@ const history: HistoryMap = {
 };
 
 describe("runFeedQuery", () => {
+  it("treats no selected statuses as all and combines selected statuses with OR", () => {
+    const feed = createFeed("statuses");
+    const hiatusTitle = { ...baseSeries[0], id: 4, display_title: "Paused Action", status: "hiatus" };
+    const query = () => runFeedQuery({
+      feed,
+      series: [...baseSeries, hiatusTitle],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+      metaHistoryFirst: "2024-05-01",
+      metaHistoryLast: "2024-05-10",
+    });
+
+    expect(query().items.map((item) => item.id)).toEqual(expect.arrayContaining([1, 2, 4]));
+
+    feed.filters.statuses = ["completed", "hiatus"];
+    expect(query().items.map((item) => item.id)).toEqual(expect.arrayContaining([2, 4]));
+    expect(query().items.map((item) => item.id)).not.toContain(1);
+  });
+
   it("hides default exact sensitive parent tags only while they are excluded", () => {
     const feed = createFeed("safe");
     feed.filters.excludeTagIds = [2];

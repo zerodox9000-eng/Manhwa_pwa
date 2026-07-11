@@ -1786,6 +1786,9 @@ function FeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (f
 function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Feed) => void; onCancel: () => void }) {
   const isDesktop = useDesktopLayout();
   const [view, setView] = useState<FeedViewSettings>(() => structuredClone(feed.view));
+  const [statuses, setStatuses] = useState<string[]>(() =>
+    feed.filters.statuses.filter((status) => status === "completed" || status === "hiatus"),
+  );
   const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : ["fanFavouriteDiscoveryPercentile"]);
   const coverStatsVisible = view.metricSlots.length > 0;
 
@@ -1828,12 +1831,36 @@ function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onS
         value={coverStatsVisible}
         onChange={setCoverStatsVisible}
       />
+      <div className="field">
+        <span className="small-label">Status</span>
+        <p className="muted tiny">Leave both off to show every status.</p>
+      </div>
+      <ToggleRow
+        label="Completed"
+        description="Only include completed titles when selected."
+        value={statuses.includes("completed")}
+        onChange={(selected) => setStatuses((current) => selected
+          ? [...current.filter((status) => status !== "completed"), "completed"]
+          : current.filter((status) => status !== "completed"))}
+      />
+      <ToggleRow
+        label="Hiatus"
+        description="Only include titles on hiatus when selected."
+        value={statuses.includes("hiatus")}
+        onChange={(selected) => setStatuses((current) => selected
+          ? [...current.filter((status) => status !== "hiatus"), "hiatus"]
+          : current.filter((status) => status !== "hiatus"))}
+      />
       <div className="toolbar">
         <button className="button" type="button" onClick={onCancel}>
           Cancel
         </button>
         <span className="spacer" />
-        <button className="button primary" type="button" onClick={() => onSave({ ...feed, view })}>
+        <button
+          className="button primary"
+          type="button"
+          onClick={() => onSave({ ...feed, view, filters: { ...feed.filters, statuses } })}
+        >
           Save
         </button>
       </div>
@@ -3633,7 +3660,6 @@ function downloadText(filename: string, text: string) {
 }
 
 export default App;
-
 
 
 
