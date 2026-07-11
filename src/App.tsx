@@ -2043,10 +2043,10 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
             ))}
           </div>
         </div>
-        <NumberField
+        <RollingAmountField
           label="Amount"
           value={draft.filters.rolling.amount}
-          onChange={(value) => updateFilters({ rolling: { ...draft.filters.rolling, amount: value ?? 1 } })}
+          onChange={(amount) => updateFilters({ rolling: { ...draft.filters.rolling, amount } })}
         />
         <div className="field">
           <label>Unit</label>
@@ -2226,6 +2226,41 @@ function NumberField({ label, value, onChange }: { label: string; value: number 
         type="number"
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}
+      />
+    </div>
+  );
+}
+
+function RollingAmountField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  const [input, setInput] = useState(() => String(value));
+
+  useEffect(() => {
+    setInput(String(value));
+  }, [value]);
+
+  const commit = (next: string) => {
+    const amount = Number(next);
+    if (!Number.isSafeInteger(amount) || amount < 1) return;
+    onChange(amount);
+  };
+
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <input
+        className="input"
+        type="number"
+        min="1"
+        step="1"
+        value={input}
+        onChange={(event) => {
+          const next = event.target.value;
+          setInput(next);
+          if (next !== "") commit(next);
+        }}
+        onBlur={() => {
+          if (input === "") setInput(String(value));
+        }}
       />
     </div>
   );
@@ -3598,7 +3633,6 @@ function downloadText(filename: string, text: string) {
 }
 
 export default App;
-
 
 
 
