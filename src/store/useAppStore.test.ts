@@ -68,7 +68,7 @@ describe("new feed segment placement", () => {
 });
 
 describe("default feed description fixes", () => {
-  it("corrects only the two unchanged underrated descriptions", () => {
+  it("corrects only unchanged built-in descriptions", () => {
     const mostUnderrated = createFeed("Most underrated");
     mostUnderrated.id = "0c96761d-09d2-423a-a959-b2c3e451f739";
     mostUnderrated.description = "Fan Loved but Less Popular | Filter : 70% < Popularity & 10% < Underrated ";
@@ -77,11 +77,15 @@ describe("default feed description fixes", () => {
     underrated.description = "Deserve More Spotlight | Filter : 70% < Popularity & 5% < Underrated < 10%";
     const custom = createFeed("Custom");
     custom.description = "My own wording";
+    const ranked = createFeed("Top 10% ranked");
+    ranked.id = "default-feed-1";
+    ranked.description = "Ranking by Engagement | Filter : 70% < Popularity & 90% < Ranking ";
 
-    const corrected = correctDefaultFeedDescriptions([mostUnderrated, underrated, custom]);
+    const corrected = correctDefaultFeedDescriptions([mostUnderrated, underrated, custom, ranked]);
 
     expect(corrected[0].description).toContain("50% < Popularity");
     expect(corrected[1].description).toContain("50% < Popularity");
     expect(corrected[2]).toBe(custom);
+    expect(corrected[3].description).toContain("Ranked by Engagement");
   });
 });

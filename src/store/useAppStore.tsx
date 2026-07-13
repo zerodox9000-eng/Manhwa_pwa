@@ -29,7 +29,7 @@ const DEFAULT_FEED_LIBRARY_VERSION = "backup-4-segmented-v4";
 const SENSITIVE_FEED_SEGMENTS_VERSION_KEY = "manhwa-sensitive-feed-segments-version";
 const SENSITIVE_FEED_SEGMENTS_VERSION = "v2";
 const DEFAULT_FEED_DESCRIPTION_FIX_VERSION_KEY = "manhwa-default-feed-description-fix";
-const DEFAULT_FEED_DESCRIPTION_FIX_VERSION = "v1";
+const DEFAULT_FEED_DESCRIPTION_FIX_VERSION = "v2";
 const LEGACY_APP_NAME = "Manhwa Lib";
 const DEFAULT_APP_NAME = "Aeon";
 export const UNSEGMENTED_FEED_SEGMENT_ID = "unsegmented";
@@ -42,6 +42,10 @@ const DEFAULT_FEED_DESCRIPTION_FIXES = new Map([
   ["99609e6f-9bd7-4d8c-9885-de48718fc051", {
     from: "Deserve More Spotlight | Filter : 70% < Popularity & 5% < Underrated < 10%",
     to: "Deserve More Spotlight | Filter : 50% < Popularity & 5% < Underrated < 10%",
+  }],
+  ["default-feed-1", {
+    from: "Ranking by Engagement | Filter : 70% < Popularity & 90% < Ranking ",
+    to: "Ranked by Engagement | Filter : 70% < Popularity & 90% < Ranking ",
   }],
 ]);
 

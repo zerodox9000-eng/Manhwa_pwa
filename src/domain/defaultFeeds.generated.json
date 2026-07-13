@@ -1888,7 +1888,7 @@
   {
     "id": "default-feed-1",
     "name": "TOP 10% RANKED ",
-    "description": "Ranking by Engagement | Filter : 70% < Popularity & 90% < Ranking ",
+    "description": "Ranked by Engagement | Filter : 70% < Popularity & 90% < Ranking ",
     "showDescription": true,
     "createdAt": "2026-05-25T01:25:29.631Z",
     "updatedAt": "2026-07-09T17:08:03.957Z",
