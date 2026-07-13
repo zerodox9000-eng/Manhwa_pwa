@@ -88,6 +88,35 @@ const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.
 const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
 const HOME_FEED_INITIAL_RENDER_RADIUS = 4;
+const SEARCH_OPENED_HISTORY_KEY = "manhwa-search-opened-title-ids";
+const SEARCH_OPENED_HISTORY_LIMIT = 99;
+type SegmentPalette = { colors: [RgbColor, RgbColor, RgbColor]; dark: RgbColor };
+const APPROVED_SEGMENT_PALETTES: SegmentPalette[] = [
+  { colors: [[135, 245, 245], [165, 161, 185], [233, 202, 163]], dark: [70, 80, 83] }, // Top 1% Trending
+  { colors: [[237, 216, 126], [209, 192, 152], [192, 165, 224]], dark: [82, 76, 73] }, // Trending Deep Cut
+  { colors: [[174, 199, 102], [155, 216, 233], [198, 214, 187]], dark: [70, 83, 75] }, // Recently Completed
+  { colors: [[207, 226, 218], [162, 224, 247], [214, 180, 159]], dark: [76, 83, 87] }, // Trending Shounen
+  { colors: [[183, 227, 235], [197, 191, 144], [238, 196, 195]], dark: [80, 81, 81] }, // Discover Mainstream
+  { colors: [[232, 210, 200], [213, 234, 247], [125, 252, 152]], dark: [75, 90, 84] }, // Discover Upcoming
+  { colors: [[244, 212, 144], [224, 245, 252], [132, 220, 226]], dark: [78, 88, 86] }, // Discover Deep Cut
+  { colors: [[197, 235, 225], [229, 191, 201], [236, 195, 175]], dark: [85, 82, 84] }, // Overhyped
+  { colors: [[151, 191, 226], [198, 199, 230], [218, 183, 193]], dark: [74, 76, 89] }, // Rising Underdogs
+  { colors: [[231, 188, 120], [197, 193, 134], [82, 132, 145]], dark: [68, 69, 61] }, // Rising Upcoming
+];
+const BUILT_IN_SEGMENT_PALETTE_INDEX: Record<string, number> = {
+  "f4da5512-aa3e-48bf-9f3d-a0afd14b8e56": 0,
+  "2f19120b-0507-428d-9207-762d8726439e": 9,
+  "f90877c1-e055-44a9-beaf-22f57345fcef": 8,
+  "603daa76-e824-4bb6-be96-06588debd39e": 2,
+  "8e59f651-ff3e-4c02-8c41-0a5e93e359ae": 7,
+  "58de72e7-a56c-4c6a-9acc-3b7ac588551f": 1,
+  "d9eb80bc-3a5f-4d06-8bb0-cf2841f75625": 5,
+  "1adf71d3-8fe8-4c9c-b758-01226da09a63": 6,
+  unsegmented: 4,
+  "e362a18b-4a6c-42d7-85f8-f499ba2d195e": 3,
+  "425682ab-52c3-41b6-bd6c-02dfd28a2903": 5,
+  "d50f2a28-f923-4148-a39f-67f1b17882b4": 7,
+};
 const HOME_FEED_RENDER_RADIUS = 4;
 const FEED_TITLE_EXPANDED_MAX = 140;
 const FEED_DESCRIPTION_EXPANDED_MAX = 260;
@@ -283,6 +312,26 @@ function orderedFeedsForSegments(
     }
   }
   return ordered;
+}
+
+function segmentColorStyle(segmentId: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < segmentId.length; index += 1) {
+    hash = Math.imul(hash ^ segmentId.charCodeAt(index), 16777619);
+  }
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x7feb352d);
+  hash ^= hash >>> 15;
+  hash = Math.imul(hash, 0x846ca68b);
+  hash = (hash ^ (hash >>> 16)) >>> 0;
+  const paletteIndex = BUILT_IN_SEGMENT_PALETTE_INDEX[segmentId] ?? hash % APPROVED_SEGMENT_PALETTES.length;
+  const palette = APPROVED_SEGMENT_PALETTES[paletteIndex];
+  return {
+    "--segment-color-1": palette.colors[0].join(" "),
+    "--segment-color-2": palette.colors[1].join(" "),
+    "--segment-color-3": palette.colors[2].join(" "),
+    "--segment-color-dark": palette.dark.join(" "),
+  } as React.CSSProperties;
 }
 
 function formatStatusLabel(value: string | null | undefined) {
@@ -566,11 +615,22 @@ function BottomDrawer({
   );
 }
 
-function LibraryLoadingState({ complete, downloadProgress, status }: { complete: boolean; downloadProgress: number | null; status: string }) {
+function LibraryLoadingState({
+  complete,
+  downloadProgress,
+  onVisualComplete,
+  status,
+}: {
+  complete: boolean;
+  downloadProgress: number | null;
+  onVisualComplete: () => void;
+  status: string;
+}) {
   const fillRef = useRef<HTMLSpanElement>(null);
   const actualTargetRef = useRef(20);
   const visualTargetRef = useRef(20);
   const finishingRef = useRef(false);
+  const completionAnimationRef = useRef<Animation | null>(null);
 
   useEffect(() => {
     const progress = Math.max(0, Math.min(1, downloadProgress ?? 0));
@@ -579,12 +639,31 @@ function LibraryLoadingState({ complete, downloadProgress, status }: { complete:
 
   useEffect(() => {
     if (finishingRef.current || (!complete && !status.toLowerCase().includes("saving"))) return;
+    if (complete && downloadProgress === null && !status.toLowerCase().includes("saving")) {
+      finishingRef.current = true;
+      onVisualComplete();
+      return;
+    }
     finishingRef.current = true;
     const fill = fillRef.current;
-    if (!fill) return;
-    fill.style.transition = "transform 2400ms cubic-bezier(0.22, 0.72, 0.2, 1)";
-    fill.style.transform = "scaleX(1)";
-  }, [complete, status]);
+    if (!fill) {
+      onVisualComplete();
+      return;
+    }
+    const currentTransform = getComputedStyle(fill).transform;
+    fill.style.transition = "none";
+    const animation = fill.animate(
+      [{ transform: currentTransform }, { transform: "scaleX(1)" }],
+      { duration: 2400, easing: "cubic-bezier(0.22, 0.72, 0.2, 1)", fill: "forwards" },
+    );
+    completionAnimationRef.current = animation;
+    void animation.finished.then(() => {
+      fill.style.transform = "scaleX(1)";
+      onVisualComplete();
+    }).catch(() => undefined);
+  }, [complete, downloadProgress, onVisualComplete, status]);
+
+  useEffect(() => () => completionAnimationRef.current?.cancel(), []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -628,7 +707,7 @@ function LibraryLoadingState({ complete, downloadProgress, status }: { complete:
 function HomePage() {
   const store = useAppStore();
   const [libraryLoaderVisible, setLibraryLoaderVisible] = useState(() => !store.ready);
-  const libraryLoaderStartedAtRef = useRef(0);
+  const [libraryLoaderVisualComplete, setLibraryLoaderVisualComplete] = useState(false);
   const libraryDownloadObservedRef = useRef(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorFeed, setEditorFeed] = useState<Feed | null>(null);
@@ -641,10 +720,7 @@ function HomePage() {
   const renderCenterIndexRef = useRef(-1);
   const warmFeedIdsRef = useRef(new Set<string>());
   const didInitialPagerAlignRef = useRef(false);
-
-  useEffect(() => {
-    libraryLoaderStartedAtRef.current = performance.now();
-  }, []);
+  const completeLibraryLoaderVisual = useCallback(() => setLibraryLoaderVisualComplete(true), []);
 
   useEffect(() => {
     if (/starting sync|download|merging|saving/i.test(store.syncStatus)) {
@@ -654,11 +730,11 @@ function HomePage() {
 
   useEffect(() => {
     if (!libraryLoaderVisible || !store.ready) return;
-    const elapsed = performance.now() - libraryLoaderStartedAtRef.current;
-    const delay = libraryDownloadObservedRef.current ? Math.max(2700, 3100 - elapsed) : 120;
+    if (libraryDownloadObservedRef.current && !libraryLoaderVisualComplete) return;
+    const delay = libraryDownloadObservedRef.current ? 220 : 120;
     const timer = window.setTimeout(() => setLibraryLoaderVisible(false), delay);
     return () => window.clearTimeout(timer);
-  }, [libraryLoaderVisible, store.ready, store.syncStatus]);
+  }, [libraryLoaderVisible, libraryLoaderVisualComplete, store.ready]);
   const previewSegment = useMemo(() => {
     const segment = store.feedSegments.find((item) => item.id === store.homePreviewSegmentId) ?? null;
     if (!segment || !isBuiltInSensitiveSegmentVisible(segment, store.settings)) return null;
@@ -842,6 +918,7 @@ function HomePage() {
         <LibraryLoadingState
           complete={store.ready}
           downloadProgress={store.syncProgress}
+          onVisualComplete={completeLibraryLoaderVisual}
           status={store.syncStatus || "Opening offline library"}
         />
       ) : store.feeds.length === 0 ? (
@@ -1291,7 +1368,13 @@ function TitleCard({
   const title = visibleTitle(series);
   return (
     <div className="title-card-wrap">
-      <Link to={`/title/${series.id}`} className="title-card" data-testid="title-card" onClickCapture={() => prepareHomeTitleNavigation(feed)}>
+      <Link
+        to={`/title/${series.id}`}
+        className="title-card"
+        data-testid="title-card"
+        data-series-id={series.id}
+        onClickCapture={() => prepareHomeTitleNavigation(feed)}
+      >
         <div className="poster-shell">
           <Cover series={series} priority={rank <= 18} />
           {view.visible.rank && <span className="rank">{rank}</span>}
@@ -1439,6 +1522,8 @@ function FeedsPage() {
   const [segmentGhost, setSegmentGhost] = useState<{ segment: FeedSegment; count: number; x: number; y: number } | null>(null);
   const [renamingSegmentId, setRenamingSegmentId] = useState<string | null>(null);
   const [segmentNameDraft, setSegmentNameDraft] = useState("");
+  const [segmentEditMode, setSegmentEditMode] = useState(false);
+  const [instructionExpanded, setInstructionExpanded] = useState(false);
   const [deleteSegmentTarget, setDeleteSegmentTarget] = useState<{ segment: FeedSegment; count: number } | null>(null);
   const [coverMap, setCoverMap] = useState<Map<string, SeriesCatalog[]>>(new Map());
   const [coversLoading, setCoversLoading] = useState(true);
@@ -1541,17 +1626,38 @@ function FeedsPage() {
 
   return (
     <div className="page">
-      <div className="row">
-        <h1>Feeds</h1>
+      <div className="row feeds-page-header">
+        <h1>FEEDS</h1>
         <span className="spacer" />
         <button className="button ghost compact-action" type="button" onClick={() => store.createFeedSegment()} aria-label="Create segment">
           <Plus size={16} /> Segment
+        </button>
+        <button
+          className={`icon-button segment-edit-toggle ${segmentEditMode ? "active" : ""}`}
+          type="button"
+          aria-label={segmentEditMode ? "Finish editing segments" : "Edit segments"}
+          aria-pressed={segmentEditMode}
+          title={segmentEditMode ? "Finish editing segments" : "Edit segments"}
+          onClick={() => {
+            setSegmentEditMode((current) => !current);
+            setRenamingSegmentId(null);
+          }}
+        >
+          <Pencil size={18} />
         </button>
         <button className="icon-button" type="button" onClick={() => setEditorFeed(createFeed("New Feed"))} aria-label="Create feed">
           <Plus size={18} />
         </button>
       </div>
-      <p className="muted tiny">Hold the grip and drag feeds between segments. Segment drag moves the whole block in Home order.</p>
+      <button
+        className={`feeds-page-instruction ${instructionExpanded ? "expanded" : ""}`}
+        type="button"
+        aria-expanded={instructionExpanded}
+        onClick={() => setInstructionExpanded((current) => !current)}
+      >
+        <Info size={16} aria-hidden="true" />
+        <span>Drag a grip to reorder feeds or segments. Segment order also controls Home.</span>
+      </button>
       <div className="feed-segment-list">
         {visibleSegments.map((segment) => {
           const segmentFeeds = segment.feedIds.flatMap((feedId) => {
@@ -1564,10 +1670,15 @@ function FeedsPage() {
           return (
             <section
               key={segment.id}
-              className={`feed-segment ${draggingSegmentId === segment.id ? "dragging" : ""} ${overDraggingSegmentId === segment.id ? "drag-over" : ""} ${overSegmentId === segment.id ? "feed-over" : ""}`}
+              className={`feed-segment ${segment.collapsed ? "collapsed" : ""} ${draggingSegmentId === segment.id ? "dragging" : ""} ${overDraggingSegmentId === segment.id ? "drag-over" : ""} ${overSegmentId === segment.id ? "feed-over" : ""}`}
               data-segment-id={segment.id}
+              style={segmentColorStyle(segment.id)}
+              onClick={(event) => {
+                if ((event.target as HTMLElement).closest("button, a, input, select, textarea")) return;
+                store.updateFeedSegment(segment.id, { collapsed: !segment.collapsed });
+              }}
             >
-              <div className="feed-segment-header">
+              <div className={`feed-segment-header ${segmentEditMode ? "editing" : ""}`}>
                 <button
                   className="feed-segment-drag-handle"
                   type="button"
@@ -1604,19 +1715,21 @@ function FeedsPage() {
                 >
                   <GripVertical size={18} />
                 </button>
-                <button
-                  className="feed-segment-rename"
-                  type="button"
-                  disabled={segment.id === UNSEGMENTED_FEED_SEGMENT_ID}
-                  onClick={() => {
-                    if (segment.id === UNSEGMENTED_FEED_SEGMENT_ID) return;
-                    setRenamingSegmentId(segment.id);
-                    setSegmentNameDraft(segment.name);
-                  }}
-                  aria-label={`Rename ${segment.name}`}
-                >
-                  <Pencil size={17} />
-                </button>
+                {segmentEditMode && (
+                  <button
+                    className="feed-segment-rename"
+                    type="button"
+                    disabled={segment.id === UNSEGMENTED_FEED_SEGMENT_ID}
+                    onClick={() => {
+                      if (segment.id === UNSEGMENTED_FEED_SEGMENT_ID) return;
+                      setRenamingSegmentId(segment.id);
+                      setSegmentNameDraft(segment.name);
+                    }}
+                    aria-label={`Rename ${segment.name}`}
+                  >
+                    <Pencil size={17} />
+                  </button>
+                )}
                 {isRenaming && segment.id !== "unsegmented" ? (
                   <input
                     className="input feed-segment-name-input"
@@ -1658,20 +1771,22 @@ function FeedsPage() {
                   >
                     {segment.hiddenFromHome ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
-                  <button
-                    className="icon-button"
-                    type="button"
-                    onClick={() => downloadSegmentBackup(segment, segmentFeeds)}
-                    aria-label={`Download ${segment.name}`}
-                  >
-                    <Download size={18} />
-                  </button>
-                  {canDelete && (
+                  {segmentEditMode && (
+                    <button
+                      className="icon-button"
+                      type="button"
+                      onClick={() => downloadSegmentBackup(segment, segmentFeeds)}
+                      aria-label={`Download ${segment.name}`}
+                    >
+                      <Download size={18} />
+                    </button>
+                  )}
+                  {segmentEditMode && canDelete && (
                     <button className="icon-button danger" type="button" onClick={() => store.deleteFeedSegment(segment.id)} aria-label={`Delete ${segment.name}`}>
                       <Trash2 size={18} />
                     </button>
                   )}
-                  {canDeleteWithFeeds && (
+                  {segmentEditMode && canDeleteWithFeeds && (
                     <button
                       className="icon-button danger"
                       type="button"
@@ -2535,9 +2650,13 @@ function SearchPage() {
   const store = useAppStore();
   const [query, setQuery] = useState(() => sessionStorage.getItem("manhwa-search-query") ?? "");
   const [committedQuery, setCommittedQuery] = useState(query);
-  const [history, setHistory] = useState<string[]>(() => {
+  const [openedTitleIds, setOpenedTitleIds] = useState<number[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem("manhwa-search-history") ?? "[]") as string[];
+      const saved = JSON.parse(localStorage.getItem(SEARCH_OPENED_HISTORY_KEY) ?? "[]") as unknown;
+      if (!Array.isArray(saved)) return [];
+      return saved
+        .filter((id): id is number => Number.isSafeInteger(id) && id > 0)
+        .slice(0, SEARCH_OPENED_HISTORY_LIMIT);
     } catch {
       return [];
     }
@@ -2549,6 +2668,14 @@ function SearchPage() {
   );
   const searchFeed = useMemo(() => {
     const feed = createFeed("Search results");
+    feed.filters.sourceMode = "mixed";
+    feed.filters.sourceModes = ["anilist", "non-anilist"];
+    feed.filters.contentRatings = [...store.settings.contentRatings];
+    feed.view = { ...feed.view, gridColumns: 3 };
+    return feed;
+  }, [store.settings.contentRatings]);
+  const recentFeed = useMemo(() => {
+    const feed = createFeed("Recently opened");
     feed.filters.sourceMode = "mixed";
     feed.filters.sourceModes = ["anilist", "non-anilist"];
     feed.filters.contentRatings = [...store.settings.contentRatings];
@@ -2615,61 +2742,81 @@ function SearchPage() {
       .map((result) => result.item);
     return fuzzyMatches.slice(0, 120);
   }, [committedQuery, getTitle, searchIndex, searchTextById, sensitiveTagIds, visibleSearchCatalog]);
+  const recentItems = useMemo(() => {
+    const visibleById = new Map(visibleSearchCatalog.map((item) => [item.id, item]));
+    return openedTitleIds
+      .map((id) => visibleById.get(id))
+      .filter((item): item is SeriesCatalog => Boolean(item));
+  }, [openedTitleIds, visibleSearchCatalog]);
   useEffect(() => {
     sessionStorage.setItem("manhwa-search-query", query);
   }, [query]);
-  const remember = (value = query) => {
-    const clean = value.trim();
-    if (!clean) return;
-    const next = [clean, ...history.filter((item) => item.toLocaleLowerCase() !== clean.toLocaleLowerCase())].slice(0, 12);
-    setHistory(next);
-    localStorage.setItem("manhwa-search-history", JSON.stringify(next));
-  };
+  const rememberOpenedTitle = useCallback((id: number) => {
+    setOpenedTitleIds((current) => {
+      const next = [id, ...current.filter((item) => item !== id)].slice(0, SEARCH_OPENED_HISTORY_LIMIT);
+      localStorage.setItem(SEARCH_OPENED_HISTORY_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+  const rememberOpenedTitleFromClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
+    const card = (event.target as HTMLElement).closest<HTMLElement>("[data-series-id]");
+    const id = Number(card?.dataset.seriesId);
+    if (Number.isSafeInteger(id) && id > 0) rememberOpenedTitle(id);
+  }, [rememberOpenedTitle]);
   return (
-    <div className="page">
-      <h1>Search</h1>
-      <form className="field" onSubmit={(event) => { event.preventDefault(); remember(); }}>
-        <label>Title or creator</label>
-        <div className="search-input-wrap">
-          <input
-            className="input"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Titles, aliases, creators"
-            autoComplete="off"
+    <div className="page search-page">
+      <div className="search-page-header">
+        <h1>SEARCH</h1>
+        <form className="field" onSubmit={(event) => event.preventDefault()}>
+          <label>Title or creator</label>
+          <div className="search-input-wrap">
+            <input
+              className="input"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Titles, aliases, creators"
+              autoComplete="off"
+            />
+            {query && (
+              <button className="input-clear" type="button" onClick={() => setQuery("")} aria-label="Clear search">
+                <X size={16} />
+              </button>
+            )}
+          </div>
+        </form>
+      </div>
+      {query.trim() ? (
+        <section className="search-results-surface" onClickCapture={rememberOpenedTitleFromClick}>
+          <MemoSearchTitleCollection
+            items={results}
+            feed={searchFeed}
+            history={store.history}
+            latestDate={store.syncMeta?.historyLastDate}
           />
-          {query && (
-            <button className="input-clear" type="button" onClick={() => setQuery("")} aria-label="Clear search">
-              <X size={16} />
-            </button>
-          )}
-        </div>
-      </form>
-        {query.trim() ? (
-        <MemoSearchTitleCollection
-          items={results}
-          feed={searchFeed}
-          history={store.history}
-          latestDate={store.syncMeta?.historyLastDate}
-        />
+        </section>
       ) : (
-        <section>
+        <section className="search-history-surface">
           <div className="row">
-            <h2 className="section-title">Recent searches</h2>
+            <h2 className="section-title">Recently opened</h2>
             <span className="spacer" />
-            {history.length > 0 && (
-              <button className="button ghost" type="button" onClick={() => { setHistory([]); localStorage.removeItem("manhwa-search-history"); }}>
+            {openedTitleIds.length > 0 && (
+              <button className="button ghost" type="button" onClick={() => { setOpenedTitleIds([]); localStorage.removeItem(SEARCH_OPENED_HISTORY_KEY); }}>
                 Clear
               </button>
             )}
           </div>
-          <div className="chips">
-            {history.map((item) => (
-              <button className="chip chipbutton" type="button" key={item} onClick={() => { setQuery(item); remember(item); }}>
-                {item}
-              </button>
-            ))}
-          </div>
+          {recentItems.length > 0 ? (
+            <div onClickCapture={rememberOpenedTitleFromClick}>
+              <MemoSearchTitleCollection
+                items={recentItems}
+                feed={recentFeed}
+                history={store.history}
+                latestDate={store.syncMeta?.historyLastDate}
+              />
+            </div>
+          ) : (
+            <p className="muted search-history-empty">Titles opened from Global Search will appear here.</p>
+          )}
         </section>
       )}
     </div>
@@ -3038,7 +3185,9 @@ function SettingsPage() {
   };
   return (
     <div className="page settings-page">
-      <h1>Settings</h1>
+      <div className="settings-page-header">
+        <h1>SETTINGS</h1>
+      </div>
 
       <SettingsSection title="Appearance">
         <div className="setting-stack">

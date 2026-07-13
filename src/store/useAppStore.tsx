@@ -648,7 +648,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           ? {
               ...segment,
               ...patch,
-              name: segment.id === UNSEGMENTED_FEED_SEGMENT_ID ? "Unsegmented" : patch.name ?? segment.name,
+              name: segment.id === UNSEGMENTED_FEED_SEGMENT_ID ? "UNSEGMENTED" : patch.name ?? segment.name,
               updatedAt: new Date().toISOString(),
             }
           : segment,
