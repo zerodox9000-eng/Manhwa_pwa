@@ -48,9 +48,19 @@ export function isBuiltInSensitiveSegmentVisible(
 export function mergeBuiltInSensitiveDefaults(feeds: Feed[], segments: FeedSegment[]) {
   const existingFeedIds = new Set(feeds.map((feed) => feed.id));
   const nextFeeds = [...feeds, ...builtInSensitiveFeeds().filter((feed) => !existingFeedIds.has(feed.id))];
-  const existingSegmentIds = new Set(segments.map((segment) => segment.id));
+  const defaultSegmentsById = new Map(builtInSensitiveSegments().map((segment) => [segment.id, segment]));
+  const mergedSegments = segments.map((segment) => {
+    const builtIn = defaultSegmentsById.get(segment.id);
+    if (!builtIn) return segment;
+    const feedIds = new Set(segment.feedIds);
+    return {
+      ...segment,
+      feedIds: [...segment.feedIds, ...builtIn.feedIds.filter((feedId) => !feedIds.has(feedId))],
+    };
+  });
+  const existingSegmentIds = new Set(mergedSegments.map((segment) => segment.id));
   const nextSegments = [
-    ...segments,
+    ...mergedSegments,
     ...builtInSensitiveSegments().filter((segment) => !existingSegmentIds.has(segment.id)),
   ];
   return { feeds: nextFeeds, segments: nextSegments };

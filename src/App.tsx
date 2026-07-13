@@ -1127,6 +1127,8 @@ function TitleCollection({
   );
 }
 
+const MemoSearchTitleCollection = memo(TitleCollection);
+
 function LoadMore({ visibleCount, total, onMore }: { visibleCount: number; total: number; onMore: () => void }) {
   if (visibleCount >= total) return null;
   return (
@@ -2451,6 +2453,7 @@ function TagChipCloud({ tags, feed, onTagClick }: { tags: TagNode[]; feed: Feed;
 function SearchPage() {
   const store = useAppStore();
   const [query, setQuery] = useState(() => sessionStorage.getItem("manhwa-search-query") ?? "");
+  const [committedQuery, setCommittedQuery] = useState(query);
   const [history, setHistory] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("manhwa-search-history") ?? "[]") as string[];
@@ -2459,6 +2462,10 @@ function SearchPage() {
     }
   });
   const sensitiveTagIds = useMemo(() => buildSensitiveTagGroups(store.tags), [store.tags]);
+  const visibleSearchCatalog = useMemo(
+    () => store.catalog.filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds)),
+    [sensitiveTagIds, store.catalog, store.settings],
+  );
   const searchFeed = useMemo(() => {
     const feed = createFeed("Search results");
     feed.filters.sourceMode = "mixed";
@@ -2468,11 +2475,9 @@ function SearchPage() {
     return feed;
   }, [store.settings.contentRatings]);
   const getTitle = useCallback((item: SeriesCatalog) => visibleTitle(item), []);
-  const inputQuery = query;
-  const deferredQuery = useDeferredValue(inputQuery);
   const searchIndex = useMemo(
     () =>
-      new Fuse(store.catalog, {
+      new Fuse(visibleSearchCatalog, {
         includeScore: true,
         shouldSort: true,
         ignoreLocation: true,
@@ -2489,43 +2494,49 @@ function SearchPage() {
           { name: "artists", weight: 0.18 },
         ],
       }),
-    [store.catalog],
+    [visibleSearchCatalog],
   );
   const searchTextById = useMemo(
     () => new Map(store.catalog.map((item) => [item.id, seriesSearchText(item)])),
     [store.catalog],
   );
+  useEffect(() => {
+    if (!query.trim()) {
+      setCommittedQuery("");
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      startTransition(() => setCommittedQuery(query));
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [query]);
   const results = useMemo(() => {
-    const term = deferredQuery.trim();
-    if (!term) return [];
+    const term = committedQuery.trim();
+    if (term.length < 2) return [];
     const sensitiveFamily = sensitiveTagIdsForSearch(term, sensitiveTagIds);
     if (sensitiveFamily) {
-      return store.catalog
-        .filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds))
+      return visibleSearchCatalog
         .filter((item) => item.tag_ids.some((tagId) => sensitiveFamily.has(tagId)))
         .sort((a, b) => getTitle(a).localeCompare(getTitle(b)))
         .slice(0, 120);
     }
     const words = searchWords(term);
-    const directMatches = store.catalog
-      .filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds))
+    const directMatches = visibleSearchCatalog
       .filter((item) => matchesSearchTextWords(searchTextById.get(item.id) ?? "", words))
       .sort(
         (left, right) =>
           searchTextWordPosition(searchTextById.get(left.id) ?? "", words) -
           searchTextWordPosition(searchTextById.get(right.id) ?? "", words),
       );
-    const directMatchIds = new Set(directMatches.map((item) => item.id));
+    if (directMatches.length > 0) return directMatches.slice(0, 120);
     const fuzzyMatches = searchIndex
       .search(term, { limit: 180 })
-      .map((result) => result.item)
-      .filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds))
-      .filter((item) => !directMatchIds.has(item.id));
-    return [...directMatches, ...fuzzyMatches].slice(0, 120);
-  }, [deferredQuery, getTitle, searchIndex, searchTextById, sensitiveTagIds, store.catalog, store.settings]);
+      .map((result) => result.item);
+    return fuzzyMatches.slice(0, 120);
+  }, [committedQuery, getTitle, searchIndex, searchTextById, sensitiveTagIds, visibleSearchCatalog]);
   useEffect(() => {
-    sessionStorage.setItem("manhwa-search-query", inputQuery);
-  }, [inputQuery]);
+    sessionStorage.setItem("manhwa-search-query", query);
+  }, [query]);
   const remember = (value = query) => {
     const clean = value.trim();
     if (!clean) return;
@@ -2554,7 +2565,7 @@ function SearchPage() {
         </div>
       </form>
         {query.trim() ? (
-        <TitleCollection
+        <MemoSearchTitleCollection
           items={results}
           feed={searchFeed}
           history={store.history}
@@ -3001,7 +3012,7 @@ function SettingsPage() {
         />
         <ToggleRow
           label="Show Smut / Hentai"
-          description="Global title search includes Smut, Hentai, and child tags. It also reveals the Smut built-in segment in Feeds."
+          description="Global title search includes adult-rated titles plus Smut, Hentai, and child tags. It also reveals the Smut built-in segment in Feeds."
           value={store.settings.searchAdultTags}
           onChange={(searchAdultTags) => store.updateSettings({ searchAdultTags })}
         />
@@ -3660,6 +3671,3 @@ function downloadText(filename: string, text: string) {
 }
 
 export default App;
-
-
-

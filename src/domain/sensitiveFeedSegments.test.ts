@@ -29,4 +29,16 @@ describe("built-in sensitive feed segments", () => {
     expect(second.segments).toHaveLength(first.segments.length);
     expect(first.segments.every((segment) => segment.hiddenFromHome && segment.collapsed)).toBe(true);
   });
+
+  it("adds newly shipped feeds to an existing sensitive segment without changing its Home visibility", () => {
+    const [smut] = builtInSensitiveSegments();
+    const existing = { ...smut, feedIds: smut.feedIds.slice(0, -1), hiddenFromHome: true, collapsed: false };
+
+    const merged = mergeBuiltInSensitiveDefaults(builtInSensitiveFeeds(), [existing]);
+    const mergedSmut = merged.segments.find((segment) => segment.id === smut.id);
+
+    expect(mergedSmut?.feedIds).toEqual(smut.feedIds);
+    expect(mergedSmut?.hiddenFromHome).toBe(true);
+    expect(mergedSmut?.collapsed).toBe(false);
+  });
 });

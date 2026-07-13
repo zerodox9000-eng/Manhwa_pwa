@@ -192,6 +192,22 @@ describe("runFeedQuery", () => {
     expect(isSearchVisible(adultTitle, { ...DEFAULT_SETTINGS, searchAdultTags: true }, groups)).toBe(true);
   });
 
+  it("includes adult-rated search titles even when their exported tags omit Smut and Hentai", () => {
+    const groups = buildSensitiveTagGroups(tags);
+    const adultRatedWithoutAdultTag = {
+      ...baseSeries[0],
+      id: 47,
+      display_title: "Melt Bless You",
+      content_rating: "erotica" as const,
+      tag_ids: [1],
+    };
+
+    expect(isSearchVisible(adultRatedWithoutAdultTag, DEFAULT_SETTINGS, groups)).toBe(false);
+    expect(
+      isSearchVisible(adultRatedWithoutAdultTag, { ...DEFAULT_SETTINGS, searchAdultTags: true }, groups),
+    ).toBe(true);
+  });
+
   it("segments non-AniList titles by source mode", () => {
     const feed = createFeed("non anilist");
     feed.filters.sourceMode = "non-anilist";

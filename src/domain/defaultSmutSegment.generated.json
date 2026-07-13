@@ -262,6 +262,90 @@
         }
       },
       "coverTitleIds": []
+    },
+    {
+      "id": "0d3c8a76-188e-4cd8-b735-71c26d0b84ef",
+      "name": "Erotica ",
+      "description": "Ranked by Engagement ",
+      "showDescription": true,
+      "createdAt": "2026-07-13T06:43:36.522Z",
+      "updatedAt": "2026-07-13T06:50:05.358Z",
+      "filters": {
+        "sourceMode": "anilist",
+        "sourceModes": [
+          "anilist"
+        ],
+        "query": "",
+        "includeTagIds": [],
+        "excludeTagIds": [
+          4,
+          180
+        ],
+        "tagMatch": "any",
+        "contentRatings": [
+          "erotica"
+        ],
+        "statuses": [],
+        "minChapters": null,
+        "maxChapters": null,
+        "minYear": null,
+        "maxYear": null,
+        "minPopularity": null,
+        "maxPopularity": null,
+        "minFavourites": null,
+        "maxFavourites": null,
+        "minMeanScore": null,
+        "maxMeanScore": null,
+        "metricRanges": [],
+        "includeEstimatedDates": true,
+        "dateField": "none",
+        "rolling": {
+          "mode": "none",
+          "amount": 7,
+          "unit": "days"
+        },
+        "labelIds": []
+      },
+      "sort": [
+        {
+          "id": "0ef83511-d575-4cbe-a315-c707de20965a",
+          "metric": "fanFavouriteDiscoveryPercentile",
+          "direction": "desc"
+        }
+      ],
+      "view": {
+        "mode": "grid",
+        "gridColumns": 3,
+        "desktopGridColumns": 6,
+        "gridDensity": "standard",
+        "listCoverSize": "medium",
+        "listDensity": "standard",
+        "metricSlots": [
+          "fanFavouriteDiscoveryPercentile"
+        ],
+        "visible": {
+          "cover": true,
+          "title": true,
+          "rank": true,
+          "genreChips": true,
+          "status": false,
+          "year": false,
+          "chapters": false,
+          "contentRating": false,
+          "popularity": true,
+          "favourites": true,
+          "meanScore": false,
+          "fanFavouriteRatio": false,
+          "discoveryScore": false,
+          "growthDelta": false,
+          "labels": false,
+          "sourceBadges": false,
+          "quickActions": false,
+          "description": false,
+          "links": false
+        }
+      },
+      "coverTitleIds": []
     }
   ],
   "feedSegments": [
@@ -271,7 +355,8 @@
       "feedIds": [
         "64633318-2d77-4e02-90a4-450cfd60b491",
         "36f3b483-cec5-4dbc-9923-f5637864ed3c",
-        "6de95f8c-2e0a-49bf-a346-b1a64ee409b6"
+        "6de95f8c-2e0a-49bf-a346-b1a64ee409b6",
+        "0d3c8a76-188e-4cd8-b735-71c26d0b84ef"
       ],
       "collapsed": true,
       "hiddenFromHome": true,

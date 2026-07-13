@@ -107,15 +107,16 @@ export function isSearchVisible(
   const tagIds = new Set(series.tag_ids ?? []);
   const hasRelationshipTag = [...groups.relationship].some((id) => tagIds.has(id));
   const hasAdultTag = [...groups.adult].some((id) => tagIds.has(id));
+  const rating = series.content_rating as AppSettings["contentRatings"][number] | null;
+  const hasAdultRating = rating === "erotica" || rating === "pornographic";
 
   if (!settings.searchRelationshipTags && hasRelationshipTag) return false;
-  if (!settings.searchAdultTags && hasAdultTag) return false;
+  if (!settings.searchAdultTags && (hasAdultTag || hasAdultRating)) return false;
 
-  const rating = series.content_rating as AppSettings["contentRatings"][number] | null;
   if (rating && !settings.contentRatings.includes(rating)) {
     const explicitlyAllowed =
       (settings.searchRelationshipTags && hasRelationshipTag) ||
-      (settings.searchAdultTags && hasAdultTag);
+      (settings.searchAdultTags && (hasAdultTag || hasAdultRating));
     if (!explicitlyAllowed) return false;
   }
 
