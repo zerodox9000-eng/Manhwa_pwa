@@ -111,9 +111,18 @@ describe("chunked frontend data", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const data = await fetchChunkedFrontendData(base, undefined, { includeRecommendations: false });
+    const progress: number[] = [];
+    const data = await fetchChunkedFrontendData(
+      base,
+      undefined,
+      { includeRecommendations: false },
+      (value) => progress.push(value),
+    );
     expect(data.recommendationFeatures).toEqual([]);
     expect(fetchMock.mock.calls.map(([url]) => String(url)).some((url) => url.includes("/recommendations/"))).toBe(false);
+    expect(progress[0]).toBe(0);
+    expect(progress.at(-1)).toBe(1);
+    expect(progress.every((value, index) => index === 0 || value >= progress[index - 1])).toBe(true);
   });
 
   it("rejects unsafe chunk paths before downloading them", async () => {

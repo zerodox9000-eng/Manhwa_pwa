@@ -566,8 +566,70 @@ function BottomDrawer({
   );
 }
 
+function LibraryLoadingState({ complete, downloadProgress, status }: { complete: boolean; downloadProgress: number | null; status: string }) {
+  const fillRef = useRef<HTMLSpanElement>(null);
+  const actualTargetRef = useRef(20);
+  const visualTargetRef = useRef(20);
+  const finishingRef = useRef(false);
+
+  useEffect(() => {
+    const progress = Math.max(0, Math.min(1, downloadProgress ?? 0));
+    actualTargetRef.current = 20 + progress * 62;
+  }, [downloadProgress]);
+
+  useEffect(() => {
+    if (finishingRef.current || (!complete && !status.toLowerCase().includes("saving"))) return;
+    finishingRef.current = true;
+    const fill = fillRef.current;
+    if (!fill) return;
+    fill.style.transition = "transform 2400ms cubic-bezier(0.22, 0.72, 0.2, 1)";
+    fill.style.transform = "scaleX(1)";
+  }, [complete, status]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (finishingRef.current) return;
+      const allowedTarget = Math.min(82, actualTargetRef.current + 3);
+      const remaining = allowedTarget - visualTargetRef.current;
+      visualTargetRef.current = Math.min(
+        allowedTarget,
+        visualTargetRef.current + Math.max(0.08, remaining * 0.12),
+      );
+      if (fillRef.current) {
+        fillRef.current.style.transform = `scaleX(${visualTargetRef.current / 100})`;
+      }
+    }, 160);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="library-loading-state" role="status" aria-live="polite" aria-busy="true">
+      <div className="library-loading-panel">
+        <div className="library-loading-mark" aria-hidden="true">
+          <Database size={28} strokeWidth={1.8} />
+        </div>
+        <div className="library-loading-copy">
+          <strong>Preparing your library</strong>
+          <span>{status}</span>
+        </div>
+        <div
+          className="library-loading-progress"
+          role="progressbar"
+          aria-label="Library download in progress"
+          aria-valuetext={status}
+        >
+          <span ref={fillRef} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HomePage() {
   const store = useAppStore();
+  const [libraryLoaderVisible, setLibraryLoaderVisible] = useState(() => !store.ready);
+  const libraryLoaderStartedAtRef = useRef(0);
+  const libraryDownloadObservedRef = useRef(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorFeed, setEditorFeed] = useState<Feed | null>(null);
   const [preloadReady, setPreloadReady] = useState(false);
@@ -579,6 +641,24 @@ function HomePage() {
   const renderCenterIndexRef = useRef(-1);
   const warmFeedIdsRef = useRef(new Set<string>());
   const didInitialPagerAlignRef = useRef(false);
+
+  useEffect(() => {
+    libraryLoaderStartedAtRef.current = performance.now();
+  }, []);
+
+  useEffect(() => {
+    if (/starting sync|download|merging|saving/i.test(store.syncStatus)) {
+      libraryDownloadObservedRef.current = true;
+    }
+  }, [store.syncStatus]);
+
+  useEffect(() => {
+    if (!libraryLoaderVisible || !store.ready) return;
+    const elapsed = performance.now() - libraryLoaderStartedAtRef.current;
+    const delay = libraryDownloadObservedRef.current ? Math.max(2700, 3100 - elapsed) : 120;
+    const timer = window.setTimeout(() => setLibraryLoaderVisible(false), delay);
+    return () => window.clearTimeout(timer);
+  }, [libraryLoaderVisible, store.ready, store.syncStatus]);
   const previewSegment = useMemo(() => {
     const segment = store.feedSegments.find((item) => item.id === store.homePreviewSegmentId) ?? null;
     if (!segment || !isBuiltInSensitiveSegmentVisible(segment, store.settings)) return null;
@@ -758,11 +838,12 @@ function HomePage() {
 
   return (
     <div className="page home-page">
-      {!store.ready ? (
-        <div className="empty-state">
-          <strong>Loading local library</strong>
-          <span className="muted">{store.syncStatus || "Opening IndexedDB cache"}</span>
-        </div>
+      {libraryLoaderVisible ? (
+        <LibraryLoadingState
+          complete={store.ready}
+          downloadProgress={store.syncProgress}
+          status={store.syncStatus || "Opening offline library"}
+        />
       ) : store.feeds.length === 0 ? (
         <div className="empty-state">
           <Library size={34} />

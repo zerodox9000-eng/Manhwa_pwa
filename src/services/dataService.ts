@@ -192,7 +192,8 @@ export async function checkFrontendDataVersion(preferred?: string) {
 
 export async function syncFrontendData(
   preferredSource: string,
-  onProgress?: (message: string) => void
+  onProgress?: (message: string) => void,
+  onDownloadProgress?: (progress: number) => void,
 ) {
   const source = await resolveDataSource(preferredSource);
   const syncTimestamp = new Date().toISOString();
@@ -200,7 +201,12 @@ export async function syncFrontendData(
 
   try {
     onProgress?.("Loading versioned backend data");
-    chunkedData = await fetchChunkedFrontendData(source, onProgress, { includeRecommendations: false });
+    chunkedData = await fetchChunkedFrontendData(
+      source,
+      onProgress,
+      { includeRecommendations: false },
+      onDownloadProgress,
+    );
   } catch {
     onProgress?.("Using compatible backend data");
   }

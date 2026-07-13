@@ -181,11 +181,20 @@ interface ChunkedFetchOptions {
   includeRecommendations?: boolean;
 }
 
-async function loadDataset(base: string, name: DatasetName, descriptor: DatasetDescriptor) {
+async function loadDataset(
+  base: string,
+  name: DatasetName,
+  descriptor: DatasetDescriptor,
+  onChunkComplete?: (bytes: number) => void,
+) {
   const chunks = await mapWithConcurrency(
     descriptor.chunks,
     DOWNLOAD_CONCURRENCY,
-    (chunk) => downloadChunk(base, chunk),
+    async (chunk) => {
+      const value = await downloadChunk(base, chunk);
+      onChunkComplete?.(chunk.bytes);
+      return value;
+    },
   );
   const combined: unknown[] | Record<string, unknown> = descriptor.kind === "array" ? [] : {};
   let records = 0;
@@ -221,29 +230,43 @@ export async function fetchChunkedFrontendData(
   base: string,
   onProgress?: (message: string) => void,
   options: ChunkedFetchOptions = {},
+  onDownloadProgress?: (progress: number) => void,
 ): Promise<ChunkedFrontendData> {
   const manifestResponse = await fetch(`${base}/meta/data-manifest.json`, { cache: "no-cache" });
   if (!manifestResponse.ok) {
     throw new Error(`Manifest: ${manifestResponse.status} ${manifestResponse.statusText}`);
   }
   const manifest = parseFrontendDataManifest(await manifestResponse.json());
+  const requestedDatasets: DatasetName[] = options.includeRecommendations === false
+    ? ["catalog", "tags", "history"]
+    : ["catalog", "tags", "history", "recommendations"];
+  const totalBytes = requestedDatasets.reduce(
+    (sum, name) => sum + manifest.datasets[name].chunks.reduce((chunkSum, chunk) => chunkSum + chunk.bytes, 0),
+    0,
+  );
+  let completedBytes = 0;
+  const reportChunk = (bytes: number) => {
+    completedBytes += bytes;
+    onDownloadProgress?.(totalBytes > 0 ? Math.min(1, completedBytes / totalBytes) : 1);
+  };
+  onDownloadProgress?.(0);
 
   onProgress?.("Downloading chunked catalog");
-  const rawCatalog = await loadDataset(base, "catalog", manifest.datasets.catalog);
+  const rawCatalog = await loadDataset(base, "catalog", manifest.datasets.catalog, reportChunk);
   const catalog = parseCatalogList(rawCatalog);
   if (catalog.length !== manifest.datasets.catalog.count) {
     throw new Error("Catalog validation dropped one or more records.");
   }
 
   onProgress?.("Downloading chunked tags");
-  const rawTags = await loadDataset(base, "tags", manifest.datasets.tags);
+  const rawTags = await loadDataset(base, "tags", manifest.datasets.tags, reportChunk);
   const tags = parseTags(rawTags);
   if (tags.length !== manifest.datasets.tags.count) {
     throw new Error("Tag validation dropped one or more records.");
   }
 
   onProgress?.("Downloading chunked history");
-  const history = parseHistory(await loadDataset(base, "history", manifest.datasets.history));
+  const history = parseHistory(await loadDataset(base, "history", manifest.datasets.history, reportChunk));
   if (Object.keys(history).length !== manifest.datasets.history.count) {
     throw new Error("History validation dropped one or more tracks.");
   }
@@ -252,7 +275,7 @@ export async function fetchChunkedFrontendData(
   if (options.includeRecommendations !== false) {
     onProgress?.("Downloading chunked recommendation features");
     recommendationFeatures = parseRecommendationFeatures(
-      await loadDataset(base, "recommendations", manifest.datasets.recommendations),
+      await loadDataset(base, "recommendations", manifest.datasets.recommendations, reportChunk),
     );
     if (recommendationFeatures.length !== manifest.datasets.recommendations.count) {
       throw new Error("Recommendation validation dropped one or more records.");

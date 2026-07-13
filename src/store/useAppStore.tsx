@@ -64,6 +64,7 @@ interface StoreState {
   settings: AppSettings;
   activeFeedId: string | null;
   syncStatus: string;
+  syncProgress: number | null;
   syncInFlight: boolean;
   homePreviewSegmentId: string | null;
   homeResetRequested: boolean;
@@ -414,6 +415,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [homePreviewSegmentId, setHomePreviewSegmentId] = useState<string | null>(null);
   const [homeResetRequested, setHomeResetRequested] = useState(false);
   const [syncStatus, setSyncStatus] = useState("");
+  const [syncProgress, setSyncProgress] = useState<number | null>(null);
   const [syncInFlight, setSyncInFlight] = useState(false);
   const syncInFlightRef = useRef<Promise<void> | null>(null);
 
@@ -509,6 +511,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
     const task = (async () => {
       setSyncInFlight(true);
+      setSyncProgress(null);
       setSyncStatus("Checking library version");
       try {
         if (!options?.force) {
@@ -526,7 +529,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           setSyncStatus(`Updating ${shortDataVersion(currentVersion)} -> ${shortDataVersion(remote.versionHash)}`);
         }
         setSyncStatus("Starting sync");
-        const synced = await syncFrontendData(settings.dataSourceUrl, setSyncStatus);
+        const synced = await syncFrontendData(settings.dataSourceUrl, setSyncStatus, setSyncProgress);
         setSyncMeta(synced.meta);
         setSettings((current) => ({ ...current, dataSourceUrl: synced.meta.source }));
         startTransition(() => {
@@ -535,6 +538,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           setHistory(synced.history);
           setRecommendationFeatures([]);
         });
+        setSyncProgress(1);
         setSyncStatus("Sync complete");
       } catch (error) {
         setSyncStatus(error instanceof Error ? error.message : "Sync failed");
@@ -764,6 +768,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       settings,
       activeFeedId,
       syncStatus,
+      syncProgress,
       syncInFlight,
       homePreviewSegmentId,
       homeResetRequested,
@@ -803,6 +808,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       settings,
       activeFeedId,
       syncStatus,
+      syncProgress,
       syncInFlight,
       homePreviewSegmentId,
       homeResetRequested,
