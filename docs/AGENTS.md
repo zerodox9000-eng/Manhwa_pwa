@@ -16,6 +16,7 @@ Owns durable documentation for frontend agents and maintainers.
 ## Work Guidance
 
 - Prefer short sections with exact file references.
+- `assets/` contains optimized product screenshots used by the public README; keep that gallery selective and current.
 - Do not duplicate the root DOX contract here.
 - Link to backend docs only for consumed export contracts.
 

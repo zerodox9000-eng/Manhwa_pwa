@@ -14,7 +14,7 @@ export default defineConfig({
       manifest: {
         name: 'Aeon',
         short_name: 'Aeon',
-        description: 'Local-first manhwa discovery grids powered by MangaBaka and AniList exports.',
+        description: 'Explore focused manhwa feeds, meaningful rankings, powerful search, and personal title collections.',
         theme_color: '#11131a',
         background_color: '#08090d',
         display: 'standalone',

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://zerodox9000-eng.github.io/Manhwa_pwa/sitemap.xml

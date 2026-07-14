@@ -53,6 +53,8 @@ Update parent docs when parent-level structure, ownership, workflow, or child in
 - For Home pager work, protect native horizontal scroll-snap, per-feed vertical scroll, and back/return restoration.
 - Prefer scoped fixes over broad rewrites. If a bug is in a shell or persistence path, do not churn card rendering or feed math unless needed.
 - Keep docs concise, current, and operational. Document stable contracts, not diary entries.
+- Keep the root README human-first and presentation-ready: lead with Aeon's purpose, visuals, and reader value; place implementation details in a secondary maintainer section.
+- Avoid em dashes in public-facing copy; use ordinary punctuation that reads naturally.
 
 ## Verification
 
