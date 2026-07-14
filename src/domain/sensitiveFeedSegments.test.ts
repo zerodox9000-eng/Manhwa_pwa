@@ -4,6 +4,7 @@ import {
   builtInSensitiveSegments,
   isBuiltInSensitiveSegmentVisible,
   mergeBuiltInSensitiveDefaults,
+  normalizeBuiltInSensitiveNames,
 } from "./sensitiveFeedSegments";
 
 describe("built-in sensitive feed segments", () => {
@@ -32,13 +33,33 @@ describe("built-in sensitive feed segments", () => {
 
   it("adds newly shipped feeds to an existing sensitive segment without changing its Home visibility", () => {
     const [smut] = builtInSensitiveSegments();
-    const existing = { ...smut, feedIds: smut.feedIds.slice(0, -1), hiddenFromHome: true, collapsed: false };
+    const existingFeed = { ...builtInSensitiveFeeds().find((feed) => feed.id === "0d3c8a76-188e-4cd8-b735-71c26d0b84ef")!, name: "Erotica " };
+    const existing = { ...smut, name: "SMUT", feedIds: smut.feedIds.slice(0, -1), hiddenFromHome: true, collapsed: false };
 
-    const merged = mergeBuiltInSensitiveDefaults(builtInSensitiveFeeds(), [existing]);
+    const merged = mergeBuiltInSensitiveDefaults(
+      builtInSensitiveFeeds().map((feed) => feed.id === existingFeed.id ? existingFeed : feed),
+      [existing],
+    );
     const mergedSmut = merged.segments.find((segment) => segment.id === smut.id);
+    const mergedErotica = merged.feeds.find((feed) => feed.id === existingFeed.id);
 
     expect(mergedSmut?.feedIds).toEqual(smut.feedIds);
+    expect(mergedSmut?.name).toBe("SMUT/EROTICA");
     expect(mergedSmut?.hiddenFromHome).toBe(true);
     expect(mergedSmut?.collapsed).toBe(false);
+    expect(mergedErotica?.name).toBe("EROTICA");
+  });
+
+  it("normalizes built-in display names even after the one-time install migration", () => {
+    const feeds = builtInSensitiveFeeds().map((feed) => feed.id === "0d3c8a76-188e-4cd8-b735-71c26d0b84ef" ? { ...feed, name: "Erotica " } : feed);
+    const segments = builtInSensitiveSegments().map((segment) => segment.id === "e362a18b-4a6c-42d7-85f8-f499ba2d195e" ? { ...segment, name: "SMUT", collapsed: false } : segment);
+
+    const normalized = normalizeBuiltInSensitiveNames(feeds, segments);
+
+    expect(normalized.feeds.find((feed) => feed.id === "0d3c8a76-188e-4cd8-b735-71c26d0b84ef")?.name).toBe("EROTICA");
+    expect(normalized.segments.find((segment) => segment.id === "e362a18b-4a6c-42d7-85f8-f499ba2d195e")).toMatchObject({
+      name: "SMUT/EROTICA",
+      collapsed: false,
+    });
   });
 });

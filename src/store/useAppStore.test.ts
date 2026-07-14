@@ -1,15 +1,32 @@
 import { describe, expect, it } from "vitest";
 import { createFeed } from "../domain/defaults";
 import type { FeedSegment } from "../domain/types";
-import { addNewFeedToUnsegmentedSegment, correctDefaultFeedDescriptions, normalizeFeed, UNSEGMENTED_FEED_SEGMENT_ID } from "./useAppStore";
+import { addNewFeedToUnsegmentedSegment, correctDefaultFeedDescriptions, MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID, normalizeFeed, normalizeFeedSegments, UNSEGMENTED_FEED_SEGMENT_ID } from "./useAppStore";
 
 const now = "2026-07-10T00:00:00.000Z";
 
 function segment(id: string, feedIds: string[]): FeedSegment {
-  return { id, name: id, feedIds, collapsed: false, hiddenFromHome: false, createdAt: now, updatedAt: now };
+  return { id, library: "logic", name: id, feedIds, collapsed: false, hiddenFromHome: false, createdAt: now, updatedAt: now };
 }
 
 describe("normalizeFeed", () => {
+  it("migrates legacy feeds to logic without changing their id", () => {
+    const legacy = createFeed("Legacy");
+    delete (legacy as Partial<typeof legacy>).kind;
+    const normalized = normalizeFeed(legacy);
+    expect(normalized.kind).toBe("logic");
+    expect(normalized.id).toBe(legacy.id);
+  });
+
+  it("keeps custom membership and creates a separate MY LIST segment", () => {
+    const logic = createFeed("Logic");
+    const custom = createFeed("Custom");
+    custom.kind = "custom";
+    custom.titleIds = [3, 3, 2];
+    const segments = normalizeFeedSegments([normalizeFeed(logic), normalizeFeed(custom)], [segment(UNSEGMENTED_FEED_SEGMENT_ID, [logic.id])]);
+    expect(segments.find((item) => item.id === MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID)?.feedIds).toEqual([custom.id]);
+    expect(normalizeFeed(custom).titleIds).toEqual([3, 2]);
+  });
   it("removes latest-added rank from visible cover stats", () => {
     const feed = createFeed("old latest");
     feed.filters.sourceMode = "mixed";

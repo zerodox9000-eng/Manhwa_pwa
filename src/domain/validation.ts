@@ -264,6 +264,7 @@ const sortRuleSchema = z
 const feedSchema = z
   .object({
     id: z.string(),
+    kind: z.enum(["logic", "custom"]).optional(),
     name: z.string().optional(),
     description: z.string().optional(),
     showDescription: z.boolean().optional(),
@@ -273,6 +274,10 @@ const feedSchema = z
     sort: z.array(sortRuleSchema).optional(),
     view: feedViewSettingsSchema.optional(),
     coverTitleIds: z.array(z.number()).optional(),
+    titleIds: z.array(z.number()).optional(),
+    orderMode: z.enum(["manual", "automatic"]).optional(),
+    newTitlePlacement: z.enum(["top", "bottom"]).optional(),
+    nonAniListPlacement: z.enum(["top", "bottom"]).optional(),
   })
   .passthrough();
 
@@ -291,6 +296,7 @@ const folderSchema = z
 const feedSegmentSchema = z
   .object({
     id: z.string(),
+    library: z.enum(["logic", "custom"]).optional(),
     name: z.string().optional(),
     feedIds: z.array(z.string()).optional(),
     collapsed: z.boolean().optional(),
@@ -370,6 +376,7 @@ const appStateSnapshotSchema = z
   .object({
     feeds: z.array(feedSchema).optional(),
     feedSegments: z.array(feedSegmentSchema).optional(),
+    feedLibraryOrder: z.array(z.enum(["logic", "custom"])).optional(),
     folders: z.array(folderSchema).optional(),
     labels: z.array(labelSchema).optional(),
     settings: appSettingsSchema.optional(),

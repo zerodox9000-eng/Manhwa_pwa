@@ -11,14 +11,30 @@ interface SensitiveSegmentSource {
 }
 
 const sensitiveSegmentSources: Array<{ mode: SensitiveSegmentMode; source: SensitiveSegmentSource }> = [
-  { mode: "adult", source: smutSegmentJson as SensitiveSegmentSource },
-  { mode: "relationship", source: yuriYaoiSegmentJson as SensitiveSegmentSource },
-  { mode: "combined", source: smutYuriYaoiSegmentJson as SensitiveSegmentSource },
+  { mode: "adult", source: smutSegmentJson as unknown as SensitiveSegmentSource },
+  { mode: "relationship", source: yuriYaoiSegmentJson as unknown as SensitiveSegmentSource },
+  { mode: "combined", source: smutYuriYaoiSegmentJson as unknown as SensitiveSegmentSource },
 ];
 
 const sensitiveSegmentModeById = new Map(
   sensitiveSegmentSources.flatMap(({ mode, source }) => source.feedSegments.map((segment) => [segment.id, mode] as const)),
 );
+
+const builtInFeedNameMigrations = new Map([["0d3c8a76-188e-4cd8-b735-71c26d0b84ef", "EROTICA"]]);
+const builtInSegmentNameMigrations = new Map([["e362a18b-4a6c-42d7-85f8-f499ba2d195e", "SMUT/EROTICA"]]);
+
+export function normalizeBuiltInSensitiveNames(feeds: Feed[], segments: FeedSegment[]) {
+  return {
+    feeds: feeds.map((feed) => {
+      const name = builtInFeedNameMigrations.get(feed.id);
+      return name && feed.name !== name ? { ...feed, name } : feed;
+    }),
+    segments: segments.map((segment) => {
+      const name = builtInSegmentNameMigrations.get(segment.id);
+      return name && segment.name !== name ? { ...segment, name } : segment;
+    }),
+  };
+}
 
 export function builtInSensitiveFeeds() {
   return sensitiveSegmentSources.flatMap(({ source }) => source.feeds);
@@ -46,10 +62,14 @@ export function isBuiltInSensitiveSegmentVisible(
 }
 
 export function mergeBuiltInSensitiveDefaults(feeds: Feed[], segments: FeedSegment[]) {
-  const existingFeedIds = new Set(feeds.map((feed) => feed.id));
-  const nextFeeds = [...feeds, ...builtInSensitiveFeeds().filter((feed) => !existingFeedIds.has(feed.id))];
+  const canonical = normalizeBuiltInSensitiveNames(feeds, segments);
+  const existingFeedIds = new Set(canonical.feeds.map((feed) => feed.id));
+  const nextFeeds = [
+    ...canonical.feeds,
+    ...builtInSensitiveFeeds().filter((feed) => !existingFeedIds.has(feed.id)),
+  ];
   const defaultSegmentsById = new Map(builtInSensitiveSegments().map((segment) => [segment.id, segment]));
-  const mergedSegments = segments.map((segment) => {
+  const mergedSegments = canonical.segments.map((segment) => {
     const builtIn = defaultSegmentsById.get(segment.id);
     if (!builtIn) return segment;
     const feedIds = new Set(segment.feedIds);

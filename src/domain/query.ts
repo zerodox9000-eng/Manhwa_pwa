@@ -177,6 +177,7 @@ function sourceModesFromFilters(feed: Feed) {
 }
 
 export function feedUsesAniListOnlyParameters(feed: Feed) {
+  if (feed.kind === "custom") return false;
   const filters = feed.filters;
   if (
     filters.minPopularity != null ||
@@ -264,9 +265,16 @@ export function runFeedQuery(args: {
   let limitedHistory = false;
   let missingDateData = false;
   let candidates = series;
+  if (feed.kind === "custom") {
+    const byId = new Map(series.map((item) => [item.id, item]));
+    candidates = feed.titleIds.flatMap((id) => {
+      const item = byId.get(id);
+      return item ? [item] : [];
+    });
+  }
   const usesLatestAddedSort = feed.sort.some((rule) => rule.metric === "mangabakaLatestRank");
 
-  if (filters.query.trim()) {
+  if (feed.kind === "logic" && filters.query.trim()) {
     const q = filters.query.trim().toLocaleLowerCase();
     const exactMatches = series.filter((item) => {
       const tagText = item.tag_ids
@@ -299,12 +307,14 @@ export function runFeedQuery(args: {
 
   const result = candidates.filter((item) => {
     const rating = item.content_rating as AppSettings["contentRatings"][number] | null;
-    if (rating && !filters.contentRatings.includes(rating)) return false;
+    if (feed.kind === "logic" && rating && !filters.contentRatings.includes(rating)) return false;
 
     const ani = hasAniList(item);
-    const sourceModes = effectiveSourceModesForFeed(feed);
-    if (!sourceModes.includes(ani ? "anilist" : "non-anilist")) return false;
-    if (!ani && usesLatestAddedSort && !isNonAniListAddCandidate(item)) return false;
+    if (feed.kind === "logic") {
+      const sourceModes = effectiveSourceModesForFeed(feed);
+      if (!sourceModes.includes(ani ? "anilist" : "non-anilist")) return false;
+      if (!ani && usesLatestAddedSort && !isNonAniListAddCandidate(item)) return false;
+    }
 
     if (filters.statuses.length > 0 && (!item.status || !filters.statuses.includes(item.status))) return false;
     if (filters.includeEstimatedDates === false && !displayReleaseDate(item)) return false;
@@ -331,14 +341,14 @@ export function runFeedQuery(args: {
       if (range.max != null && value > range.max) return false;
     }
 
-    if (includeTagIds.length > 0) {
+    if (feed.kind === "logic" && includeTagIds.length > 0) {
       const hasTagGroup = (ids: number[]) => ids.some((id) => item.tag_ids.includes(id));
       const ok = filters.tagMatch === "all" ? includeTagGroups.every(hasTagGroup) : includeTagGroups.some(hasTagGroup);
       if (!ok) return false;
     }
-    if (excludeTagIds.some((id) => item.tag_ids.includes(id))) return false;
+    if (feed.kind === "logic" && excludeTagIds.some((id) => item.tag_ids.includes(id))) return false;
 
-    if (filters.labelIds.length > 0) {
+    if (feed.kind === "logic" && filters.labelIds.length > 0) {
       const matchingLabels = labels.filter((label) => filters.labelIds.includes(label.id));
       const itemLabelIds = matchingLabels.filter((label) => labelMatchesSeries(label, item)).map((label) => label.id);
       if (itemLabelIds.length === 0) return false;
@@ -357,11 +367,18 @@ export function runFeedQuery(args: {
     return true;
   });
 
+  if (feed.kind === "custom" && feed.orderMode === "manual") {
+    return { items: result, limitedHistory, missingDateData, activeNotes };
+  }
+
   const effectiveSourceModes = effectiveSourceModesForFeed(feed);
   const usesAniListAddedSort = usesLatestAddedSort && effectiveSourceModes.length === 1 && effectiveSourceModes[0] === "anilist";
   const sorted = [...result].sort((a, b) => {
     const aAni = hasAniList(a);
     const bAni = hasAniList(b);
+    if (feed.kind === "custom" && aAni !== bAni) {
+      return feed.nonAniListPlacement === "top" ? (aAni ? 1 : -1) : aAni ? -1 : 1;
+    }
     if (!usesLatestAddedSort && (filters.sourceModes?.length ?? 0) > 1 && aAni !== bAni && settings.nonAniListPlacement !== "mixed") {
       return settings.nonAniListPlacement === "top" ? (aAni ? 1 : -1) : aAni ? -1 : 1;
     }

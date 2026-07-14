@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Check,
   Copy,
   Database,
@@ -28,7 +29,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { memo, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createContext, memo, startTransition, useCallback, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Fuse from "fuse.js";
 import { appDebugLog } from "./lib/debug";
 import { useRegisterSW } from "virtual:pwa-register/react";
@@ -47,7 +48,7 @@ import {
 } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import { createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
+import { createCustomFeed, createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
 import { isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments";
 import { resolveRollingWindow } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
@@ -61,6 +62,7 @@ import type {
   AppStateSnapshot,
   ContentRating,
   Feed,
+  FeedLibraryKind,
   FeedSegment,
   FeedViewSettings,
   HistoryMap,
@@ -73,7 +75,7 @@ import type {
   TagNode,
 } from "./domain/types";
 import { fetchSeriesDetail } from "./services/dataService";
-import { AppStoreProvider, isBuiltInDefaultFeed, UNSEGMENTED_FEED_SEGMENT_ID, useAppStore } from "./store/useAppStore";
+import { AppStoreProvider, CUSTOM_FEED_TITLE_LIMIT, isBuiltInDefaultFeed, MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID, UNSEGMENTED_FEED_SEGMENT_ID, useAppStore } from "./store/useAppStore";
 
 const NAV_ITEMS = [
   { id: "home", to: "/", label: "Home", icon: Home },
@@ -84,6 +86,7 @@ const NAV_ITEMS = [
 
 const SORT_OPTIONS: MetricId[] = METRIC_DEFINITIONS.map((definition) => definition.id);
 const RANGE_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.filterable);
+const CUSTOM_ADDITIONAL_RANGE_METRICS = RANGE_METRICS.filter((definition) => definition.id !== "year" && definition.id !== "chapters");
 const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.id !== "title" && definition.id !== "mangabakaLatestRank");
 const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
@@ -122,6 +125,7 @@ const FEED_TITLE_EXPANDED_MAX = 140;
 const FEED_DESCRIPTION_EXPANDED_MAX = 260;
 const FEEDS_DRAG_EDGE_SIZE = 92;
 const FEEDS_DRAG_MAX_SCROLL_SPEED = 18;
+const FEEDS_PAGE_LIBRARY_SESSION_KEY = "aeon-feeds-page-library";
 const PWA_CHROME_THEME_COLOR = "#11131a";
 const DESKTOP_GRID_OPTIONS = [6, 7, 8] as const;
 
@@ -160,6 +164,74 @@ const DEFAULT_FEED_PALETTE: [RgbColor, RgbColor, RgbColor] = [
   [170, 92, 132],
 ];
 const coverPaletteCache = new Map<string, Promise<RgbColor>>();
+
+type TitleSelectionMode = { kind: "collect" } | { kind: "remove"; feedId: string };
+interface TitleSelectionSnapshot {
+  mode: TitleSelectionMode | null;
+  selectedIds: ReadonlySet<number>;
+}
+interface TitleSelectionStore {
+  getSnapshot: () => TitleSelectionSnapshot;
+  isSelected: (titleId: number) => boolean;
+  subscribe: (titleId: number, listener: () => void) => () => void;
+  subscribeAll: (listener: () => void) => () => void;
+  replace: (mode: TitleSelectionMode, titleIds: Iterable<number>) => void;
+  toggle: (titleId: number) => void;
+  clear: () => void;
+}
+interface TitleSelectionValue {
+  store: TitleSelectionStore;
+  begin: (feed: Feed, titleId: number) => void;
+  toggle: (feed: Feed, titleId: number) => void;
+  clear: () => void;
+}
+
+function createTitleSelectionStore(): TitleSelectionStore {
+  let snapshot: TitleSelectionSnapshot = { mode: null, selectedIds: new Set() };
+  const titleListeners = new Map<number, Set<() => void>>();
+  const allListeners = new Set<() => void>();
+  const publish = (next: TitleSelectionSnapshot) => {
+    const changedIds = new Set<number>([...snapshot.selectedIds, ...next.selectedIds]);
+    for (const titleId of [...changedIds]) {
+      if (snapshot.selectedIds.has(titleId) === next.selectedIds.has(titleId)) changedIds.delete(titleId);
+    }
+    snapshot = next;
+    for (const titleId of changedIds) for (const listener of titleListeners.get(titleId) ?? []) listener();
+    for (const listener of allListeners) listener();
+  };
+  return {
+    getSnapshot: () => snapshot,
+    isSelected: (titleId) => snapshot.selectedIds.has(titleId),
+    subscribe: (titleId, listener) => {
+      const listeners = titleListeners.get(titleId) ?? new Set<() => void>();
+      listeners.add(listener);
+      titleListeners.set(titleId, listeners);
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size === 0) titleListeners.delete(titleId);
+      };
+    },
+    subscribeAll: (listener) => {
+      allListeners.add(listener);
+      return () => allListeners.delete(listener);
+    },
+    replace: (mode, titleIds) => publish({ mode, selectedIds: new Set(titleIds) }),
+    toggle: (titleId) => {
+      const selectedIds = new Set(snapshot.selectedIds);
+      if (selectedIds.has(titleId)) selectedIds.delete(titleId);
+      else selectedIds.add(titleId);
+      publish({ ...snapshot, selectedIds });
+    },
+    clear: () => publish({ mode: null, selectedIds: new Set() }),
+  };
+}
+
+const TitleSelectionContext = createContext<TitleSelectionValue | null>(null);
+function useTitleSelection() {
+  const value = useContext(TitleSelectionContext);
+  if (!value) throw new Error("Title selection must be used inside AppFrame");
+  return value;
+}
 
 function extractBrightCoverColor(image: HTMLImageElement): RgbColor {
   const canvas = document.createElement("canvas");
@@ -293,17 +365,21 @@ function orderedFeedsForSegments(
   segments: FeedSegment[],
   settings: Pick<AppSettings, "searchAdultTags" | "searchRelationshipTags">,
   options: { homeOnly?: boolean } = {},
+  libraryOrder: FeedLibraryKind[] = ["logic", "custom"],
 ) {
   const byId = new Map(feeds.map((feed) => [feed.id, feed]));
   const seen = new Set<string>();
   const ordered: Feed[] = [];
-  for (const segment of segments) {
-    if (options.homeOnly && (segment.hiddenFromHome || !isBuiltInSensitiveSegmentVisible(segment, settings))) continue;
-    for (const feedId of segment.feedIds) {
-      const feed = byId.get(feedId);
-      if (!feed || seen.has(feedId)) continue;
-      seen.add(feedId);
-      ordered.push(feed);
+  for (const library of libraryOrder) {
+    for (const segment of segments) {
+      if (segment.library !== library) continue;
+      if (options.homeOnly && (segment.hiddenFromHome || !isBuiltInSensitiveSegmentVisible(segment, settings))) continue;
+      for (const feedId of segment.feedIds) {
+        const feed = byId.get(feedId);
+        if (!feed || feed.kind !== library || seen.has(feedId)) continue;
+        seen.add(feedId);
+        ordered.push(feed);
+      }
     }
   }
   if (!options.homeOnly) {
@@ -369,19 +445,26 @@ function AppFrame() {
   const navigate = useNavigate();
   const lastHomeNavTapRef = useRef(0);
   const homeTapTimerRef = useRef<number | null>(null);
+  const titleSelectionHistoryEntryRef = useRef(false);
+  const [titleSelectionStore] = useState(createTitleSelectionStore);
   const nav = NAV_ITEMS.filter((item) => store.settings.bottomNavItems.includes(item.id));
   const showingHome = location.pathname === "/";
   const showingTitle = location.pathname.startsWith("/title/");
-  const keepHomeMounted = showingHome || showingTitle;
+  const [homeHasMounted, setHomeHasMounted] = useState(showingHome || showingTitle);
+  const keepHomeMounted = homeHasMounted || showingHome || showingTitle;
   const defaultHomeFeeds = useMemo(
-    () => orderedFeedsForSegments(store.feeds, store.feedSegments, store.settings, { homeOnly: true }),
-    [store.feeds, store.feedSegments, store.settings],
+    () => orderedFeedsForSegments(store.feeds, store.feedSegments, store.settings, { homeOnly: true }, store.feedLibraryOrder),
+    [store.feeds, store.feedLibraryOrder, store.feedSegments, store.settings],
   );
   const { needRefresh, updateServiceWorker } = useRegisterSW({
     onRegisteredSW() {
       void 0;
     },
   });
+
+  useEffect(() => {
+    if (showingHome || showingTitle) setHomeHasMounted(true);
+  }, [showingHome, showingTitle]);
 
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", store.settings.accentColor);
@@ -416,13 +499,55 @@ function AppFrame() {
     if (needRefresh) void updateServiceWorker(true);
   }, [needRefresh, updateServiceWorker]);
 
+  const clearTitleSelection = useCallback(() => {
+    titleSelectionStore.clear();
+    if (titleSelectionHistoryEntryRef.current) {
+      titleSelectionHistoryEntryRef.current = false;
+      window.history.back();
+    }
+  }, [titleSelectionStore]);
+  const beginTitleSelection = useCallback((feed: Feed, titleId: number) => {
+    if (!titleSelectionStore.getSnapshot().mode && !titleSelectionHistoryEntryRef.current) {
+      window.history.pushState({ ...window.history.state, aeonTitleSelection: true }, "", window.location.href);
+      titleSelectionHistoryEntryRef.current = true;
+    }
+    titleSelectionStore.replace(feed.kind === "custom" ? { kind: "remove", feedId: feed.id } : { kind: "collect" }, [titleId]);
+  }, [titleSelectionStore]);
+  const toggleTitleSelection = useCallback((feed: Feed, titleId: number) => {
+    const { mode } = titleSelectionStore.getSnapshot();
+    if (mode?.kind === "remove" && mode.feedId !== feed.id) return;
+    if (mode?.kind === "collect" && feed.kind === "custom") return;
+    if (!mode) {
+      beginTitleSelection(feed, titleId);
+      return;
+    }
+    titleSelectionStore.toggle(titleId);
+  }, [beginTitleSelection, titleSelectionStore]);
+
+  useEffect(() => {
+    const handleSelectionBack = () => {
+      if (!titleSelectionHistoryEntryRef.current) return;
+      titleSelectionHistoryEntryRef.current = false;
+      titleSelectionStore.clear();
+    };
+    window.addEventListener("popstate", handleSelectionBack);
+    return () => window.removeEventListener("popstate", handleSelectionBack);
+  }, [titleSelectionStore]);
+  const selectionValue = useMemo<TitleSelectionValue>(() => ({
+    store: titleSelectionStore,
+    begin: beginTitleSelection,
+    toggle: toggleTitleSelection,
+    clear: clearTitleSelection,
+  }), [beginTitleSelection, clearTitleSelection, titleSelectionStore, toggleTitleSelection]);
+
   return (
+    <TitleSelectionContext.Provider value={selectionValue}>
     <div className="app-shell">
       <SessionRestorer />
       <main>
         {keepHomeMounted && (
-          <div className={showingTitle ? "route-cache-hidden" : undefined} aria-hidden={showingTitle || undefined}>
-            <HomePage />
+          <div className={!showingHome ? "route-cache-hidden" : undefined} aria-hidden={!showingHome || undefined}>
+            <StableHomePage />
           </div>
         )}
         {showingTitle ? (
@@ -478,7 +603,9 @@ function AppFrame() {
           );
         })}
       </nav>
+      <TitleSelectionDock />
     </div>
+    </TitleSelectionContext.Provider>
   );
 }
 
@@ -615,6 +742,122 @@ function BottomDrawer({
   );
 }
 
+function TitleSelectionDock() {
+  const store = useAppStore();
+  const selection = useTitleSelection();
+  const selectionSnapshot = useSyncExternalStore(
+    selection.store.subscribeAll,
+    selection.store.getSnapshot,
+    selection.store.getSnapshot,
+  );
+  const { mode, selectedIds } = selectionSnapshot;
+  const [destinationOpen, setDestinationOpen] = useState(false);
+  const [destinationIds, setDestinationIds] = useState<Set<string>>(() => new Set());
+  const [newListName, setNewListName] = useState("");
+  const [summary, setSummary] = useState("");
+  const customFeeds = useMemo(() => store.feeds.filter((feed) => feed.kind === "custom"), [store.feeds]);
+  const customFeedsById = useMemo(() => new Map(customFeeds.map((feed) => [feed.id, feed])), [customFeeds]);
+  const customSegments = useMemo(() => store.feedSegments.filter((segment) => segment.library === "custom"), [store.feedSegments]);
+  const removalFeed = mode?.kind === "remove" ? customFeedsById.get(mode.feedId) : null;
+  const selectedCount = selectedIds.size;
+
+  useLayoutEffect(() => {
+    if (mode && selectedCount === 0 && !destinationOpen) selection.clear();
+  }, [destinationOpen, mode, selectedCount, selection]);
+
+  useEffect(() => {
+    if (!summary) return;
+    const timer = window.setTimeout(() => setSummary(""), 2600);
+    return () => window.clearTimeout(timer);
+  }, [summary]);
+
+  if (!mode && !summary) return null;
+  const applyDestinations = () => {
+    const result = store.addTitlesToCustomFeeds([...destinationIds], [...selectedIds]);
+    setSummary(`${result.added} added${result.duplicates ? ` · ${result.duplicates} already there` : ""}${result.full ? ` · ${result.full} skipped (full)` : ""}`);
+    setDestinationOpen(false);
+    setDestinationIds(new Set());
+    selection.clear();
+  };
+
+  return (
+    <>
+      {mode && !destinationOpen ? (
+        <div className="title-selection-dock" role="toolbar" aria-label="Selected titles">
+          <button className="button ghost" type="button" onClick={selection.clear}>Cancel</button>
+          <strong className="title-selection-count" aria-label={`${selectedCount} selected`}>{selectedCount}</strong>
+          {mode.kind === "remove" ? (
+            <>
+              <button className="button ghost" type="button" disabled={(removalFeed?.titleIds.length ?? 0) < 2} onClick={() => {
+                if (!removalFeed) return;
+                const feedId = removalFeed.id;
+                selection.clear();
+                window.dispatchEvent(new CustomEvent("aeon:rearrange-custom-feed", { detail: { feedId } }));
+              }}><GripVertical size={17} /> Drag</button>
+              <button className="button danger" type="button" disabled={selectedCount === 0} onClick={() => {
+                store.removeTitlesFromCustomFeed(mode.kind === "remove" ? mode.feedId : "", [...selectedIds]);
+                selection.clear();
+              }}><Trash2 size={17} /> Remove</button>
+            </>
+          ) : (
+            <button className="button primary" type="button" disabled={selectedCount === 0} onClick={() => setDestinationOpen(true)}><Plus size={17} /> Add</button>
+          )}
+        </div>
+      ) : null}
+      {summary ? <div className="selection-result-toast" role="status">{summary}</div> : null}
+      <BottomDrawer title="Add to MY LIST" open={destinationOpen} onOpenChange={(open) => {
+        setDestinationOpen(open);
+        if (!open) setDestinationIds(new Set());
+      }}>
+        <div className="setting-stack custom-destination-list">
+          {customSegments.map((segment) => {
+            const feeds = segment.feedIds.flatMap((id) => {
+              const feed = customFeedsById.get(id);
+              return feed ? [feed] : [];
+            });
+            if (feeds.length === 0) return null;
+            return <section key={segment.id}>
+              <h3 className="small-label">{segment.name}</h3>
+              {feeds.map((feed) => {
+                const checked = destinationIds.has(feed.id);
+                return <button className={`custom-destination-row ${checked ? "selected" : ""}`} type="button" key={feed.id} onClick={() => setDestinationIds((current) => {
+                  const next = new Set(current);
+                  if (next.has(feed.id)) next.delete(feed.id); else next.add(feed.id);
+                  return next;
+                })}>
+                  <span>{feed.name}</span>
+                  <small>{feed.titleIds.length} / {CUSTOM_FEED_TITLE_LIMIT}</small>
+                  <span className="selection-check">{checked ? <Check size={16} /> : null}</span>
+                </button>;
+              })}
+            </section>;
+          })}
+          <div className="field">
+            <label htmlFor="selection-new-list">Create a new list</label>
+            <div className="row">
+              <input id="selection-new-list" className="input" value={newListName} onChange={(event) => setNewListName(event.target.value)} placeholder="List name" autoComplete="off" />
+              <button className="button" type="button" disabled={!newListName.trim()} onClick={() => {
+                const feed = createCustomFeed(newListName.trim());
+                feed.titleIds = [...selectedIds].slice(0, CUSTOM_FEED_TITLE_LIMIT);
+                store.upsertFeed(feed);
+                setNewListName("");
+                setDestinationOpen(false);
+                setSummary(`${feed.titleIds.length} added to ${feed.name}`);
+                selection.clear();
+              }}><Plus size={16} /> Create</button>
+            </div>
+          </div>
+          <div className="toolbar">
+            <button className="button" type="button" onClick={() => setDestinationOpen(false)}>Cancel</button>
+            <span className="spacer" />
+            <button className="button primary" type="button" disabled={destinationIds.size === 0} onClick={applyDestinations}><Check size={16} /> Add to selected</button>
+          </div>
+        </div>
+      </BottomDrawer>
+    </>
+  );
+}
+
 function LibraryLoadingState({
   complete,
   downloadProgress,
@@ -745,13 +988,13 @@ function HomePage() {
     if (store.homePreviewSegmentId && !previewSegment) store.exitHomePreview();
   }, [previewSegment, store]);
   const feeds = useMemo(() => {
-    if (!previewSegment) return orderedFeedsForSegments(store.feeds, store.feedSegments, store.settings, { homeOnly: true });
+    if (!previewSegment) return orderedFeedsForSegments(store.feeds, store.feedSegments, store.settings, { homeOnly: true }, store.feedLibraryOrder);
     const byId = new Map(store.feeds.map((feed) => [feed.id, feed]));
     return previewSegment.feedIds.flatMap((feedId) => {
       const feed = byId.get(feedId);
       return feed ? [feed] : [];
     });
-  }, [previewSegment, store.feedSegments, store.feeds, store.settings]);
+  }, [previewSegment, store.feedLibraryOrder, store.feedSegments, store.feeds, store.settings]);
   const { activeFeedId, completeHomeReset, setActiveFeedId } = store;
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
   const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
@@ -818,6 +1061,23 @@ function HomePage() {
     },
     [feeds],
   );
+
+  useLayoutEffect(() => {
+    const requestedFeedId = store.homeOpenFeedRequestId;
+    if (!requestedFeedId) return;
+    const requestedIndex = feeds.findIndex((feed) => feed.id === requestedFeedId);
+    if (requestedIndex < 0) return;
+    renderCenterIndexRef.current = requestedIndex;
+    setRenderCenterIndex(requestedIndex);
+    warmFeedAt(requestedIndex);
+    const frame = window.requestAnimationFrame(() => {
+      const pane = paneRefs.current.get(requestedFeedId);
+      if (!pane) return;
+      pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
+      store.completeHomeFeedOpen();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [feeds, store, warmFeedAt]);
 
   useLayoutEffect(() => {
     if (!store.ready || !activeFeed) return;
@@ -1024,12 +1284,24 @@ function HomePage() {
   );
 }
 
+const StableHomePage = memo(HomePage);
+
 function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) => void }) {
   const store = useAppStore();
   const [titleExpanded, setTitleExpanded] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [localSearchOpen, setLocalSearchOpen] = useState(false);
   const [localSearchQuery, setLocalSearchQuery] = useState("");
+  const [customActionOpen, setCustomActionOpen] = useState(false);
+  const [customMode, setCustomMode] = useState<"add" | "rearrange" | null>(null);
+  const [customAddQuery, setCustomAddQuery] = useState("");
+  const [pendingAddIds, setPendingAddIds] = useState<Set<number>>(() => new Set());
+  const addSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingAddIdsRef = useRef<Set<number>>(new Set());
+  const customModeRef = useRef<"add" | "rearrange" | null>(null);
+  const customAddQueryRef = useRef("");
+  const customAddHistoryEntryRef = useRef(false);
+  const addTitlesRef = useRef(store.addTitlesToCustomFeeds);
   const lastTitleTapRef = useRef(0);
   const query = useMemo(
     () =>
@@ -1056,12 +1328,113 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
     if (words.length === 0) return query.items;
     return query.items.filter((item) => matchesSearchTextWords(seriesSearchText(item), words));
   }, [deferredLocalSearchQuery, query.items]);
+  const sensitiveTagIds = useMemo(() => buildSensitiveTagGroups(store.tags), [store.tags]);
+  const visibleAddCatalog = useMemo(
+    () => store.catalog.filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds)),
+    [sensitiveTagIds, store.catalog, store.settings],
+  );
+  const addSearchTextById = useMemo(() => new Map(visibleAddCatalog.map((item) => [item.id, seriesSearchText(item)])), [visibleAddCatalog]);
+  const addSearchIndex = useMemo(() => new Fuse(visibleAddCatalog, {
+    shouldSort: true,
+    ignoreLocation: true,
+    threshold: 0.28,
+    minMatchCharLength: 2,
+    keys: [
+      { name: "display_title", weight: 0.5 },
+      { name: "titles.title", weight: 0.42 },
+      { name: "animeplanet_title", weight: 0.3 },
+      { name: "mangabaka_title", weight: 0.24 },
+      { name: "native_title", weight: 0.22 },
+      { name: "romanized_title", weight: 0.22 },
+      { name: "authors", weight: 0.2 },
+      { name: "artists", weight: 0.18 },
+    ],
+  }), [visibleAddCatalog]);
+  const deferredAddQuery = useDeferredValue(customAddQuery);
+  const addResults = useMemo(() => {
+    const term = deferredAddQuery.trim();
+    if (term.length < 2) return [];
+    const words = searchWords(term);
+    const direct = visibleAddCatalog
+      .filter((item) => matchesSearchTextWords(addSearchTextById.get(item.id) ?? "", words))
+      .sort((left, right) => searchTextWordPosition(addSearchTextById.get(left.id) ?? "", words) - searchTextWordPosition(addSearchTextById.get(right.id) ?? "", words));
+    return (direct.length ? direct : addSearchIndex.search(term, { limit: 120 }).map((result) => result.item)).slice(0, 120);
+  }, [addSearchIndex, addSearchTextById, deferredAddQuery, visibleAddCatalog]);
+  const existingCustomIds = useMemo(() => new Set(feed.titleIds), [feed.titleIds]);
+  useEffect(() => { pendingAddIdsRef.current = pendingAddIds; }, [pendingAddIds]);
+  useEffect(() => { customModeRef.current = customMode; }, [customMode]);
+  useEffect(() => { customAddQueryRef.current = customAddQuery; }, [customAddQuery]);
+  useEffect(() => { addTitlesRef.current = store.addTitlesToCustomFeeds; }, [store.addTitlesToCustomFeeds]);
+  const commitPendingAdds = useCallback(() => {
+    const pending = pendingAddIdsRef.current;
+    if (feed.kind !== "custom" || pending.size === 0) return;
+    addTitlesRef.current([feed.id], [...pending]);
+    pendingAddIdsRef.current = new Set();
+    setPendingAddIds(new Set());
+  }, [feed.id, feed.kind]);
+  const closeCustomMode = useCallback(() => {
+    if (customMode === "add") commitPendingAdds();
+    setCustomMode(null);
+    setCustomAddQuery("");
+    if (customMode === "add" && customAddHistoryEntryRef.current) {
+      customAddHistoryEntryRef.current = false;
+      window.history.back();
+    }
+  }, [commitPendingAdds, customMode]);
+
+  useEffect(() => {
+    if (customMode !== "add") return;
+    if (!customAddHistoryEntryRef.current) {
+      window.history.pushState({ ...window.history.state, aeonCustomAdd: feed.id }, "", window.location.href);
+      customAddHistoryEntryRef.current = true;
+    }
+    const handleBack = () => {
+      if (!customAddHistoryEntryRef.current) return;
+      customAddHistoryEntryRef.current = false;
+      if (customAddQueryRef.current.trim()) {
+        customAddQueryRef.current = "";
+        setCustomAddQuery("");
+        window.history.pushState({ ...window.history.state, aeonCustomAdd: feed.id }, "", window.location.href);
+        customAddHistoryEntryRef.current = true;
+        return;
+      }
+      commitPendingAdds();
+      setCustomMode(null);
+    };
+    window.addEventListener("popstate", handleBack);
+    return () => window.removeEventListener("popstate", handleBack);
+  }, [commitPendingAdds, customMode, feed.id]);
+
+  useEffect(() => () => {
+    if (customModeRef.current === "add" && pendingAddIdsRef.current.size > 0 && feed.kind === "custom") {
+      addTitlesRef.current([feed.id], [...pendingAddIdsRef.current]);
+    }
+  }, [feed.id, feed.kind]);
+
+  useEffect(() => {
+    if (customMode !== "rearrange") return;
+    const pager = document.querySelector<HTMLElement>(".feed-pager");
+    pager?.classList.add("custom-rearrange-lock");
+    return () => pager?.classList.remove("custom-rearrange-lock");
+  }, [customMode]);
+  useEffect(() => {
+    if (feed.kind !== "custom") return;
+    const startRearrange = (event: Event) => {
+      const requestedFeedId = (event as CustomEvent<{ feedId?: string }>).detail?.feedId;
+      if (requestedFeedId !== feed.id) return;
+      setCustomActionOpen(false);
+      setLocalSearchOpen(false);
+      setCustomMode("rearrange");
+    };
+    window.addEventListener("aeon:rearrange-custom-feed", startRearrange);
+    return () => window.removeEventListener("aeon:rearrange-custom-feed", startRearrange);
+  }, [feed.id, feed.kind]);
   return (
     <>
       <section className="section feed-summary-section">
         <div
           className={`feed-summary-card ${titleExpanded || descriptionExpanded ? "expanded" : ""}`}
-          onDoubleClick={() => setLocalSearchOpen(true)}
+          onDoubleClick={() => feed.kind === "custom" ? setCustomActionOpen(true) : setLocalSearchOpen(true)}
         >
           <FeedBarCoverWash items={query.items.slice(0, 3)} />
           <div className="feed-summary-content">
@@ -1099,39 +1472,282 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
           </div>
         </div>
       </section>
-      {localSearchOpen ? (
+      {localSearchOpen || customMode === "add" ? (
         <div className="feed-local-search">
           <input
             className="input"
             type="search"
-            value={localSearchQuery}
-            onChange={(event) => setLocalSearchQuery(event.target.value)}
-            placeholder="Search this feed"
+            ref={customMode === "add" ? addSearchInputRef : undefined}
+            value={customMode === "add" ? customAddQuery : localSearchQuery}
+            onChange={(event) => customMode === "add" ? setCustomAddQuery(event.target.value) : setLocalSearchQuery(event.target.value)}
+            placeholder={customMode === "add" ? "Find titles to add" : "Search this feed"}
+            name={customMode === "add" ? "aeon-add-title-search" : "aeon-feed-search"}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            inputMode="search"
+            enterKeyHint="search"
             autoFocus
           />
-          <span className="feed-local-search-count">{displayedItems.length} results</span>
+          <span className="feed-local-search-count">{customMode === "add" ? `${pendingAddIds.size} selected` : `${displayedItems.length} results`}</span>
           <button
             className="icon-button"
             type="button"
             onClick={() => {
+              if (customMode === "add") {
+                if (customAddQuery.trim()) {
+                  customAddQueryRef.current = "";
+                  setCustomAddQuery("");
+                } else {
+                  closeCustomMode();
+                }
+                return;
+              }
               setLocalSearchQuery("");
               setLocalSearchOpen(false);
             }}
-            aria-label="Close feed search"
+            aria-label={customMode === "add" ? "Back from title search" : "Close feed search"}
           >
             <X size={18} />
           </button>
         </div>
       ) : null}
-      <TitleCollection
-        items={displayedItems}
-        feed={feed}
-        history={store.history}
-        latestDate={store.syncMeta?.historyLastDate}
-        rankById={originalRanks}
-      />
+      {customMode === "add" ? (
+        <CustomAddResults
+          items={addResults}
+          existingIds={existingCustomIds}
+          selectedIds={pendingAddIds}
+          onToggle={(id) => {
+            if (existingCustomIds.has(id)) return;
+            setPendingAddIds((current) => {
+              const next = new Set(current);
+              if (next.has(id)) next.delete(id); else next.add(id);
+              pendingAddIdsRef.current = next;
+              return next;
+            });
+          }}
+        />
+      ) : customMode === "rearrange" ? (
+        <CustomFeedReorderGrid feed={feed} items={displayedItems} onDone={closeCustomMode} />
+      ) : (
+        <TitleCollection
+          items={displayedItems}
+          feed={feed}
+          history={store.history}
+          latestDate={store.syncMeta?.historyLastDate}
+          rankById={originalRanks}
+        />
+      )}
+      <BottomDrawer title="MY LIST actions" open={customActionOpen} onOpenChange={setCustomActionOpen}>
+        <div className="custom-feed-action-list">
+          <button type="button" onClick={() => { setCustomActionOpen(false); setLocalSearchOpen(true); }}><Search size={18} /><span><strong>Search in feed</strong><small>Keep the list's original ranks.</small></span></button>
+          <button type="button" onClick={() => { setCustomActionOpen(false); pendingAddIdsRef.current = new Set(); setPendingAddIds(new Set()); setCustomMode("add"); }}><Plus size={18} /><span><strong>Add to feed</strong><small>Search the full catalogue.</small></span></button>
+        </div>
+      </BottomDrawer>
     </>
   );
+}
+
+function CustomAddResults({
+  items,
+  existingIds,
+  selectedIds,
+  onToggle,
+}: {
+  items: SeriesCatalog[];
+  existingIds: ReadonlySet<number>;
+  selectedIds: ReadonlySet<number>;
+  onToggle: (id: number) => void;
+}) {
+  if (items.length === 0) return <div className="empty-state"><Search size={26} /><strong>Search the catalogue</strong><span className="muted">Type at least two characters to find titles.</span></div>;
+  return <div className="title-grid columns-3 density-standard custom-add-grid" style={{ "--grid-columns": 3 } as React.CSSProperties}>
+    {items.map((series) => {
+      const existing = existingIds.has(series.id);
+      const selected = existing || selectedIds.has(series.id);
+      return <button className={`custom-add-card ${selected ? "selected" : ""}`} type="button" key={series.id} onClick={() => onToggle(series.id)} aria-pressed={selected} aria-disabled={existing}>
+        <div className="poster-shell"><Cover series={series} />{selected ? <span className="custom-add-check"><Check size={18} /></span> : null}</div>
+        <span className="title-name">{visibleTitle(series)}</span>
+        {existing ? <small>Already added</small> : null}
+      </button>;
+    })}
+  </div>;
+}
+
+function CustomFeedReorderGrid({ feed, items, onDone }: { feed: Feed; items: SeriesCatalog[]; onDone: () => void }) {
+  const store = useAppStore();
+  const [orderedIds, setOrderedIds] = useState(() => items.map((item) => item.id));
+  const orderedIdsRef = useRef(items.map((item) => item.id));
+  const [dragItem, setDragItem] = useState<SeriesCatalog | null>(null);
+  const [dragStartPoint, setDragStartPoint] = useState({ x: 0, y: 0 });
+  const ghostRef = useRef<HTMLDivElement | null>(null);
+  const draggingIdRef = useRef<number | null>(null);
+  const overIdRef = useRef<number | null>(null);
+  const autoScrollFrameRef = useRef<number | null>(null);
+  const hoverTimerRef = useRef<number | null>(null);
+  const hoverTargetIdRef = useRef<number | null>(null);
+  const activePointerIdRef = useRef<number | null>(null);
+  const pointerYRef = useRef(0);
+  const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+  const orderedItems = orderedIds.flatMap((id) => {
+    const item = itemsById.get(id);
+    return item ? [item] : [];
+  });
+  const stopAutoScroll = useCallback(() => {
+    if (autoScrollFrameRef.current !== null) cancelAnimationFrame(autoScrollFrameRef.current);
+    autoScrollFrameRef.current = null;
+  }, []);
+  const clearHoverTimer = useCallback(() => {
+    if (hoverTimerRef.current !== null) window.clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = null;
+  }, []);
+  const updateAutoScroll = useCallback((clientY: number) => {
+    pointerYRef.current = clientY;
+    if (autoScrollFrameRef.current !== null) return;
+    const pane = document.querySelector<HTMLElement>(`.feed-pager-panel[data-feed-id="${feed.id}"] .feed-pane-scroll`);
+    if (!pane) return;
+    const tick = () => {
+      const rect = pane.getBoundingClientRect();
+      const topPressure = Math.max(0, Math.min(1, (rect.top + 82 - pointerYRef.current) / 82));
+      const bottomPressure = Math.max(0, Math.min(1, (pointerYRef.current - (rect.bottom - 82)) / 82));
+      const speed = bottomPressure > 0 ? Math.max(3, bottomPressure * 16) : topPressure > 0 ? -Math.max(3, topPressure * 16) : 0;
+      if (!speed || draggingIdRef.current == null) {
+        autoScrollFrameRef.current = null;
+        return;
+      }
+      pane.scrollTop += speed;
+      autoScrollFrameRef.current = requestAnimationFrame(tick);
+    };
+    autoScrollFrameRef.current = requestAnimationFrame(tick);
+  }, [feed.id]);
+  useEffect(() => () => {
+    stopAutoScroll();
+    clearHoverTimer();
+  }, [clearHoverTimer, stopAutoScroll]);
+
+  const moveDraggedId = useCallback((current: number[], draggedId: number, targetId: number) => {
+    const from = current.indexOf(draggedId);
+    const to = current.indexOf(targetId);
+    if (from < 0 || to < 0 || from === to) return current;
+    const next = [...current];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    return next;
+  }, []);
+
+  const finishDrag = useCallback(() => {
+    const fromId = draggingIdRef.current;
+    const toId = overIdRef.current;
+    clearHoverTimer();
+    if (fromId != null) {
+      const next = toId != null ? moveDraggedId(orderedIdsRef.current, fromId, toId) : orderedIdsRef.current;
+      orderedIdsRef.current = next;
+      setOrderedIds(next);
+      store.reorderCustomFeedTitles(feed.id, next);
+    }
+    document.querySelectorAll(".custom-reorder-card.drag-over").forEach((element) => element.classList.remove("drag-over"));
+    draggingIdRef.current = null;
+    overIdRef.current = null;
+    hoverTargetIdRef.current = null;
+    activePointerIdRef.current = null;
+    setDragItem(null);
+    stopAutoScroll();
+  }, [clearHoverTimer, feed.id, moveDraggedId, stopAutoScroll, store]);
+
+  const moveDrag = useCallback((clientX: number, clientY: number) => {
+    if (draggingIdRef.current == null) return;
+    if (ghostRef.current) ghostRef.current.style.transform = `translate3d(${clientX + 12}px, ${clientY + 12}px, 0)`;
+    updateAutoScroll(clientY);
+    const grid = document.querySelector<HTMLElement>(`.feed-pager-panel[data-feed-id="${feed.id}"] .custom-reorder-grid`);
+    const gridRect = grid?.getBoundingClientRect();
+    const pane = document.querySelector<HTMLElement>(`.feed-pager-panel[data-feed-id="${feed.id}"] .feed-pane-scroll`);
+    const paneRect = pane?.getBoundingClientRect();
+    const inAutoScrollZone = Boolean(paneRect && (clientY < paneRect.top + 82 || clientY > paneRect.bottom - 82));
+    const outsideGrid = !gridRect
+      || clientX < gridRect.left
+      || clientX > gridRect.right
+      || clientY < Math.max(10, gridRect.top)
+      || clientY > Math.min(window.innerHeight - 10, gridRect.bottom);
+    if (outsideGrid || inAutoScrollZone) {
+      clearHoverTimer();
+      hoverTargetIdRef.current = null;
+      document.querySelectorAll(".custom-reorder-card.drag-over").forEach((element) => element.classList.remove("drag-over"));
+      return;
+    }
+    const target = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>("[data-reorder-id]");
+    const targetId = Number(target?.dataset.reorderId);
+    if (!Number.isSafeInteger(targetId)) return;
+    document.querySelectorAll(".custom-reorder-card.drag-over").forEach((element) => element.classList.remove("drag-over"));
+    target?.classList.add("drag-over");
+    overIdRef.current = targetId;
+    if (hoverTargetIdRef.current === targetId) return;
+    hoverTargetIdRef.current = targetId;
+    clearHoverTimer();
+    hoverTimerRef.current = window.setTimeout(() => {
+      const draggedId = draggingIdRef.current;
+      if (draggedId == null) return;
+      setOrderedIds((current) => {
+        const next = moveDraggedId(current, draggedId, targetId);
+        orderedIdsRef.current = next;
+        return next;
+      });
+      hoverTimerRef.current = null;
+    }, 420);
+  }, [clearHoverTimer, feed.id, moveDraggedId, updateAutoScroll]);
+
+  useEffect(() => {
+    if (!dragItem) return;
+    const onMove = (event: PointerEvent) => {
+      if (event.pointerId !== activePointerIdRef.current) return;
+      event.preventDefault();
+      moveDrag(event.clientX, event.clientY);
+    };
+    const onEnd = (event: PointerEvent) => {
+      if (event.pointerId !== activePointerIdRef.current) return;
+      finishDrag();
+    };
+    window.addEventListener("pointermove", onMove, { passive: false });
+    window.addEventListener("pointerup", onEnd);
+    window.addEventListener("pointercancel", onEnd);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
+    };
+  }, [dragItem, finishDrag, moveDrag]);
+
+  return <div className="custom-reorder-mode">
+    <div className="custom-reorder-toolbar"><span>Drag a handle to place visible titles.</span></div>
+    <div className={`title-grid columns-${feed.view.gridColumns} density-${feed.view.gridDensity} custom-reorder-grid`} style={{ "--grid-columns": feed.view.gridColumns, "--desktop-grid-columns": resolvedDesktopGridColumns(feed.view) } as React.CSSProperties}>
+      {orderedItems.map((series) => <article className={`custom-reorder-card ${dragItem?.id === series.id ? "drag-source" : ""}`} key={series.id} data-reorder-id={series.id}>
+        <div className="poster-shell"><Cover series={series} /></div>
+        <span className="title-name">{visibleTitle(series)}</span>
+        <button className="custom-title-drag-handle" type="button" aria-label={`Move ${visibleTitle(series)}`}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            activePointerIdRef.current = event.pointerId;
+            draggingIdRef.current = series.id;
+            overIdRef.current = series.id;
+            setDragStartPoint({ x: event.clientX + 12, y: event.clientY + 12 });
+            setDragItem(series);
+            updateAutoScroll(event.clientY);
+          }}
+        ><GripVertical size={16} /></button>
+      </article>)}
+    </div>
+    {dragItem ? (
+      <div
+        className="custom-title-drag-ghost"
+        ref={ghostRef}
+        style={{ transform: `translate3d(${dragStartPoint.x}px, ${dragStartPoint.y}px, 0)` }}
+      >
+        <img src={dragItem.cover ?? ""} alt="" />
+      </div>
+    ) : null}
+    <div className="custom-reorder-dock">
+      <button className="button primary" type="button" onClick={onDone}><Check size={17} /> Done</button>
+    </div>
+  </div>;
 }
 
 function FeedBarCoverWash({ items }: { items: SeriesCatalog[] }) {
@@ -1253,8 +1869,14 @@ function TitleCollection({
     return (
       <div className="empty-state">
         <Filter size={28} />
-        <strong>No titles matched this feed</strong>
-        <span className="muted">Loosen filters, include gated tag families if intended, or switch source mode.</span>
+        <strong>{feed.kind === "custom" && feed.titleIds.length === 0 ? "No titles in this list yet" : "No titles matched this feed"}</strong>
+        <span className="muted">
+          {feed.kind === "custom"
+            ? feed.titleIds.length === 0
+              ? "Double-tap the outer header card and choose Add to feed."
+              : "The saved filters currently hide every title in this list."
+            : "Loosen filters, include gated tag families if intended, or switch source mode."}
+        </span>
       </div>
     );
   }
@@ -1366,14 +1988,60 @@ function TitleCard({
   metricWindow?: { from: string; to: string } | null;
 }) {
   const title = visibleTitle(series);
+  const selection = useTitleSelection();
+  const longPressTimerRef = useRef<number | null>(null);
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const longPressedRef = useRef(false);
+  const subscribeToSelected = useCallback((listener: () => void) => selection.store.subscribe(series.id, listener), [selection.store, series.id]);
+  const getSelected = useCallback(() => selection.store.isSelected(series.id), [selection.store, series.id]);
+  const selected = useSyncExternalStore(subscribeToSelected, getSelected, getSelected);
+  const cancelLongPress = () => {
+    if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = null;
+    pointerStartRef.current = null;
+  };
   return (
-    <div className="title-card-wrap">
-      <Link
-        to={`/title/${series.id}`}
+    <div className={`title-card-wrap ${selected ? "selected" : ""}`}>
+      <a
+        href={`#/title/${series.id}`}
         className="title-card"
         data-testid="title-card"
         data-series-id={series.id}
-        onClickCapture={() => prepareHomeTitleNavigation(feed)}
+        onPointerDown={(event) => {
+          if (event.pointerType === "mouse" && event.button !== 0) return;
+          longPressedRef.current = false;
+          pointerStartRef.current = { x: event.clientX, y: event.clientY };
+          longPressTimerRef.current = window.setTimeout(() => {
+            longPressedRef.current = true;
+            selection.begin(feed, series.id);
+            if (navigator.vibrate) navigator.vibrate(20);
+          }, 320);
+        }}
+        onPointerMove={(event) => {
+          const start = pointerStartRef.current;
+          if (!start || Math.hypot(event.clientX - start.x, event.clientY - start.y) < 12) return;
+          cancelLongPress();
+        }}
+        onPointerUp={cancelLongPress}
+        onPointerCancel={cancelLongPress}
+        onContextMenu={(event) => event.preventDefault()}
+        onClickCapture={(event) => {
+          if (longPressedRef.current) {
+            event.preventDefault();
+            event.stopPropagation();
+            longPressedRef.current = false;
+            return;
+          }
+          const { mode } = selection.store.getSnapshot();
+          if (mode) {
+            event.preventDefault();
+            event.stopPropagation();
+            const canSelect = mode.kind === "collect" ? feed.kind === "logic" : mode.feedId === feed.id;
+            if (canSelect) selection.toggle(feed, series.id);
+            return;
+          }
+          prepareHomeTitleNavigation(feed);
+        }}
       >
         <div className="poster-shell">
           <Cover series={series} priority={rank <= 18} />
@@ -1381,11 +2049,12 @@ function TitleCard({
           <div className="poster-metrics">
             <MemoTitleMetrics series={series} view={view} compact history={history} latestDate={latestDate} metricWindow={metricWindow} />
           </div>
+          {selected ? <span className="title-selection-mark"><Check size={19} /></span> : null}
         </div>
         <div className="title-meta">
           <span className="title-name">{title}</span>
         </div>
-      </Link>
+      </a>
     </div>
   );
 }
@@ -1523,7 +2192,10 @@ function FeedsPage() {
   const [renamingSegmentId, setRenamingSegmentId] = useState<string | null>(null);
   const [segmentNameDraft, setSegmentNameDraft] = useState("");
   const [segmentEditMode, setSegmentEditMode] = useState(false);
-  const [instructionExpanded, setInstructionExpanded] = useState(false);
+  const [selectedLibrary, setSelectedLibrary] = useState<FeedLibraryKind>(() =>
+    sessionStorage.getItem(FEEDS_PAGE_LIBRARY_SESSION_KEY) === "custom" ? "custom" : "logic",
+  );
+  const [draggingLibrary, setDraggingLibrary] = useState<FeedLibraryKind | null>(null);
   const [deleteSegmentTarget, setDeleteSegmentTarget] = useState<{ segment: FeedSegment; count: number } | null>(null);
   const [coverMap, setCoverMap] = useState<Map<string, SeriesCatalog[]>>(new Map());
   const [coversLoading, setCoversLoading] = useState(true);
@@ -1532,9 +2204,13 @@ function FeedsPage() {
   const feedsById = useMemo(() => new Map(store.feeds.map((feed) => [feed.id, feed])), [store.feeds]);
   const { searchAdultTags, searchRelationshipTags } = store.settings;
   const visibleSegments = useMemo(
-    () => store.feedSegments.filter((segment) => isBuiltInSensitiveSegmentVisible(segment, { searchAdultTags, searchRelationshipTags })),
-    [searchAdultTags, searchRelationshipTags, store.feedSegments],
+    () => store.feedSegments.filter((segment) => segment.library === selectedLibrary && isBuiltInSensitiveSegmentVisible(segment, { searchAdultTags, searchRelationshipTags })),
+    [searchAdultTags, searchRelationshipTags, selectedLibrary, store.feedSegments],
   );
+
+  useEffect(() => {
+    sessionStorage.setItem(FEEDS_PAGE_LIBRARY_SESSION_KEY, selectedLibrary);
+  }, [selectedLibrary]);
 
   const stopDragAutoScroll = useCallback(() => {
     if (autoScrollFrameRef.current !== null) {
@@ -1593,34 +2269,42 @@ function FeedsPage() {
 
   useEffect(() => {
     let cancelled = false;
+    let handle: number | null = null;
     setCoversLoading(true);
-    const handle = window.setTimeout(() => {
-      const next = new Map<string, SeriesCatalog[]>();
-      for (const feed of store.feeds) {
-        next.set(
-          feed.id,
-          runFeedQuery({
-            feed,
-            series: store.catalog,
-            tags: store.tags,
-            history: store.history,
-            labels: store.labels,
-            settings: store.settings,
-            metaHistoryFirst: store.syncMeta?.historyFirstDate,
-            metaHistoryLast: store.syncMeta?.historyLastDate,
-          }).items.slice(0, 4),
-        );
-      }
-      if (!cancelled) {
+    const visibleFeedIds = new Set(visibleSegments.flatMap((segment) => segment.feedIds));
+    const pendingFeeds = store.feeds.filter((feed) => feed.kind === selectedLibrary && visibleFeedIds.has(feed.id));
+    const next = new Map<string, SeriesCatalog[]>();
+    let index = 0;
+    const processNextFeed = () => {
+      if (cancelled) return;
+      const feed = pendingFeeds[index];
+      if (!feed) {
         setCoverMap(next);
         setCoversLoading(false);
+        return;
       }
-    }, 24);
+      next.set(
+        feed.id,
+        runFeedQuery({
+          feed,
+          series: store.catalog,
+          tags: store.tags,
+          history: store.history,
+          labels: store.labels,
+          settings: store.settings,
+          metaHistoryFirst: store.syncMeta?.historyFirstDate,
+          metaHistoryLast: store.syncMeta?.historyLastDate,
+        }).items.slice(0, 4),
+      );
+      index += 1;
+      handle = window.setTimeout(processNextFeed, 0);
+    };
+    handle = window.setTimeout(processNextFeed, 24);
     return () => {
       cancelled = true;
-      window.clearTimeout(handle);
+      if (handle !== null) window.clearTimeout(handle);
     };
-  }, [store.catalog, store.feeds, store.history, store.labels, store.settings, store.syncMeta, store.tags]);
+  }, [selectedLibrary, store.catalog, store.feeds, store.history, store.labels, store.settings, store.syncMeta, store.tags, visibleSegments]);
 
   useEffect(() => stopDragAutoScroll, [stopDragAutoScroll]);
 
@@ -1629,7 +2313,7 @@ function FeedsPage() {
       <div className="row feeds-page-header">
         <h1>FEEDS</h1>
         <span className="spacer" />
-        <button className="button ghost compact-action" type="button" onClick={() => store.createFeedSegment()} aria-label="Create segment">
+        <button className="button ghost compact-action" type="button" onClick={() => store.createFeedSegment(undefined, selectedLibrary)} aria-label="Create segment">
           <Plus size={16} /> Segment
         </button>
         <button
@@ -1645,27 +2329,50 @@ function FeedsPage() {
         >
           <Pencil size={18} />
         </button>
-        <button className="icon-button" type="button" onClick={() => setEditorFeed(createFeed("New Feed"))} aria-label="Create feed">
+        <button className="icon-button" type="button" onClick={() => setEditorFeed(selectedLibrary === "custom" ? createCustomFeed("New List") : createFeed("New Feed"))} aria-label={selectedLibrary === "custom" ? "Create custom feed" : "Create feed"}>
           <Plus size={18} />
         </button>
       </div>
-      <button
-        className={`feeds-page-instruction ${instructionExpanded ? "expanded" : ""}`}
-        type="button"
-        aria-expanded={instructionExpanded}
-        onClick={() => setInstructionExpanded((current) => !current)}
-      >
-        <Info size={16} aria-hidden="true" />
-        <span>Drag a grip to reorder feeds or segments. Segment order also controls Home.</span>
-      </button>
+      <div className={`feed-library-selector ${segmentEditMode ? "editing" : ""}`} aria-label="Feed libraries">
+        {store.feedLibraryOrder.map((library) => (
+          <button
+            className={`feed-library-option ${selectedLibrary === library ? "active" : ""} ${draggingLibrary === library ? "dragging" : ""}`}
+            type="button"
+            key={library}
+            onClick={() => setSelectedLibrary(library)}
+            onPointerDown={(event) => {
+              if (!segmentEditMode) return;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setDraggingLibrary(library);
+            }}
+            onPointerMove={(event) => {
+              if (!segmentEditMode || !draggingLibrary) return;
+              const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-feed-library]");
+              const targetLibrary = target?.dataset.feedLibrary as FeedLibraryKind | undefined;
+              if (targetLibrary && targetLibrary !== draggingLibrary) store.moveFeedLibrary(draggingLibrary, targetLibrary);
+            }}
+            onPointerUp={(event) => {
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+              setDraggingLibrary(null);
+            }}
+            onPointerCancel={() => setDraggingLibrary(null)}
+            data-feed-library={library}
+            aria-pressed={selectedLibrary === library}
+          >
+            {segmentEditMode ? <GripVertical size={15} /> : null}
+            <span>{library === "logic" ? "LIST" : "MY LIST"}</span>
+          </button>
+        ))}
+      </div>
       <div className="feed-segment-list">
         {visibleSegments.map((segment) => {
           const segmentFeeds = segment.feedIds.flatMap((feedId) => {
             const feed = feedsById.get(feedId);
             return feed ? [feed] : [];
           });
-          const canDelete = segment.id !== "unsegmented" && segmentFeeds.length === 0;
-          const canDeleteWithFeeds = segment.id !== "unsegmented" && segmentFeeds.length > 0;
+          const isUnsegmented = segment.id === UNSEGMENTED_FEED_SEGMENT_ID || segment.id === MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID;
+          const canDelete = !isUnsegmented && segmentFeeds.length === 0;
+          const canDeleteWithFeeds = !isUnsegmented && segmentFeeds.length > 0;
           const isRenaming = renamingSegmentId === segment.id;
           return (
             <section
@@ -1719,9 +2426,9 @@ function FeedsPage() {
                   <button
                     className="feed-segment-rename"
                     type="button"
-                    disabled={segment.id === UNSEGMENTED_FEED_SEGMENT_ID}
+                    disabled={isUnsegmented}
                     onClick={() => {
-                      if (segment.id === UNSEGMENTED_FEED_SEGMENT_ID) return;
+                      if (isUnsegmented) return;
                       setRenamingSegmentId(segment.id);
                       setSegmentNameDraft(segment.name);
                     }}
@@ -1730,7 +2437,7 @@ function FeedsPage() {
                     <Pencil size={17} />
                   </button>
                 )}
-                {isRenaming && segment.id !== "unsegmented" ? (
+                {isRenaming && !isUnsegmented ? (
                   <input
                     className="input feed-segment-name-input"
                     value={segmentNameDraft}
@@ -1945,6 +2652,23 @@ function FeedCoverCard({
   onDragEnd: React.PointerEventHandler<HTMLButtonElement>;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuAlign, setMenuAlign] = useState<"left" | "right">("right");
+  const [shareCopied, setShareCopied] = useState(false);
+  useEffect(() => {
+    if (!shareCopied) return;
+    const timer = window.setTimeout(() => setShareCopied(false), 2200);
+    return () => window.clearTimeout(timer);
+  }, [shareCopied]);
+  const toggleMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!menuOpen) {
+      const card = event.currentTarget.closest<HTMLElement>(".feed-cover-card");
+      if (card) {
+        const cardRect = card.getBoundingClientRect();
+        setMenuAlign(cardRect.right - 4 - 168 < 8 ? "left" : "right");
+      }
+    }
+    setMenuOpen((open) => !open);
+  };
   return (
     <article className={`feed-cover-card ${dragging ? "dragging" : ""} ${over ? "drag-over" : ""}`} data-feed-id={feed.id}>
       <button className="feed-cover-link" type="button" onClick={onOpen}>
@@ -1962,21 +2686,30 @@ function FeedCoverCard({
       >
         <GripVertical size={18} />
       </button>
-      <button className="feed-card-menu-button" type="button" onClick={() => setMenuOpen((open) => !open)} aria-label={`${feed.name} menu`}>
+      <button className="feed-card-menu-button" type="button" onClick={toggleMenu} aria-label={`${feed.name} menu`}>
         <EllipsisVertical size={18} />
       </button>
       {menuOpen && (
-        <div className="popover-menu card-menu">
+        <div className={`popover-menu card-menu align-${menuAlign}`}>
           <button type="button" onClick={() => { onEdit(); setMenuOpen(false); }}><SlidersHorizontal size={16} /> Edit</button>
-          <SharePanelButton payload={{ kind: "feed", version: 2, feed }} label="Share" />
+          <SharePanelButton
+            payload={{ kind: "feed", version: feed.kind === "custom" ? 3 : 2, feed }}
+            label="Share"
+            onCopied={() => {
+              setMenuOpen(false);
+              setShareCopied(true);
+            }}
+          />
           <button className="danger-text" type="button" onClick={onDelete}><Trash2 size={16} /> Delete</button>
         </div>
       )}
+      {shareCopied ? <div className="selection-result-toast" role="status">Link copied</div> : null}
     </article>
   );
 }
 
 function FeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Feed) => void; onCancel: () => void }) {
+  if (feed.kind === "custom") return <CustomFeedSettingsEditor feed={feed} onSave={onSave} onCancel={onCancel} />;
   if (!isBuiltInDefaultFeed(feed)) return <FeedEditor feed={feed} onSave={onSave} onCancel={onCancel} />;
   return <DefaultFeedSettingsEditor feed={feed} onSave={onSave} onCancel={onCancel} />;
 }
@@ -2061,6 +2794,171 @@ function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onS
         >
           Save
         </button>
+      </div>
+    </div>
+  );
+}
+
+function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Feed) => void; onCancel: () => void }) {
+  const isDesktop = useDesktopLayout();
+  const [draft, setDraft] = useState<Feed>(() => structuredClone(feed));
+  const [advanced, setAdvanced] = useState(false);
+  const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : ["fanFavouriteDiscoveryPercentile"]);
+  const updateFilters = (patch: Partial<Feed["filters"]>) => setDraft((current) => ({ ...current, filters: { ...current.filters, ...patch } }));
+  const updateView = (patch: Partial<FeedViewSettings>) => setDraft((current) => ({ ...current, view: { ...current.view, ...patch } }));
+  const toggleStatus = (status: "completed" | "hiatus", selected: boolean) => updateFilters({
+    statuses: selected
+      ? [...draft.filters.statuses.filter((item) => item !== status), status]
+      : draft.filters.statuses.filter((item) => item !== status),
+  });
+  const setCoverStatsVisible = (visible: boolean) => updateView({
+    metricSlots: visible ? [...savedMetricSlotsRef.current] : [],
+  });
+
+  return (
+    <div className="setting-stack custom-feed-settings">
+      <div className="field">
+        <label htmlFor="custom-feed-name">List name</label>
+        <input id="custom-feed-name" className="input" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} autoComplete="off" />
+      </div>
+      <div className="field">
+        <label htmlFor="custom-feed-description">Description</label>
+        <textarea id="custom-feed-description" className="textarea" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
+      </div>
+      <ToggleRow label="Show description" description="Show this text below the list name." value={draft.showDescription} onChange={(showDescription) => setDraft({ ...draft, showDescription })} />
+      <div className="field">
+        <label>Grid columns</label>
+        <div className="segmented compact-segments">
+          {(isDesktop ? DESKTOP_GRID_OPTIONS : [1, 2, 3, 4, 5]).map((columns) => (
+            <button className={`segment ${(isDesktop ? resolvedDesktopGridColumns(draft.view) : draft.view.gridColumns) === columns ? "active" : ""}`} type="button" key={columns} onClick={() => updateView(isDesktop
+              ? { desktopGridColumns: columns as FeedViewSettings["desktopGridColumns"] }
+              : { gridColumns: columns as FeedViewSettings["gridColumns"] })}>
+              {columns}
+            </button>
+          ))}
+        </div>
+      </div>
+      <ToggleRow label="Show rank" description="Show each title's position on its cover." value={draft.view.visible.rank} onChange={(rank) => updateView({ visible: { ...draft.view.visible, rank } })} />
+      <ToggleRow label="Show cover stats" description="Show the configured stat strip on covers." value={draft.view.metricSlots.length > 0} onChange={(visible) => {
+        if (!visible && draft.view.metricSlots.length) savedMetricSlotsRef.current = [...draft.view.metricSlots];
+        setCoverStatsVisible(visible);
+      }} />
+      <ToggleRow label="Completed" description="Only show completed titles when selected." value={draft.filters.statuses.includes("completed")} onChange={(selected) => toggleStatus("completed", selected)} />
+      <ToggleRow label="Hiatus" description="Only show titles on hiatus when selected." value={draft.filters.statuses.includes("hiatus")} onChange={(selected) => toggleStatus("hiatus", selected)} />
+      <div className="field">
+        <label>New titles</label>
+        <div className="segmented">
+          {(["top", "bottom"] as const).map((placement) => <button className={`segment ${draft.newTitlePlacement === placement ? "active" : ""}`} type="button" key={placement} onClick={() => setDraft({ ...draft, newTitlePlacement: placement })}>{placement === "top" ? "Add to top" : "Add to bottom"}</button>)}
+        </div>
+      </div>
+      <div className="field">
+        <label>Non-AniList titles</label>
+        <div className="segmented">
+          {(["top", "bottom"] as const).map((placement) => <button className={`segment ${draft.nonAniListPlacement === placement ? "active" : ""}`} type="button" key={placement} onClick={() => setDraft({ ...draft, nonAniListPlacement: placement })}>{placement === "top" ? "Keep above" : "Keep below"}</button>)}
+        </div>
+      </div>
+      <button className="button ghost" type="button" onClick={() => setAdvanced((open) => !open)} aria-expanded={advanced}>
+        <SlidersHorizontal size={16} /> Advanced {advanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
+      {advanced ? (
+        <div className="custom-feed-advanced">
+          <div className="field">
+            <label>Order mode</label>
+            <div className="segmented">
+              {(["manual", "automatic"] as const).map((mode) => <button className={`segment ${draft.orderMode === mode ? "active" : ""}`} type="button" key={mode} onClick={() => setDraft({ ...draft, orderMode: mode })}>{mode === "manual" ? "Manual" : "Automatic"}</button>)}
+            </div>
+          </div>
+          <div className="field-grid">
+            <NumberField label="Min chapters" value={draft.filters.minChapters} onChange={(value) => updateFilters({ minChapters: value })} />
+            <NumberField label="Max chapters" value={draft.filters.maxChapters} onChange={(value) => updateFilters({ maxChapters: value })} />
+            <NumberField label="Min year" value={draft.filters.minYear} onChange={(value) => updateFilters({ minYear: value })} />
+            <NumberField label="Max year" value={draft.filters.maxYear} onChange={(value) => updateFilters({ maxYear: value })} />
+          </div>
+          <MetricRangeEditor
+            ranges={(draft.filters.metricRanges ?? []).filter((range) => range.metric !== "year" && range.metric !== "chapters")}
+            metrics={CUSTOM_ADDITIONAL_RANGE_METRICS}
+            onChange={(metricRanges) => updateFilters({ metricRanges })}
+          />
+          <h2 className="section-title">Rolling Dates</h2>
+          <div className="field-grid">
+            <div className="field">
+              <label>Date field</label>
+              <div className="segmented">
+                {([
+                  ["none", "None"],
+                  ["release", "Release"],
+                  ["end", "End"],
+                ] as const).map(([value, label]) => (
+                  <button className={`segment ${draft.filters.dateField === value ? "active" : ""}`} type="button" key={value} onClick={() => updateFilters({ dateField: value })}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="field">
+              <label>Window mode</label>
+              <div className="segmented">
+                {([
+                  ["none", "None"],
+                  ["last", "Last X"],
+                  ["fixed", "Fixed"],
+                ] as const).map(([value, label]) => (
+                  <button className={`segment ${draft.filters.rolling.mode === value ? "active" : ""}`} type="button" key={value} onClick={() => updateFilters({ rolling: { ...draft.filters.rolling, mode: value } })}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <RollingAmountField label="Amount" value={draft.filters.rolling.amount} onChange={(amount) => updateFilters({ rolling: { ...draft.filters.rolling, amount } })} />
+            <div className="field">
+              <label>Unit</label>
+              <div className="segmented compact-segments">
+                {(["days", "weeks", "months", "years"] as const).map((unit) => (
+                  <button className={`segment ${draft.filters.rolling.unit === unit ? "active" : ""}`} type="button" key={unit} onClick={() => updateFilters({ rolling: { ...draft.filters.rolling, unit } })}>
+                    {unit}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="field">
+              <label>From</label>
+              <input className="input" type="date" value={draft.filters.rolling.from ?? ""} onChange={(event) => updateFilters({ rolling: { ...draft.filters.rolling, from: event.target.value } })} />
+            </div>
+            <div className="field">
+              <label>To</label>
+              <input className="input" type="date" value={draft.filters.rolling.to ?? ""} onChange={(event) => updateFilters({ rolling: { ...draft.filters.rolling, to: event.target.value } })} />
+            </div>
+          </div>
+          <h2 className="section-title">Sort</h2>
+          <div className="settings-list">
+            {draft.sort.map((rule, index) => <div className="setting-row" key={rule.id}>
+              <div className="sort-editor">
+                <div className="metric-choice">{SORT_OPTIONS.map((option) => <button className={`metric-option ${rule.metric === option ? "active" : ""}`} type="button" key={option} onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.map((item) => item.id === rule.id ? { ...item, metric: option } : item) }))}>{metricDefinition(option).shortLabel}</button>)}</div>
+                <div className="segmented compact-segments">{(["desc", "asc"] as const).map((direction) => <button className={`segment ${rule.direction === direction ? "active" : ""}`} type="button" key={direction} onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.map((item) => item.id === rule.id ? { ...item, direction } : item) }))}>{direction === "desc" ? "High first" : "Low first"}</button>)}</div>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setDraft((current) => ({ ...current, sort: current.sort.filter((item) => item.id !== rule.id) }))} aria-label={`Remove sort ${index + 1}`}><Trash2 size={16} /></button>
+            </div>)}
+            <button className="button" type="button" onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: [...current.sort, { ...DEFAULT_SORT[0], id: makeId() }] }))}><Plus size={16} /> Add sort</button>
+          </div>
+        </div>
+      ) : null}
+      <div className="toolbar">
+        <button className="button" type="button" onClick={onCancel}>Cancel</button>
+        <span className="spacer" />
+        <button className="button primary" type="button" disabled={!draft.name.trim()} onClick={() => onSave({
+          ...draft,
+          name: draft.name.trim(),
+          filters: {
+            ...draft.filters,
+            minPopularity: null,
+            maxPopularity: null,
+            minFavourites: null,
+            maxFavourites: null,
+            minMeanScore: null,
+            maxMeanScore: null,
+            metricRanges: (draft.filters.metricRanges ?? []).filter((range) => range.metric !== "year" && range.metric !== "chapters"),
+          },
+        })}><Check size={16} /> Save list</button>
       </div>
     </div>
   );
@@ -2491,10 +3389,27 @@ function RollingAmountField({ label, value, onChange }: { label: string; value: 
   );
 }
 
-function MetricRangeEditor({ ranges, onChange }: { ranges: MetricRange[]; onChange: (ranges: MetricRange[]) => void }) {
+function MetricRangeEditor({
+  ranges,
+  onChange,
+  metrics = RANGE_METRICS,
+}: {
+  ranges: MetricRange[];
+  onChange: (ranges: MetricRange[]) => void;
+  metrics?: typeof RANGE_METRICS;
+}) {
+  const newestRangeRef = useRef<HTMLDivElement | null>(null);
+  const previousRangeCountRef = useRef(ranges.length);
+  useEffect(() => {
+    if (ranges.length > previousRangeCountRef.current) {
+      window.requestAnimationFrame(() => newestRangeRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" }));
+    }
+    previousRangeCountRef.current = ranges.length;
+  }, [ranges.length]);
   const addRange = () => {
     const used = new Set(ranges.map((range) => range.metric));
-    const nextMetric = RANGE_METRICS.find((metric) => !used.has(metric.id))?.id ?? "fanFavouriteRaw";
+    const nextMetric = metrics.find((metric) => !used.has(metric.id))?.id ?? metrics[0]?.id;
+    if (!nextMetric) return;
     onChange([...ranges, { id: crypto.randomUUID(), metric: nextMetric, min: null, max: null }]);
   };
   const update = (id: string, patch: Partial<MetricRange>) => {
@@ -2505,16 +3420,16 @@ function MetricRangeEditor({ ranges, onChange }: { ranges: MetricRange[]; onChan
       <div className="row">
         <h2 className="section-title">Additional Stat Ranges</h2>
         <span className="spacer" />
-        <button className="button" type="button" onClick={addRange}>
+        <button className="button" type="button" onClick={addRange} disabled={ranges.length >= metrics.length}>
           <Plus size={16} /> Add
         </button>
       </div>
-      {ranges.length === 0 ? <p className="muted tiny">Add min/max filters for any metric, including Fan%, discovery, growth, year, and chapters.</p> : null}
+      {ranges.length === 0 ? <p className="muted tiny">Add min/max filters for stats such as Fan%, popularity, favourites, scores, and growth.</p> : null}
       <div className="settings-list">
-        {ranges.map((range) => (
-          <div className="range-row" key={range.id}>
+        {ranges.map((range, index) => (
+          <div className="range-row" key={range.id} ref={index === ranges.length - 1 ? newestRangeRef : undefined}>
             <div className="metric-choice">
-              {RANGE_METRICS.map((metric) => (
+              {metrics.map((metric) => (
                 <button
                   className={`metric-option ${range.metric === metric.id ? "active" : ""}`}
                   type="button"
@@ -3241,8 +4156,8 @@ function SettingsPage() {
           onChange={(searchRelationshipTags) => store.updateSettings({ searchRelationshipTags })}
         />
         <ToggleRow
-          label="Show Smut / Hentai"
-          description="Global title search includes adult-rated titles plus Smut, Hentai, and child tags. It also reveals the Smut built-in segment in Feeds."
+          label="Show Smut / Erotica"
+          description="Global title search includes adult-rated titles plus Smut, Erotica, and child tags. It also reveals the SMUT/EROTICA built-in segment in Feeds."
           value={store.settings.searchAdultTags}
           onChange={(searchAdultTags) => store.updateSettings({ searchAdultTags })}
         />
@@ -3726,7 +4641,7 @@ function LearnPage() {
           that feed&apos;s settings, or double-tap the surrounding header card to search titles already inside that feed.
         </LearnItem>
         <LearnItem title="Segments">
-          The eye control in Feeds hides a segment from Home without deleting its feeds. Smut/Hentai and BL/GL
+          The eye control in Feeds hides a segment from Home without deleting its feeds. Smut/Erotica and BL/GL
           segments also stay unavailable until their matching Settings search toggle is enabled.
         </LearnItem>
         <LearnItem title="Additional sources">
@@ -3753,6 +4668,7 @@ function ImportPage() {
   const store = useAppStore();
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const importedFeedRef = useRef(false);
   const payload = useMemo(() => {
     const encoded = params.get("p");
     if (!encoded) return null;
@@ -3762,6 +4678,16 @@ function ImportPage() {
       return null;
     }
   }, [params]);
+
+  useLayoutEffect(() => {
+    if (!store.ready || payload?.kind !== "feed" || importedFeedRef.current) return;
+    importedFeedRef.current = true;
+    const now = new Date().toISOString();
+    const importedFeed = { ...payload.feed, id: makeId(), createdAt: now, updatedAt: now };
+    store.upsertFeed(importedFeed);
+    store.openFeedInHome(importedFeed.id, null);
+    navigate("/", { replace: true });
+  }, [navigate, payload, store]);
 
   useEffect(() => {
     if (payload?.kind !== "feed") return;
@@ -3780,7 +4706,6 @@ function ImportPage() {
 
   const apply = (mode: "merge" | "replace") => {
     if (!payload) return;
-    if (payload.kind === "feed") store.importSnapshot({ feeds: [payload.feed] }, "merge");
     if (payload.kind === "settings") store.importSnapshot({ settings: payload.settings as AppSettings }, mode);
     if (payload.kind === "labels") store.importSnapshot({ labels: payload.labels }, mode);
     if (payload.kind === "full") store.importSnapshot(payload.snapshot, mode);
@@ -3792,20 +4717,16 @@ function ImportPage() {
       <h1>Import Preview</h1>
       {!payload ? (
         <div className="empty-state">This share link could not be decoded.</div>
+      ) : payload.kind === "feed" ? (
+        <div className="empty-state">Opening {payload.feed.name}...</div>
       ) : (
         <div className="empty-state">
           <Import size={28} />
-          <strong>{payload.kind === "feed" ? payload.feed.name : `${payload.kind} share`}</strong>
-          <span className="muted">
-            {payload.kind === "feed" && payload.feed.showDescription && payload.feed.description.trim()
-              ? payload.feed.description.trim()
-              : payload.kind === "feed"
-                ? "Review this feed before adding it to your library."
-                : "Review before applying this shared configuration."}
-          </span>
+          <strong>{`${payload.kind} share`}</strong>
+          <span className="muted">Review before applying this shared configuration.</span>
           <div className="toolbar">
             <button className="button primary" type="button" onClick={() => apply("merge")}>
-              Add
+              Apply
             </button>
             {(payload.kind === "settings" || payload.kind === "full") && (
               <button className="button" type="button" onClick={() => apply("replace")}>
@@ -3822,45 +4743,67 @@ function ImportPage() {
   );
 }
 
-function SharePanelButton({ payload, label = "Share" }: { payload: SharePayload; label?: string }) {
+function SharePanelButton({ payload, label = "Share", onCopied }: { payload: SharePayload; label?: string; onCopied?: () => void }) {
   const [open, setOpen] = useState(false);
+  const handleCopied = () => {
+    setOpen(false);
+    onCopied?.();
+  };
   return (
     <>
       <button className="button" type="button" onClick={() => setOpen(true)}>
         <Share2 size={16} /> {label}
       </button>
       <BottomDrawer title={label} open={open} onOpenChange={setOpen}>
-        <SharePanel payload={payload} />
+        <SharePanel payload={payload} onCopied={handleCopied} />
       </BottomDrawer>
     </>
   );
 }
 
-function SharePanel({ payload }: { payload: SharePayload }) {
+function SharePanel({ payload, onCopied }: { payload: SharePayload; onCopied: () => void }) {
   const url = useMemo(() => makeShareUrl(payload), [payload]);
+  const [copyError, setCopyError] = useState("");
   const title = payload.kind === "feed" ? payload.feed.name : "Aeon configuration";
   const description = payload.kind === "feed" && payload.feed.showDescription ? payload.feed.description.trim() : "";
+  const copyLink = async () => {
+    if (!url) return;
+    if (await copyTextToClipboard(url)) onCopied();
+    else setCopyError("Could not copy link");
+  };
   const share = async () => {
+    if (!url) return;
     if (navigator.share) {
       await navigator.share({ title, text: description ? `${title}\n${description}` : title, url });
       return;
     }
-    await navigator.clipboard.writeText(url);
+    await copyLink();
   };
   return (
     <div>
       <h2 className="share-title">{title}</h2>
       {description && <p className="muted">{description}</p>}
-      <p className="muted">Same-domain compressed share link. No URL shortener, no tracker.</p>
-      <textarea className="textarea" readOnly value={url} />
-      <div className="toolbar">
-        <button className="button primary" type="button" onClick={() => void share()}>
-          <Share2 size={16} /> Share
-        </button>
-        <button className="button" type="button" onClick={() => void navigator.clipboard.writeText(url)}>
-          <Copy size={16} /> Copy
-        </button>
-      </div>
+      {url ? (
+        <>
+          <p className="muted">Same-domain compressed share link. No URL shortener, no tracker.</p>
+          <textarea className="textarea" readOnly value={url} />
+          <div className="toolbar">
+            <button className="button primary" type="button" onClick={() => void share()}><Share2 size={16} /> Share</button>
+            <button className="button" type="button" onClick={() => void copyLink()}><Copy size={16} /> Copy</button>
+            {payload.kind === "feed" ? (
+              <button className="button" type="button" onClick={() => downloadText(`${safeFilename(payload.feed.name)}.json`, JSON.stringify({ feeds: [payload.feed] }, null, 2))}>
+                <Download size={16} /> JSON
+              </button>
+            ) : null}
+          </div>
+          {copyError ? <div className="settings-status" role="status">{copyError}</div> : null}
+        </>
+      ) : payload.kind === "feed" ? (
+        <div className="setting-stack">
+          <p className="muted">This list is too large for a reliable link. Share it as a JSON file instead.</p>
+          <button className="button primary" type="button" onClick={() => downloadText(`${safeFilename(payload.feed.name)}.json`, JSON.stringify({ feeds: [payload.feed] }, null, 2))}><Download size={16} /> Download JSON</button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -3869,6 +4812,7 @@ function makeSnapshot(store: ReturnType<typeof useAppStore>) {
   return {
     feeds: store.feeds,
     feedSegments: store.feedSegments,
+    feedLibraryOrder: store.feedLibraryOrder,
     settings: store.settings,
     activeFeedId: store.activeFeedId,
     lastRoute: window.location.hash,
@@ -3888,6 +4832,32 @@ function downloadSegmentBackup(segment: FeedSegment, feeds: Feed[]) {
 
 function safeFilename(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "segment";
+}
+
+async function copyTextToClipboard(text: string) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // LAN HTTP previews may not expose the modern Clipboard API.
+    }
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.readOnly = true;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+  document.body.appendChild(textarea);
+  textarea.select();
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+  }
 }
 
 function downloadText(filename: string, text: string) {

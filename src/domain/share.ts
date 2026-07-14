@@ -2,34 +2,34 @@ import { deflate, inflate } from "pako";
 import type { AppStateSnapshot, Feed, Folder, UserLabel, AppSettings } from "./types";
 
 export type SharePayload =
-  | { kind: "feed"; version: 2; feed: Feed }
-  | { kind: "folder"; version: 2; folder: Folder }
-  | { kind: "settings"; version: 2; settings: Partial<AppSettings> }
-  | { kind: "labels"; version: 2; labels: UserLabel[] }
-  | { kind: "full"; version: 2; snapshot: AppStateSnapshot };
+  | { kind: "feed"; version: 2 | 3; feed: Feed }
+  | { kind: "folder"; version: 2 | 3; folder: Folder }
+  | { kind: "settings"; version: 2 | 3; settings: Partial<AppSettings> }
+  | { kind: "labels"; version: 2 | 3; labels: UserLabel[] }
+  | { kind: "full"; version: 2 | 3; snapshot: AppStateSnapshot };
 
 type CompactPayload =
-  | { v: 2; k: "f"; f: unknown }
-  | { v: 2; k: "d"; d: unknown }
-  | { v: 2; k: "s"; s: unknown }
-  | { v: 2; k: "l"; l: unknown }
-  | { v: 2; k: "a"; a: unknown };
+  | { v: 2 | 3; k: "f"; f: unknown }
+  | { v: 2 | 3; k: "d"; d: unknown }
+  | { v: 2 | 3; k: "s"; s: unknown }
+  | { v: 2 | 3; k: "l"; l: unknown }
+  | { v: 2 | 3; k: "a"; a: unknown };
 
 function compact(payload: SharePayload): CompactPayload {
-  if (payload.kind === "feed") return { v: 2, k: "f", f: payload.feed };
-  if (payload.kind === "folder") return { v: 2, k: "d", d: payload.folder };
-  if (payload.kind === "settings") return { v: 2, k: "s", s: payload.settings };
-  if (payload.kind === "labels") return { v: 2, k: "l", l: payload.labels };
-  return { v: 2, k: "a", a: payload.snapshot };
+  if (payload.kind === "feed") return { v: payload.version, k: "f", f: payload.feed };
+  if (payload.kind === "folder") return { v: payload.version, k: "d", d: payload.folder };
+  if (payload.kind === "settings") return { v: payload.version, k: "s", s: payload.settings };
+  if (payload.kind === "labels") return { v: payload.version, k: "l", l: payload.labels };
+  return { v: payload.version, k: "a", a: payload.snapshot };
 }
 
 function expand(payload: CompactPayload): SharePayload {
-  if (payload.v !== 2) throw new Error("Unsupported share payload");
-  if (payload.k === "f") return { kind: "feed", version: 2, feed: payload.f as Feed };
-  if (payload.k === "d") return { kind: "folder", version: 2, folder: payload.d as Folder };
-  if (payload.k === "s") return { kind: "settings", version: 2, settings: payload.s as Partial<AppSettings> };
-  if (payload.k === "l") return { kind: "labels", version: 2, labels: payload.l as UserLabel[] };
-  return { kind: "full", version: 2, snapshot: payload.a as AppStateSnapshot };
+  if (payload.v !== 2 && payload.v !== 3) throw new Error("Unsupported share payload");
+  if (payload.k === "f") return { kind: "feed", version: payload.v, feed: payload.f as Feed };
+  if (payload.k === "d") return { kind: "folder", version: payload.v, folder: payload.d as Folder };
+  if (payload.k === "s") return { kind: "settings", version: payload.v, settings: payload.s as Partial<AppSettings> };
+  if (payload.k === "l") return { kind: "labels", version: payload.v, labels: payload.l as UserLabel[] };
+  return { kind: "full", version: payload.v, snapshot: payload.a as AppStateSnapshot };
 }
 
 function toBase64Url(bytes: Uint8Array) {
@@ -58,7 +58,8 @@ export function makeShareUrl(payload: SharePayload) {
   const encoded = encodeSharePayload(payload);
   const url = new URL(window.location.href);
   url.hash = `#/import?p=${encoded}`;
-  return url.toString();
+  const result = url.toString();
+  return result.length <= 8192 ? result : null;
 }
 
 export function exportCsv(rows: Record<string, unknown>[]) {

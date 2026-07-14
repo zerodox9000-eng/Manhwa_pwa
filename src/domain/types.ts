@@ -226,8 +226,14 @@ export interface FeedViewSettings {
   visible: VisibleTitleFields;
 }
 
+export type FeedKind = "logic" | "custom";
+export type FeedLibraryKind = FeedKind;
+export type CustomFeedOrderMode = "manual" | "automatic";
+export type CustomFeedPlacement = "top" | "bottom";
+
 export interface Feed {
   id: string;
+  kind: FeedKind;
   name: string;
   description: string;
   showDescription: boolean;
@@ -237,10 +243,15 @@ export interface Feed {
   sort: SortRule[];
   view: FeedViewSettings;
   coverTitleIds: number[];
+  titleIds: number[];
+  orderMode: CustomFeedOrderMode;
+  newTitlePlacement: CustomFeedPlacement;
+  nonAniListPlacement: CustomFeedPlacement;
 }
 
 export interface FeedSegment {
   id: string;
+  library: FeedLibraryKind;
   name: string;
   feedIds: string[];
   collapsed: boolean;
@@ -342,6 +353,7 @@ export interface SyncMeta {
 export interface AppStateSnapshot {
   feeds: Feed[];
   feedSegments?: FeedSegment[];
+  feedLibraryOrder?: FeedLibraryKind[];
   folders?: Folder[];
   labels?: UserLabel[];
   settings: AppSettings;

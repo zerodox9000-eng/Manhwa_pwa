@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, createFeed } from "./defaults";
+import { DEFAULT_SETTINGS, createCustomFeed, createFeed } from "./defaults";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch } from "./query";
 import type { HistoryMap, SeriesCatalog, TagNode } from "./types";
 
@@ -70,6 +70,24 @@ const history: HistoryMap = {
 };
 
 describe("runFeedQuery", () => {
+  it("keeps fixed custom membership in manual order while applying status filters", () => {
+    const feed = createCustomFeed("Manual");
+    feed.titleIds = [3, 1, 2];
+    const query = () => runFeedQuery({ feed, series: baseSeries, tags, history, labels: [], settings: DEFAULT_SETTINGS });
+    expect(query().items.map((item) => item.id)).toEqual([3, 1, 2]);
+    feed.filters.statuses = ["completed"];
+    expect(query().items.map((item) => item.id)).toEqual([3, 2]);
+  });
+
+  it("automatically sorts AniList members while pinning non-AniList titles", () => {
+    const feed = createCustomFeed("Automatic");
+    feed.titleIds = [1, 3, 2];
+    feed.orderMode = "automatic";
+    feed.nonAniListPlacement = "top";
+    feed.sort = [{ id: "pop", metric: "popularity", direction: "desc" }];
+    const result = runFeedQuery({ feed, series: baseSeries, tags, history, labels: [], settings: DEFAULT_SETTINGS });
+    expect(result.items.map((item) => item.id)).toEqual([3, 2, 1]);
+  });
   it("treats no selected statuses as all and combines selected statuses with OR", () => {
     const feed = createFeed("statuses");
     const hiatusTitle = { ...baseSeries[0], id: 4, display_title: "Paused Action", status: "hiatus" };

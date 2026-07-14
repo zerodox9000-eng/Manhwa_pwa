@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createFeed } from "./defaults";
+import { createCustomFeed } from "./defaults";
 import { decodeSharePayload, encodeSharePayload } from "./share";
 
 describe("share codec", () => {
@@ -13,5 +14,13 @@ describe("share codec", () => {
     expect(encoded).not.toContain("+");
     expect(encoded).not.toContain("/");
     expect(decodeSharePayload(encoded)).toEqual(payload);
+  });
+
+  it("round-trips version 3 custom feeds with fixed membership", () => {
+    const feed = createCustomFeed("Saved titles");
+    feed.titleIds = [9, 7, 5];
+    feed.newTitlePlacement = "bottom";
+    const payload = { kind: "feed" as const, version: 3 as const, feed };
+    expect(decodeSharePayload(encodeSharePayload(payload))).toEqual(payload);
   });
 });

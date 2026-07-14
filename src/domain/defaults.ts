@@ -165,6 +165,7 @@ export function createFeed(name = "New Feed"): Feed {
   const now = new Date().toISOString();
   return {
     id: makeId(),
+    kind: "logic",
     name,
     description: "",
     showDescription: false,
@@ -183,5 +184,30 @@ export function createFeed(name = "New Feed"): Feed {
       visible: { ...DEFAULT_FEED_VIEW.visible },
     },
     coverTitleIds: [],
+    titleIds: [],
+    orderMode: "automatic",
+    newTitlePlacement: "top",
+    nonAniListPlacement: "top",
+  };
+}
+
+export function createCustomFeed(name = "New List"): Feed {
+  const feed = createFeed(name);
+  return {
+    ...feed,
+    kind: "custom",
+    titleIds: [],
+    orderMode: "manual",
+    sort: [],
+    filters: {
+      ...feed.filters,
+      sourceMode: "mixed",
+      sourceModes: ["anilist", "non-anilist"],
+      query: "",
+      includeTagIds: [],
+      excludeTagIds: [],
+      contentRatings: ["safe", "suggestive", "erotica", "pornographic"],
+      labelIds: [],
+    },
   };
 }

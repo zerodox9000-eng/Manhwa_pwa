@@ -4,12 +4,15 @@ import defaultFeedSegmentsJson from "../domain/defaultFeedSegments.generated.jso
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import defaultSettingsJson from "../domain/defaultSettings.generated.json";
 import { feedUsesAniListOnlyParameters } from "../domain/query";
-import { builtInSensitiveFeeds, builtInSensitiveSegments, mergeBuiltInSensitiveDefaults } from "../domain/sensitiveFeedSegments";
+import { CUSTOM_FEED_MAX_TITLES, insertCustomTitleIds, mergeReorderedVisibleIds, normalizeCustomTitleIds } from "../domain/customFeeds";
+import { builtInCreatorFavouriteFeeds, builtInCreatorFavouriteSegments, mergeBuiltInCreatorFavourites, normalizeBuiltInCreatorFavouriteMetadata } from "../domain/creatorFavouritesDefaults";
+import { builtInSensitiveFeeds, builtInSensitiveSegments, mergeBuiltInSensitiveDefaults, normalizeBuiltInSensitiveNames } from "../domain/sensitiveFeedSegments";
 import { parseAppStateSnapshot, parseSettings } from "../domain/validation";
 import type {
   AppSettings,
   AppStateSnapshot,
   Feed,
+  FeedLibraryKind,
   FeedSegment,
   Folder,
   HistoryMap,
@@ -27,12 +30,17 @@ const THREE_COLUMN_FEEDS_MIGRATION_KEY = "manhwa-three-column-feeds-v1";
 const DEFAULT_FEED_LIBRARY_VERSION_KEY = "manhwa-default-feed-library-version";
 const DEFAULT_FEED_LIBRARY_VERSION = "backup-4-segmented-v4";
 const SENSITIVE_FEED_SEGMENTS_VERSION_KEY = "manhwa-sensitive-feed-segments-version";
-const SENSITIVE_FEED_SEGMENTS_VERSION = "v2";
+const SENSITIVE_FEED_SEGMENTS_VERSION = "v3";
+const CREATOR_FAVOURITES_VERSION_KEY = "manhwa-creator-favourites-version";
+const CREATOR_FAVOURITES_VERSION = "v1";
 const DEFAULT_FEED_DESCRIPTION_FIX_VERSION_KEY = "manhwa-default-feed-description-fix";
 const DEFAULT_FEED_DESCRIPTION_FIX_VERSION = "v2";
 const LEGACY_APP_NAME = "Manhwa Lib";
 const DEFAULT_APP_NAME = "Aeon";
 export const UNSEGMENTED_FEED_SEGMENT_ID = "unsegmented";
+export const MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID = "my-list-unsegmented";
+export const DEFAULT_FEED_LIBRARY_ORDER: FeedLibraryKind[] = ["logic", "custom"];
+export const CUSTOM_FEED_TITLE_LIMIT = CUSTOM_FEED_MAX_TITLES;
 
 const DEFAULT_FEED_DESCRIPTION_FIXES = new Map([
   ["0c96761d-09d2-423a-a959-b2c3e451f739", {
@@ -63,6 +71,7 @@ interface StoreState {
   syncMeta: SyncMeta | null;
   feeds: Feed[];
   feedSegments: FeedSegment[];
+  feedLibraryOrder: FeedLibraryKind[];
   folders: Folder[];
   labels: UserLabel[];
   settings: AppSettings;
@@ -72,8 +81,10 @@ interface StoreState {
   syncInFlight: boolean;
   homePreviewSegmentId: string | null;
   homeResetRequested: boolean;
+  homeOpenFeedRequestId: string | null;
   setActiveFeedId: (id: string | null) => void;
   openFeedInHome: (feedId: string, segmentId: string | null) => void;
+  completeHomeFeedOpen: () => void;
   exitHomePreview: () => void;
   requestHomeReset: () => void;
   completeHomeReset: () => void;
@@ -81,11 +92,15 @@ interface StoreState {
   deleteFeed: (id: string) => void;
   moveFeed: (id: string, targetId: string) => void;
   moveFeedToSegment: (id: string, segmentId: string) => void;
-  createFeedSegment: (name?: string) => void;
+  createFeedSegment: (name?: string, library?: FeedLibraryKind) => void;
   updateFeedSegment: (id: string, patch: Partial<Pick<FeedSegment, "name" | "collapsed" | "hiddenFromHome">>) => void;
   deleteFeedSegment: (id: string) => void;
   deleteFeedSegmentWithFeeds: (id: string) => void;
   moveFeedSegment: (id: string, targetId: string) => void;
+  moveFeedLibrary: (id: FeedLibraryKind, targetId: FeedLibraryKind) => void;
+  addTitlesToCustomFeeds: (feedIds: string[], titleIds: number[]) => { added: number; duplicates: number; full: number };
+  removeTitlesFromCustomFeed: (feedId: string, titleIds: number[]) => void;
+  reorderCustomFeedTitles: (feedId: string, orderedVisibleIds: number[]) => void;
   upsertFolder: (folder: Folder) => void;
   deleteFolder: (id: string) => void;
   upsertLabel: (label: UserLabel) => void;
@@ -182,6 +197,7 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
   ).slice(0, 3);
   const normalized: Feed = {
     ...feed,
+    kind: feed.kind === "custom" ? "custom" : "logic",
     description: feed.description ?? "",
     showDescription: feed.showDescription ?? false,
     filters: {
@@ -214,7 +230,26 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
         labels: options.preserveFeedSettings ? feed.view?.visible?.labels ?? false : false,
       },
     },
+    titleIds: normalizeCustomTitleIds(feed.titleIds ?? []),
+    orderMode: feed.kind === "custom" && feed.orderMode === "automatic" ? "automatic" : feed.kind === "custom" ? "manual" : "automatic",
+    newTitlePlacement: feed.newTitlePlacement === "bottom" ? "bottom" : "top",
+    nonAniListPlacement: feed.nonAniListPlacement === "bottom" ? "bottom" : "top",
   };
+  if (normalized.kind === "custom") {
+    return {
+      ...normalized,
+      filters: {
+        ...normalized.filters,
+        sourceMode: "mixed",
+        sourceModes: ["anilist", "non-anilist"],
+        query: "",
+        includeTagIds: [],
+        excludeTagIds: [],
+        contentRatings: ["safe", "suggestive", "erotica", "pornographic"],
+        labelIds: [],
+      },
+    };
+  }
   if (feedUsesAniListOnlyParameters(normalized)) {
     return {
       ...normalized,
@@ -228,10 +263,11 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
   return normalized;
 }
 
-function createSegment(name = "New Segment", feedIds: string[] = []): FeedSegment {
+function createSegment(name = "New Segment", feedIds: string[] = [], library: FeedLibraryKind = "logic"): FeedSegment {
   const now = new Date().toISOString();
   return {
     id: makeId(),
+    library,
     name,
     feedIds,
     collapsed: false,
@@ -241,10 +277,11 @@ function createSegment(name = "New Segment", feedIds: string[] = []): FeedSegmen
   };
 }
 
-function unsegmentedSegment(feedIds: string[] = []): FeedSegment {
+function unsegmentedSegment(library: FeedLibraryKind = "logic", feedIds: string[] = []): FeedSegment {
   const now = new Date().toISOString();
   return {
-    id: UNSEGMENTED_FEED_SEGMENT_ID,
+    id: library === "custom" ? MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID : UNSEGMENTED_FEED_SEGMENT_ID,
+    library,
     name: "UNSEGMENTED",
     feedIds,
     collapsed: false,
@@ -254,13 +291,19 @@ function unsegmentedSegment(feedIds: string[] = []): FeedSegment {
   };
 }
 
-export function addNewFeedToUnsegmentedSegment(segments: FeedSegment[], feedId: string) {
+export function addNewFeedToUnsegmentedSegment(segments: FeedSegment[], feedId: string, library: FeedLibraryKind = "logic") {
   if (segments.some((segment) => segment.feedIds.includes(feedId))) return segments;
-  const next = segments.length ? [...segments] : [unsegmentedSegment()];
-  let targetIndex = next.findIndex((segment) => segment.id === UNSEGMENTED_FEED_SEGMENT_ID);
+  const targetId = library === "custom" ? MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID : UNSEGMENTED_FEED_SEGMENT_ID;
+  const next = segments.length ? [...segments] : [unsegmentedSegment("logic"), unsegmentedSegment("custom")];
+  let targetIndex = next.findIndex((segment) => segment.id === targetId);
   if (targetIndex < 0) {
-    next.unshift(unsegmentedSegment());
-    targetIndex = 0;
+    if (library === "logic") {
+      next.unshift(unsegmentedSegment(library));
+      targetIndex = 0;
+    } else {
+      next.push(unsegmentedSegment(library));
+      targetIndex = next.length - 1;
+    }
   }
   const now = new Date().toISOString();
   return next.map((segment, index) =>
@@ -268,25 +311,33 @@ export function addNewFeedToUnsegmentedSegment(segments: FeedSegment[], feedId: 
   );
 }
 
-function normalizeFeedSegments(feeds: Feed[], segments?: FeedSegment[]): FeedSegment[] {
+export function normalizeFeedSegments(feeds: Feed[], segments?: FeedSegment[]): FeedSegment[] {
   const feedIdSet = new Set(feeds.map((feed) => feed.id));
+  const feedLibraryById = new Map(feeds.map((feed) => [feed.id, feed.kind]));
   const assigned = new Set<string>();
   const normalized: FeedSegment[] = [];
-  const source = segments?.length ? segments : [unsegmentedSegment(feeds.map((feed) => feed.id))];
-  let hasUnsegmented = false;
+  const source = segments?.length ? segments : [unsegmentedSegment("logic", feeds.filter((feed) => feed.kind === "logic").map((feed) => feed.id))];
+  const hasUnsegmented = new Set<FeedLibraryKind>();
 
   for (const segment of source) {
-    const id = segment.id || makeId();
+    const inferredLibrary: FeedLibraryKind = segment.library === "custom" || (segment.feedIds ?? []).some((feedId) => feedLibraryById.get(feedId) === "custom")
+      ? "custom"
+      : "logic";
+    const isUnsegmented = segment.id === UNSEGMENTED_FEED_SEGMENT_ID || segment.id === MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID;
+    const id = isUnsegmented
+      ? inferredLibrary === "custom" ? MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID : UNSEGMENTED_FEED_SEGMENT_ID
+      : segment.id || makeId();
     const feedIds: string[] = [];
     for (const feedId of segment.feedIds ?? []) {
-      if (!feedIdSet.has(feedId) || assigned.has(feedId)) continue;
+      if (!feedIdSet.has(feedId) || assigned.has(feedId) || feedLibraryById.get(feedId) !== inferredLibrary) continue;
       assigned.add(feedId);
       feedIds.push(feedId);
     }
-    if (id === UNSEGMENTED_FEED_SEGMENT_ID) hasUnsegmented = true;
+    if (isUnsegmented) hasUnsegmented.add(inferredLibrary);
     normalized.push({
       id,
-      name: id === UNSEGMENTED_FEED_SEGMENT_ID ? "UNSEGMENTED" : segment.name || "New Segment",
+      library: inferredLibrary,
+      name: isUnsegmented ? "UNSEGMENTED" : segment.name || "New Segment",
       feedIds,
       collapsed: Boolean(segment.collapsed),
       hiddenFromHome: Boolean(segment.hiddenFromHome),
@@ -295,10 +346,12 @@ function normalizeFeedSegments(feeds: Feed[], segments?: FeedSegment[]): FeedSeg
     });
   }
 
-  if (!hasUnsegmented) normalized.unshift(unsegmentedSegment());
-  const unsegmented = normalized.find((segment) => segment.id === UNSEGMENTED_FEED_SEGMENT_ID) ?? normalized[0];
+  if (!hasUnsegmented.has("logic")) normalized.unshift(unsegmentedSegment("logic"));
+  if (!hasUnsegmented.has("custom")) normalized.push(unsegmentedSegment("custom"));
   for (const feed of feeds) {
-    if (!assigned.has(feed.id)) unsegmented.feedIds.push(feed.id);
+    if (assigned.has(feed.id)) continue;
+    const targetId = feed.kind === "custom" ? MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID : UNSEGMENTED_FEED_SEGMENT_ID;
+    normalized.find((segment) => segment.id === targetId)?.feedIds.push(feed.id);
   }
 
   return normalized;
@@ -322,8 +375,14 @@ function orderFeedsBySegments(feeds: Feed[], segments: FeedSegment[]) {
   return ordered;
 }
 
+function normalizeFeedLibraryOrder(order?: FeedLibraryKind[]) {
+  const next = (order ?? []).filter((item, index, values) => (item === "logic" || item === "custom") && values.indexOf(item) === index);
+  for (const library of DEFAULT_FEED_LIBRARY_ORDER) if (!next.includes(library)) next.push(library);
+  return next.slice(0, 2);
+}
+
 function defaultFeeds() {
-  return [...(defaultFeedsJson as Feed[]), ...builtInSensitiveFeeds()].map((feed) =>
+  return [...(defaultFeedsJson as unknown as Feed[]), ...builtInSensitiveFeeds(), ...builtInCreatorFavouriteFeeds()].map((feed) =>
     normalizeFeed(feed, { preserveMetricSlots: true, preserveFeedSettings: true }),
   );
 }
@@ -336,8 +395,9 @@ export function correctDefaultFeedDescriptions(feeds: Feed[]) {
 }
 
 const BUILT_IN_DEFAULT_FEED_IDS = new Set([
-  ...(defaultFeedsJson as Feed[]).map((feed) => feed.id),
+  ...(defaultFeedsJson as unknown as Feed[]).map((feed) => feed.id),
   ...builtInSensitiveFeeds().map((feed) => feed.id),
+  ...builtInCreatorFavouriteFeeds().map((feed) => feed.id),
 ]);
 
 export function isBuiltInDefaultFeed(feed: Pick<Feed, "id">) {
@@ -345,7 +405,11 @@ export function isBuiltInDefaultFeed(feed: Pick<Feed, "id">) {
 }
 
 function defaultFeedSegments(feeds: Feed[]) {
-  return normalizeFeedSegments(feeds, [...(defaultFeedSegmentsJson as FeedSegment[]), ...builtInSensitiveSegments()]);
+  return normalizeFeedSegments(feeds, [
+    ...(defaultFeedSegmentsJson as unknown as FeedSegment[]),
+    ...builtInSensitiveSegments(),
+    ...builtInCreatorFavouriteSegments(),
+  ]);
 }
 
 function defaultSettings() {
@@ -370,6 +434,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     () => hasSavedState && !replaceDefaultLikeSavedFeeds && localStorage.getItem(SENSITIVE_FEED_SEGMENTS_VERSION_KEY) !== SENSITIVE_FEED_SEGMENTS_VERSION,
     [hasSavedState, replaceDefaultLikeSavedFeeds],
   );
+  const shouldInstallCreatorFavourites = useMemo(
+    () => hasSavedState && !replaceDefaultLikeSavedFeeds && localStorage.getItem(CREATOR_FAVOURITES_VERSION_KEY) !== CREATOR_FAVOURITES_VERSION,
+    [hasSavedState, replaceDefaultLikeSavedFeeds],
+  );
   const shouldCorrectDefaultFeedDescriptions = useMemo(
     () => hasSavedState && localStorage.getItem(DEFAULT_FEED_DESCRIPTION_FIX_VERSION_KEY) !== DEFAULT_FEED_DESCRIPTION_FIX_VERSION,
     [hasSavedState],
@@ -379,12 +447,17 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (replaceDefaultLikeSavedFeeds || !hasSavedState) return defaultFeeds();
       const savedFeeds = (local.feeds ?? []).map((feed) => normalizeFeed(feed));
       const correctedFeeds = shouldCorrectDefaultFeedDescriptions ? correctDefaultFeedDescriptions(savedFeeds) : savedFeeds;
-      const merged = shouldInstallSensitiveFeedSegments
-        ? mergeBuiltInSensitiveDefaults(correctedFeeds, local.feedSegments ?? []).feeds
-        : correctedFeeds;
-      return merged.map((feed) => normalizeFeed(feed, { preserveMetricSlots: true, preserveFeedSettings: true }));
+      const creatorCanonicalFeeds = normalizeBuiltInCreatorFavouriteMetadata(correctedFeeds);
+      const canonicalFeeds = normalizeBuiltInSensitiveNames(creatorCanonicalFeeds, local.feedSegments ?? []).feeds;
+      const sensitiveMerged = shouldInstallSensitiveFeedSegments
+        ? mergeBuiltInSensitiveDefaults(canonicalFeeds, local.feedSegments ?? []).feeds
+        : canonicalFeeds;
+      const creatorMerged = shouldInstallCreatorFavourites
+        ? mergeBuiltInCreatorFavourites(sensitiveMerged, local.feedSegments ?? []).feeds
+        : sensitiveMerged;
+      return creatorMerged.map((feed) => normalizeFeed(feed, { preserveMetricSlots: true, preserveFeedSettings: true }));
     },
-    [hasSavedState, local.feedSegments, local.feeds, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallSensitiveFeedSegments],
+    [hasSavedState, local.feedSegments, local.feeds, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallCreatorFavourites, shouldInstallSensitiveFeedSegments],
   );
   const shouldMigrateFeedsToThreeColumns = useMemo(
     () => localStorage.getItem(THREE_COLUMN_FEEDS_MIGRATION_KEY) !== "1",
@@ -403,11 +476,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   });
   const [feedSegments, setFeedSegments] = useState<FeedSegment[]>(() => {
     if (replaceDefaultLikeSavedFeeds || !hasSavedState) return defaultFeedSegments(initialFeeds);
-    const sourceSegments = shouldInstallSensitiveFeedSegments
+    const sensitiveSegments = shouldInstallSensitiveFeedSegments
       ? mergeBuiltInSensitiveDefaults(initialFeeds, local.feedSegments ?? []).segments
       : local.feedSegments;
-    return normalizeFeedSegments(initialFeeds, sourceSegments);
+    const sourceSegments = shouldInstallCreatorFavourites
+      ? mergeBuiltInCreatorFavourites(initialFeeds, sensitiveSegments ?? []).segments
+      : sensitiveSegments;
+    return normalizeFeedSegments(initialFeeds, normalizeBuiltInSensitiveNames(initialFeeds, sourceSegments ?? []).segments);
   });
+  const [feedLibraryOrder, setFeedLibraryOrder] = useState<FeedLibraryKind[]>(() => normalizeFeedLibraryOrder(local.feedLibraryOrder));
   const [folders, setFolders] = useState<Folder[]>(local.folders ?? []);
   const [labels, setLabels] = useState<UserLabel[]>(local.labels ?? []);
   const [settings, setSettings] = useState<AppSettings>(() =>
@@ -418,6 +495,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [activeFeedId, setActiveFeedId] = useState<string | null>(local.activeFeedId ?? null);
   const [homePreviewSegmentId, setHomePreviewSegmentId] = useState<string | null>(null);
   const [homeResetRequested, setHomeResetRequested] = useState(false);
+  const [homeOpenFeedRequestId, setHomeOpenFeedRequestId] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState("");
   const [syncProgress, setSyncProgress] = useState<number | null>(null);
   const [syncInFlight, setSyncInFlight] = useState(false);
@@ -437,10 +515,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (shouldInstallSensitiveFeedSegments || !hasSavedState) {
       localStorage.setItem(SENSITIVE_FEED_SEGMENTS_VERSION_KEY, SENSITIVE_FEED_SEGMENTS_VERSION);
     }
+    if (shouldInstallCreatorFavourites || !hasSavedState) {
+      localStorage.setItem(CREATOR_FAVOURITES_VERSION_KEY, CREATOR_FAVOURITES_VERSION);
+    }
     if (shouldCorrectDefaultFeedDescriptions || !hasSavedState) {
       localStorage.setItem(DEFAULT_FEED_DESCRIPTION_FIX_VERSION_KEY, DEFAULT_FEED_DESCRIPTION_FIX_VERSION);
     }
-  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallSensitiveFeedSegments, shouldMigrateFeedsToThreeColumns]);
+  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallCreatorFavourites, shouldInstallSensitiveFeedSegments, shouldMigrateFeedsToThreeColumns]);
 
   useEffect(() => {
     void (async () => {
@@ -501,6 +582,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     const snapshot: AppStateSnapshot = {
       feeds,
       feedSegments,
+      feedLibraryOrder,
       folders,
       labels,
       settings,
@@ -508,7 +590,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       lastRoute: window.location.hash,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-  }, [feeds, feedSegments, folders, labels, settings, activeFeedId]);
+  }, [feeds, feedSegments, feedLibraryOrder, folders, labels, settings, activeFeedId]);
 
   const refreshData = useCallback((options?: { force?: boolean }) => {
     if (syncInFlightRef.current) return syncInFlightRef.current;
@@ -563,7 +645,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       return exists ? current.map((item) => (item.id === feed.id ? updated : item)) : [...current, updated];
     });
     setFeedSegments((current) => {
-      return addNewFeedToUnsegmentedSegment(current, updated.id);
+      return addNewFeedToUnsegmentedSegment(current, updated.id, updated.kind);
     });
     setActiveFeedId((current) => current ?? updated.id);
   }, []);
@@ -571,7 +653,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const openFeedInHome = useCallback((feedId: string, segmentId: string | null) => {
     setHomePreviewSegmentId(segmentId);
     setActiveFeedId(feedId);
+    setHomeOpenFeedRequestId(feedId);
   }, []);
+
+  const completeHomeFeedOpen = useCallback(() => setHomeOpenFeedRequestId(null), []);
 
   const exitHomePreview = useCallback(() => {
     setHomePreviewSegmentId(null);
@@ -602,6 +687,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         if (segment.feedIds.includes(targetId)) targetIndex = index;
       });
       if (sourceIndex < 0 || targetIndex < 0 || id === targetId) return current;
+      if (current[sourceIndex].library !== current[targetIndex].library) return current;
       const sourceLocalIndex = current[sourceIndex].feedIds.indexOf(id);
       const targetLocalIndex = current[targetIndex].feedIds.indexOf(targetId);
       const next = current.map((segment) => ({ ...segment, feedIds: segment.feedIds.filter((feedId) => feedId !== id) }));
@@ -626,6 +712,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     setFeedSegments((current) => {
       const targetIndex = current.findIndex((segment) => segment.id === segmentId);
       if (targetIndex < 0) return current;
+      const feed = feeds.find((item) => item.id === id);
+      if (!feed || current[targetIndex].library !== feed.kind) return current;
       const next = current.map((segment) => ({ ...segment, feedIds: segment.feedIds.filter((feedId) => feedId !== id) }));
       next[targetIndex] = {
         ...next[targetIndex],
@@ -635,10 +723,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setFeeds((feedsCurrent) => orderFeedsBySegments(feedsCurrent, next));
       return next;
     });
-  }, []);
+  }, [feeds]);
 
-  const createFeedSegment = useCallback((name = "New Segment") => {
-    setFeedSegments((current) => [...normalizeFeedSegments(feeds, current), createSegment(name)]);
+  const createFeedSegment = useCallback((name = "New Segment", library: FeedLibraryKind = "logic") => {
+    setFeedSegments((current) => [...normalizeFeedSegments(feeds, current), createSegment(name, [], library)]);
   }, [feeds]);
 
   const updateFeedSegment = useCallback((id: string, patch: Partial<Pick<FeedSegment, "name" | "collapsed" | "hiddenFromHome">>) => {
@@ -676,12 +764,62 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const from = current.findIndex((segment) => segment.id === id);
       const to = current.findIndex((segment) => segment.id === targetId);
       if (from < 0 || to < 0 || from === to) return current;
+      if (current[from].library !== current[to].library) return current;
       const next = [...current];
       const [moved] = next.splice(from, 1);
       next.splice(to, 0, moved);
       setFeeds((feedsCurrent) => orderFeedsBySegments(feedsCurrent, next));
       return next;
     });
+  }, []);
+
+  const moveFeedLibrary = useCallback((id: FeedLibraryKind, targetId: FeedLibraryKind) => {
+    setFeedLibraryOrder((current) => {
+      const from = current.indexOf(id);
+      const to = current.indexOf(targetId);
+      if (from < 0 || to < 0 || from === to) return current;
+      const next = [...current];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }, []);
+
+  const addTitlesToCustomFeeds = useCallback((feedIds: string[], titleIds: number[]) => {
+    const uniqueIds = [...new Set(titleIds)];
+    let added = 0;
+    let duplicates = 0;
+    let full = 0;
+    const next = feeds.map((feed) => {
+      if (feed.kind !== "custom" || !feedIds.includes(feed.id)) return feed;
+      const result = insertCustomTitleIds(feed.titleIds, uniqueIds, feed.newTitlePlacement);
+      duplicates += result.duplicates;
+      full += result.full;
+      added += result.added;
+      if (result.added === 0) return feed;
+      return {
+        ...feed,
+        titleIds: result.titleIds,
+        updatedAt: new Date().toISOString(),
+      };
+    });
+    setFeeds(next);
+    return { added, duplicates, full };
+  }, [feeds]);
+
+  const removeTitlesFromCustomFeed = useCallback((feedId: string, titleIds: number[]) => {
+    const removed = new Set(titleIds);
+    setFeeds((current) => current.map((feed) => feed.id === feedId && feed.kind === "custom"
+      ? { ...feed, titleIds: feed.titleIds.filter((id) => !removed.has(id)), updatedAt: new Date().toISOString() }
+      : feed));
+  }, []);
+
+  const reorderCustomFeedTitles = useCallback((feedId: string, orderedVisibleIds: number[]) => {
+    setFeeds((current) => current.map((feed) => {
+      if (feed.id !== feedId || feed.kind !== "custom") return feed;
+      const titleIds = mergeReorderedVisibleIds(feed.titleIds, orderedVisibleIds);
+      return { ...feed, titleIds, orderMode: "manual", updatedAt: new Date().toISOString() };
+    }));
   }, []);
 
   const upsertFolder = useCallback((folder: Folder) => {
@@ -712,12 +850,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     const nextFeeds = defaultFeeds();
     setFeeds(nextFeeds);
     setFeedSegments(defaultFeedSegments(nextFeeds));
+    setFeedLibraryOrder([...DEFAULT_FEED_LIBRARY_ORDER]);
     setFolders([]);
     setLabels([]);
     setSettings(defaultSettings());
     setActiveFeedId(nextFeeds[0]?.id ?? null);
     localStorage.setItem(DEFAULT_FEED_LIBRARY_VERSION_KEY, DEFAULT_FEED_LIBRARY_VERSION);
     localStorage.setItem(SENSITIVE_FEED_SEGMENTS_VERSION_KEY, SENSITIVE_FEED_SEGMENTS_VERSION);
+    localStorage.setItem(CREATOR_FAVOURITES_VERSION_KEY, CREATOR_FAVOURITES_VERSION);
   }, []);
 
   const importSnapshot = useCallback((snapshot: Partial<AppStateSnapshot>, mode: "merge" | "replace") => {
@@ -726,6 +866,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const nextFeeds = (safeSnapshot.feeds ?? []).map((feed) => normalizeFeed(feed, { preserveMetricSlots: true }));
       setFeeds(nextFeeds);
       setFeedSegments(normalizeFeedSegments(nextFeeds, safeSnapshot.feedSegments));
+      setFeedLibraryOrder(normalizeFeedLibraryOrder(safeSnapshot.feedLibraryOrder));
       setFolders(safeSnapshot.folders ?? []);
       setLabels(safeSnapshot.labels ?? []);
       setSettings(mergeSettings(safeSnapshot.settings ? parseSettings(safeSnapshot.settings) ?? safeSnapshot.settings : undefined));
@@ -744,7 +885,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             return nextId ? [nextId] : [];
           }),
         }))
-      : [createSegment("Imported", incomingFeeds.map((feed) => feed.id))];
+      : [];
     setFeeds((current) => [...current, ...incomingFeeds]);
     setFeedSegments((current) => {
       const normalized = current.length ? current : [unsegmentedSegment()];
@@ -767,6 +908,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       syncMeta,
       feeds,
       feedSegments,
+      feedLibraryOrder,
       folders,
       labels,
       settings,
@@ -776,8 +918,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       syncInFlight,
       homePreviewSegmentId,
       homeResetRequested,
+      homeOpenFeedRequestId,
       setActiveFeedId,
       openFeedInHome,
+      completeHomeFeedOpen,
       exitHomePreview,
       requestHomeReset,
       completeHomeReset,
@@ -790,6 +934,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       deleteFeedSegment,
       deleteFeedSegmentWithFeeds,
       moveFeedSegment,
+      moveFeedLibrary,
+      addTitlesToCustomFeeds,
+      removeTitlesFromCustomFeed,
+      reorderCustomFeedTitles,
       upsertFolder,
       deleteFolder,
       upsertLabel,
@@ -807,6 +955,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       syncMeta,
       feeds,
       feedSegments,
+      feedLibraryOrder,
       folders,
       labels,
       settings,
@@ -816,8 +965,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       syncInFlight,
       homePreviewSegmentId,
       homeResetRequested,
+      homeOpenFeedRequestId,
       setActiveFeedId,
       openFeedInHome,
+      completeHomeFeedOpen,
       exitHomePreview,
       requestHomeReset,
       completeHomeReset,
@@ -830,6 +981,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       deleteFeedSegment,
       deleteFeedSegmentWithFeeds,
       moveFeedSegment,
+      moveFeedLibrary,
+      addTitlesToCustomFeeds,
+      removeTitlesFromCustomFeed,
+      reorderCustomFeedTitles,
       upsertFolder,
       deleteFolder,
       upsertLabel,
