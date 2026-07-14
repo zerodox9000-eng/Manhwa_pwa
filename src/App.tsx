@@ -4650,6 +4650,10 @@ function LearnPage() {
           <a href="https://www.anime-planet.com/manga" target="_blank" rel="noreferrer">Anime-Planet</a>. Feeds and
           settings stay on this device and can be moved with the JSON backup.
         </LearnItem>
+        <LearnItem title="Project">
+          Aeon is an open-source project created and maintained by{" "}
+          <a href="https://www.reddit.com/u/ZERO_DOX/" target="_blank" rel="noreferrer">ZERO_DOX</a>.
+        </LearnItem>
       </div>
     </div>
   );
