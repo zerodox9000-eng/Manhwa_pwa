@@ -7,13 +7,13 @@
 <p align="center"><strong>Open-source manhwa discovery app.</strong></p>
 
 <p align="center">
-  <a href="https://zerodox9000-eng.github.io/Manhwa_pwa/"><img src="https://img.shields.io/badge/Open%20App-00a9bd?style=for-the-badge" alt="Open app"></a>
-  <a href="https://github.com/zerodox9000-eng/Manhwa_pwa"><img src="https://img.shields.io/badge/Source-20232a?style=for-the-badge&logo=github&logoColor=white" alt="Source code"></a>
-  <a href="https://www.reddit.com/u/ZERO_DOX/"><img src="https://img.shields.io/badge/Creator-ZERO__DOX-20232a?style=for-the-badge&logo=reddit&logoColor=white" alt="Creator profile"></a>
+  <a href="https://zerodox9000-eng.github.io/Manhwa_pwa/"><img src="https://img.shields.io/badge/Open%20App-00a9bd?style=flat-square" alt="Open app"></a>
+  <a href="https://github.com/zerodox9000-eng/Manhwa_pwa"><img src="https://img.shields.io/badge/Source-20232a?style=flat-square&logo=github&logoColor=white" alt="Source code"></a>
+  <a href="https://www.reddit.com/u/ZERO_DOX/"><img src="https://img.shields.io/badge/Creator-ZERO__DOX-20232a?style=flat-square&logo=reddit&logoColor=white" alt="Creator profile"></a>
 </p>
 
 <p align="center">
-  <img src="./docs/assets/aeon-home.jpg" width="430" alt="Aeon Home showing a focused manhwa feed">
+  <img src="./docs/assets/aeon-home.jpg" width="360" alt="Aeon Home showing a focused manhwa feed">
 </p>
 
 <p align="center">Browse rule-based feeds, personal collections, and title details from one local catalogue.</p>
@@ -43,27 +43,11 @@ Both libraries use segments for ordering and Home visibility.
 
 ## Screenshots
 
-<table width="100%">
-  <tr>
-    <td width="50%" align="center"><img src="./docs/assets/aeon-home.jpg" width="300" alt="Aeon Home"></td>
-    <td width="50%" align="center"><img src="./docs/assets/aeon-library.jpg" width="300" alt="Aeon feed library"></td>
-  </tr>
-  <tr>
-    <td align="center">Home</td>
-    <td align="center">Feeds</td>
-  </tr>
-</table>
+<p align="center"><img src="./docs/assets/aeon-library.jpg" width="360" alt="Aeon feed library"><br>Feeds</p>
 
-<table width="100%">
-  <tr>
-    <td width="50%" align="center"><img src="./docs/assets/aeon-search.jpg" width="300" alt="Aeon catalogue search"></td>
-    <td width="50%" align="center"><img src="./docs/assets/aeon-details.jpg" width="230" alt="Aeon title details"></td>
-  </tr>
-  <tr>
-    <td align="center">Search</td>
-    <td align="center">Title details</td>
-  </tr>
-</table>
+<p align="center"><img src="./docs/assets/aeon-search.jpg" width="360" alt="Aeon catalogue search"><br>Search</p>
+
+<p align="center"><img src="./docs/assets/aeon-details.jpg" width="300" alt="Aeon title details"><br>Title details</p>
 
 ## Fan Rank
 
@@ -76,10 +60,10 @@ Feeds, MY LIST collections, segments, display settings, and the last app positio
 ## Data sources
 
 <p>
-  <a href="https://mangabaka.dev/"><img src="https://img.shields.io/badge/MangaBaka-0b7285?style=for-the-badge" alt="MangaBaka"></a>
-  <a href="https://anilist.co/"><img src="https://img.shields.io/badge/AniList-2563eb?style=for-the-badge" alt="AniList"></a>
-  <a href="https://www.mangaupdates.com/"><img src="https://img.shields.io/badge/MangaUpdates-7c3aed?style=for-the-badge" alt="MangaUpdates"></a>
-  <a href="https://www.anime-planet.com/"><img src="https://img.shields.io/badge/Anime--Planet-e11d48?style=for-the-badge" alt="Anime-Planet"></a>
+  <a href="https://mangabaka.dev/"><img src="https://img.shields.io/badge/MangaBaka-0b7285?style=flat-square" alt="MangaBaka"></a>
+  <a href="https://anilist.co/"><img src="https://img.shields.io/badge/AniList-2563eb?style=flat-square" alt="AniList"></a>
+  <a href="https://www.mangaupdates.com/"><img src="https://img.shields.io/badge/MangaUpdates-7c3aed?style=flat-square" alt="MangaUpdates"></a>
+  <a href="https://www.anime-planet.com/"><img src="https://img.shields.io/badge/Anime--Planet-e11d48?style=flat-square" alt="Anime-Planet"></a>
 </p>
 
 MangaBaka supplies the main catalogue, covers, publication details, links, and tag hierarchy. AniList supplies audience statistics for mapped titles. MangaUpdates and Anime-Planet are linked when available.
