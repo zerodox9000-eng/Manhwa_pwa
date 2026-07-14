@@ -1,16 +1,12 @@
-<table>
-  <tr>
-    <td width="240" align="center">
-      <img src="./docs/assets/aeon-round.png" width="190" alt="Aeon">
-    </td>
-    <td>
-      <h1>AEON</h1>
-      <p><strong>Open-source manhwa discovery app.</strong></p>
-      <p>Configurable feeds, personal lists, catalogue search, and detailed title pages.</p>
-      <a href="https://zerodox9000-eng.github.io/Manhwa_pwa/"><img src="./docs/assets/open-aeon.svg" width="190" alt="Open Aeon"></a>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="./docs/assets/aeon-round.png" width="160" alt="Aeon">
+</p>
+
+<h1 align="center">Aeon</h1>
+
+<p align="center"><strong>Open-source manhwa discovery app.</strong></p>
+
+<p align="center"><a href="https://zerodox9000-eng.github.io/Manhwa_pwa/">Open Aeon</a></p>
 
 ## About
 
