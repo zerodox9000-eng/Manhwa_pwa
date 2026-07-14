@@ -14,6 +14,7 @@ Owns frontend maintenance and generation scripts.
 ## Work Guidance
 
 - Prefer deterministic scripts with clear input/output paths.
+- `generate-icons.mjs` owns the platform icon outputs and uses `assets/aeon-icon-master.png` as the single visual source.
 - Keep destructive behavior opt-in and documented.
 
 ## Verification
