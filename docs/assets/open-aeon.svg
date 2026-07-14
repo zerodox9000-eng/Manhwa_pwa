@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="210" height="58" viewBox="0 0 210 58" role="img" aria-labelledby="title">
+  <title id="title">Open Aeon</title>
+  <defs>
+    <linearGradient id="fill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#087c8b"/>
+      <stop offset="1" stop-color="#00b8cf"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="208" height="56" rx="28" fill="url(#fill)" stroke="#43d5e6" stroke-opacity=".7" stroke-width="2"/>
+  <rect x="5" y="5" width="200" height="48" rx="24" fill="#0b1720" fill-opacity=".18"/>
+  <text x="91" y="36" fill="#ffffff" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" font-weight="650" text-anchor="middle">OPEN AEON</text>
+  <path d="M158 21h11v11M169 21l-14 14" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
