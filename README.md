@@ -6,7 +6,17 @@
 
 <p align="center"><strong>Open-source manhwa discovery app.</strong></p>
 
-<p align="center"><a href="https://zerodox9000-eng.github.io/Manhwa_pwa/">Open Aeon</a></p>
+<p align="center">
+  <a href="https://zerodox9000-eng.github.io/Manhwa_pwa/"><img src="https://img.shields.io/badge/Open%20App-00a9bd?style=for-the-badge" alt="Open app"></a>
+  <a href="https://github.com/zerodox9000-eng/Manhwa_pwa"><img src="https://img.shields.io/badge/Source-20232a?style=for-the-badge&logo=github&logoColor=white" alt="Source code"></a>
+  <a href="https://www.reddit.com/u/ZERO_DOX/"><img src="https://img.shields.io/badge/Creator-ZERO__DOX-20232a?style=for-the-badge&logo=reddit&logoColor=white" alt="Creator profile"></a>
+</p>
+
+<p align="center">
+  <img src="./docs/assets/aeon-home.jpg" width="430" alt="Aeon Home showing a focused manhwa feed">
+</p>
+
+<p align="center">Browse rule-based feeds, personal collections, and title details from one local catalogue.</p>
 
 ## About
 
@@ -65,16 +75,12 @@ Feeds, MY LIST collections, segments, display settings, and the last app positio
 
 ## Data sources
 
-<table width="100%">
-  <tr>
-    <td align="center"><a href="https://mangabaka.dev/"><img src="https://www.google.com/s2/favicons?domain=mangabaka.dev&amp;sz=64" width="24" alt=""> <strong>MangaBaka</strong></a></td>
-    <td align="center"><a href="https://anilist.co/"><img src="https://www.google.com/s2/favicons?domain=anilist.co&amp;sz=64" width="24" alt=""> <strong>AniList</strong></a></td>
-  </tr>
-  <tr>
-    <td align="center"><a href="https://www.mangaupdates.com/"><img src="https://www.google.com/s2/favicons?domain=mangaupdates.com&amp;sz=64" width="24" alt=""> <strong>MangaUpdates</strong></a></td>
-    <td align="center"><a href="https://www.anime-planet.com/"><img src="https://www.google.com/s2/favicons?domain=anime-planet.com&amp;sz=64" width="24" alt=""> <strong>Anime-Planet</strong></a></td>
-  </tr>
-</table>
+<p>
+  <a href="https://mangabaka.dev/"><img src="https://img.shields.io/badge/MangaBaka-0b7285?style=for-the-badge" alt="MangaBaka"></a>
+  <a href="https://anilist.co/"><img src="https://img.shields.io/badge/AniList-2563eb?style=for-the-badge" alt="AniList"></a>
+  <a href="https://www.mangaupdates.com/"><img src="https://img.shields.io/badge/MangaUpdates-7c3aed?style=for-the-badge" alt="MangaUpdates"></a>
+  <a href="https://www.anime-planet.com/"><img src="https://img.shields.io/badge/Anime--Planet-e11d48?style=for-the-badge" alt="Anime-Planet"></a>
+</p>
 
 MangaBaka supplies the main catalogue, covers, publication details, links, and tag hierarchy. AniList supplies audience statistics for mapped titles. MangaUpdates and Anime-Planet are linked when available.
 
