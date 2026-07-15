@@ -75,3 +75,7 @@ Aeon is independent and is not affiliated with these services or with the publis
 Aeon is an open-source project created and maintained by [ZERO_DOX](https://www.reddit.com/u/ZERO_DOX/). Its catalogue and daily data pipeline are maintained in [`zerodox9000-eng/manhwa_db`](https://github.com/zerodox9000-eng/manhwa_db).
 
 Contributor guidance is available in [AGENTS.md](./AGENTS.md), with a concise frontend handoff in [docs/frontend-agent-notes.md](./docs/frontend-agent-notes.md).
+
+## License
+
+Aeon is available under the [MIT License](./LICENSE).
