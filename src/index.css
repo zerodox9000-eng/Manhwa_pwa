@@ -3542,6 +3542,7 @@ textarea,
 
 /* Home pager: native scroll-snap shell. Keep this last. */
 .home-page {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100dvh;
@@ -3549,6 +3550,14 @@ textarea,
   padding-top: 0;
   padding-bottom: 0;
   overflow: hidden;
+}
+
+.home-library-loading-overlay {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  background: var(--bg);
 }
 
 .feed-pager {

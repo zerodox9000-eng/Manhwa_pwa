@@ -317,11 +317,12 @@ function getHomeScrollContainer(feed: Feed | null) {
   return document.querySelector<HTMLElement>(`[data-home-scroll-key="${homeScrollKey(feed)}"]`);
 }
 
-function saveHomeScroll(feed: Feed | null) {
+function saveHomeScroll(feed: Feed | null, measuredScrollTop?: number) {
   if (!feed) return;
   try {
     const key = homeScrollKey(feed);
-    const scrollTop = getHomeScrollContainer(feed)?.scrollTop ?? 0;
+    const scrollTop = measuredScrollTop ?? getHomeScrollContainer(feed)?.scrollTop;
+    if (!Number.isFinite(scrollTop)) return;
     localStorage.setItem(key, String(scrollTop));
     const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
       path?: string;
@@ -329,7 +330,7 @@ function saveHomeScroll(feed: Feed | null) {
     };
     localStorage.setItem(
       SESSION_RESTORE_KEY,
-      JSON.stringify({ ...saved, path: "/", scroll: { ...(saved.scroll ?? {}), "/": scrollTop, [key]: scrollTop } }),
+      JSON.stringify({ ...saved, scroll: { ...(saved.scroll ?? {}), [key]: scrollTop } }),
     );
   } catch {
     // Best effort only.
@@ -450,8 +451,7 @@ function AppFrame() {
   const nav = NAV_ITEMS.filter((item) => store.settings.bottomNavItems.includes(item.id));
   const showingHome = location.pathname === "/";
   const showingTitle = location.pathname.startsWith("/title/");
-  const [homeHasMounted, setHomeHasMounted] = useState(showingHome || showingTitle);
-  const keepHomeMounted = homeHasMounted || showingHome || showingTitle;
+  const keepHomeMounted = showingHome || showingTitle;
   const defaultHomeFeeds = useMemo(
     () => orderedFeedsForSegments(store.feeds, store.feedSegments, store.settings, { homeOnly: true }, store.feedLibraryOrder),
     [store.feeds, store.feedLibraryOrder, store.feedSegments, store.settings],
@@ -461,10 +461,6 @@ function AppFrame() {
       void 0;
     },
   });
-
-  useEffect(() => {
-    if (showingHome || showingTitle) setHomeHasMounted(true);
-  }, [showingHome, showingTitle]);
 
   useEffect(() => {
     document.documentElement.style.setProperty("--accent", store.settings.accentColor);
@@ -547,7 +543,7 @@ function AppFrame() {
       <main>
         {keepHomeMounted && (
           <div className={!showingHome ? "route-cache-hidden" : undefined} aria-hidden={!showingHome || undefined}>
-            <StableHomePage />
+            <HomePage />
           </div>
         )}
         {showingTitle ? (
@@ -614,10 +610,8 @@ function SessionRestorer() {
   const location = useLocation();
   const navigate = useNavigate();
   const restored = useRef(false);
-  const activeFeed = useMemo(
-    () => store.feeds.find((feed) => feed.id === store.activeFeedId) ?? store.feeds[0] ?? null,
-    [store.activeFeedId, store.feeds],
-  );
+  const pendingPathRef = useRef<string | null>(null);
+  const [restoreComplete, setRestoreComplete] = useState(false);
 
   useEffect(() => {
     if (restored.current || !store.ready) return;
@@ -626,27 +620,49 @@ function SessionRestorer() {
     try {
       const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as { path?: string };
       const openedAtRoot = location.pathname === "/" && !location.search && (!window.location.hash || window.location.hash === "#/");
-      if (saved.path && saved.path !== "/" && openedAtRoot) navigate(saved.path, { replace: true });
+      if (saved.path && saved.path !== "/" && openedAtRoot) {
+        pendingPathRef.current = saved.path;
+        navigate(saved.path, { replace: true });
+        return;
+      }
     } catch {
       // Bad restore metadata should never block the app.
     }
+    setRestoreComplete(true);
   }, [location.pathname, location.search, navigate, store.ready, store.settings.restoreLastSession]);
+
+  useLayoutEffect(() => {
+    const pendingPath = pendingPathRef.current;
+    if (!pendingPath || `${location.pathname}${location.search}` !== pendingPath) return;
+    pendingPathRef.current = null;
+    setRestoreComplete(true);
+  }, [location.pathname, location.search]);
+
+  useLayoutEffect(() => {
+    if (!restoreComplete || !store.settings.restoreLastSession || location.pathname.startsWith("/title/")) return;
+    const path = `${location.pathname}${location.search}`;
+    try {
+      const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
+        path?: string;
+        scroll?: Record<string, number>;
+      };
+      localStorage.setItem(SESSION_RESTORE_KEY, JSON.stringify({ ...saved, path }));
+    } catch {
+      // localStorage can be unavailable in private contexts.
+    }
+  }, [location.pathname, location.search, restoreComplete, store.settings.restoreLastSession]);
 
   useEffect(() => {
     if (!store.settings.restoreLastSession) return;
     const path = `${location.pathname}${location.search}`;
-    const key = location.pathname === "/" ? homeScrollKey(activeFeed) : path;
     if (location.pathname.startsWith("/title/")) {
       window.scrollTo({ top: 0, behavior: "instant" });
       return;
     }
-    if (location.pathname === "/") {
-      requestAnimationFrame(() => requestAnimationFrame(() => restoreHomeScroll(activeFeed)));
-      return;
-    }
+    if (location.pathname === "/") return;
     try {
       const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as { scroll?: Record<string, number> };
-      const candidates = [saved.scroll?.[key], Number(localStorage.getItem(key)), saved.scroll?.[path]];
+      const candidates = [saved.scroll?.[path]];
       const y = candidates.find((value) => Number.isFinite(value)) ?? 0;
       if (y > 0) {
         requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo({ top: y })));
@@ -654,39 +670,13 @@ function SessionRestorer() {
     } catch {
       // Ignore stale restore payloads.
     }
-  }, [activeFeed, location.pathname, location.search, store.settings.restoreLastSession]);
+  }, [location.pathname, location.search, store.settings.restoreLastSession]);
 
   useEffect(() => {
-    if (!store.settings.restoreLastSession) return;
+    if (!restoreComplete || !store.settings.restoreLastSession) return;
     const path = `${location.pathname}${location.search}`;
-    const key = location.pathname === "/" ? homeScrollKey(activeFeed) : path;
     if (location.pathname.startsWith("/title/")) return;
-    if (location.pathname === "/") {
-      const container = getHomeScrollContainer(activeFeed);
-      if (!container) return;
-      const save = () => {
-        try {
-          const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
-            path?: string;
-            scroll?: Record<string, number>;
-          };
-          localStorage.setItem(
-            SESSION_RESTORE_KEY,
-            JSON.stringify({
-              ...saved,
-              path,
-              scroll: { ...(saved.scroll ?? {}), [path]: container.scrollTop, [key]: container.scrollTop },
-            }),
-          );
-          localStorage.setItem(key, String(container.scrollTop));
-        } catch {
-          // localStorage can be unavailable in private contexts.
-        }
-      };
-      save();
-      container.addEventListener("scroll", save, { passive: true });
-      return () => container.removeEventListener("scroll", save);
-    }
+    if (location.pathname === "/") return;
     const save = () => {
       try {
         const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
@@ -695,9 +685,8 @@ function SessionRestorer() {
         };
         localStorage.setItem(
           SESSION_RESTORE_KEY,
-          JSON.stringify({ ...saved, path, scroll: { ...(saved.scroll ?? {}), [path]: window.scrollY, [key]: window.scrollY } }),
+          JSON.stringify({ ...saved, scroll: { ...(saved.scroll ?? {}), [path]: window.scrollY } }),
         );
-        if (location.pathname === "/") localStorage.setItem(key, String(window.scrollY));
       } catch {
         // localStorage can be unavailable in private contexts.
       }
@@ -705,7 +694,7 @@ function SessionRestorer() {
     save();
     window.addEventListener("scroll", save, { passive: true });
     return () => window.removeEventListener("scroll", save);
-  }, [activeFeed, location.pathname, location.search, store.settings.restoreLastSession]);
+  }, [location.pathname, location.search, restoreComplete, store.settings.restoreLastSession]);
 
   return null;
 }
@@ -963,6 +952,7 @@ function HomePage() {
   const renderCenterIndexRef = useRef(-1);
   const warmFeedIdsRef = useRef(new Set<string>());
   const didInitialPagerAlignRef = useRef(false);
+  const homeRestoreReadyRef = useRef(false);
   const completeLibraryLoaderVisual = useCallback(() => setLibraryLoaderVisualComplete(true), []);
 
   useEffect(() => {
@@ -999,9 +989,10 @@ function HomePage() {
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
   const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     renderCenterIndexRef.current = -1;
     didInitialPagerAlignRef.current = false;
+    homeRestoreReadyRef.current = false;
     setRenderCenterIndex(-1);
   }, [store.homePreviewSegmentId]);
 
@@ -1102,10 +1093,26 @@ function HomePage() {
     }
     if (!didInitialPagerAlignRef.current) {
       didInitialPagerAlignRef.current = true;
+      renderCenterIndexRef.current = activeFeedIndex;
+      setRenderCenterIndex(activeFeedIndex);
       pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
       restoreHomeScroll(activeFeed);
     }
   }, [activeFeed, activeFeedIndex, returningFromTitle, store.ready, warmFeedAt]);
+
+  useEffect(() => {
+    if (libraryLoaderVisible || !didInitialPagerAlignRef.current) return;
+    let innerFrame = 0;
+    const outerFrame = window.requestAnimationFrame(() => {
+      innerFrame = window.requestAnimationFrame(() => {
+        homeRestoreReadyRef.current = true;
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(outerFrame);
+      if (innerFrame) window.cancelAnimationFrame(innerFrame);
+    };
+  }, [activeFeed?.id, libraryLoaderVisible, renderCenterIndex, store.homePreviewSegmentId]);
 
   useEffect(() => {
     if (!store.ready || activeFeedIndex < 0) return;
@@ -1119,7 +1126,7 @@ function HomePage() {
   const warmFeedsAroundScrollPosition = useCallback(() => {
     setPreloadReady(true);
     const pager = pagerRef.current;
-    if (!pager || feeds.length === 0) return;
+    if (!pager || feeds.length === 0 || !homeRestoreReadyRef.current) return;
     const handleScroll = () => {
       const firstPane = paneRefs.current.get(feeds[0]?.id);
       const secondPane = paneRefs.current.get(feeds[1]?.id);
@@ -1143,8 +1150,9 @@ function HomePage() {
   }, [activeFeedId, feeds, setActiveFeedId, warmFeedAt]);
 
   const handleFeedPaneScroll = useCallback(
-    (feed: Feed) => {
-      saveHomeScroll(feed);
+    (feed: Feed, scrollTop: number) => {
+      if (!homeRestoreReadyRef.current) return;
+      saveHomeScroll(feed, scrollTop);
     },
     [],
   );
@@ -1163,25 +1171,19 @@ function HomePage() {
     [feeds, setActiveFeedId, warmFeedAt],
   );
 
-  useEffect(() => {
-    const feed = feeds.find((item) => item.id === activeFeedId) ?? feeds[0] ?? null;
-    const pane = feed ? paneRefs.current.get(feed.id) : null;
-    const scroller = pane?.querySelector<HTMLElement>(".feed-pane-scroll");
-    if (!pane || !feed || !scroller) return;
-    appDebugLog("home-scroll", "attach scroll listener", { feedId: feed.id });
-    saveHomeScroll(feed);
-  }, [activeFeedId, feeds]);
-
   return (
     <div className="page home-page">
       {libraryLoaderVisible ? (
-        <LibraryLoadingState
-          complete={store.ready}
-          downloadProgress={store.syncProgress}
-          onVisualComplete={completeLibraryLoaderVisual}
-          status={store.syncStatus || "Opening offline library"}
-        />
-      ) : store.feeds.length === 0 ? (
+        <div className="home-library-loading-overlay">
+          <LibraryLoadingState
+            complete={store.ready}
+            downloadProgress={store.syncProgress}
+            onVisualComplete={completeLibraryLoaderVisual}
+            status={store.syncStatus || "Opening offline library"}
+          />
+        </div>
+      ) : null}
+      {store.feeds.length === 0 ? (
         <div className="empty-state">
           <Library size={34} />
           <h1>Build your first feed</h1>
@@ -1237,7 +1239,7 @@ function HomePage() {
                   <div
                     className="feed-pane-scroll"
                     data-home-scroll-key={homeScrollKey(feed)}
-                    onScroll={() => handleFeedPaneScroll(feed)}
+                    onScroll={(event) => handleFeedPaneScroll(feed, event.currentTarget.scrollTop)}
                   >
                     {shouldRenderFeed ? <FeedView feed={feed} onEditFeed={setEditorFeed} /> : <HomeFeedPaneSkeleton feed={feed} />}
                   </div>
@@ -1283,8 +1285,6 @@ function HomePage() {
     </div>
   );
 }
-
-const StableHomePage = memo(HomePage);
 
 function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) => void }) {
   const store = useAppStore();
