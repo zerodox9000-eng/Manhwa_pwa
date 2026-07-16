@@ -20,6 +20,29 @@ export function insertCustomTitleIds(existingIds: number[], incomingIds: number[
   };
 }
 
+export function moveCustomTitleIds(
+  sourceIds: number[],
+  destinationIds: number[],
+  selectedIds: number[],
+  placement: CustomFeedPlacement,
+) {
+  const source = normalizeCustomTitleIds(sourceIds);
+  const selected = new Set(normalizeCustomTitleIds(selectedIds));
+  const selectedFromSource = source.filter((id) => selected.has(id));
+  const inserted = insertCustomTitleIds(destinationIds, selectedFromSource, placement);
+  const destinationAfterMove = new Set(inserted.titleIds);
+  const movedIds = new Set(selectedFromSource.filter((id) => destinationAfterMove.has(id)));
+
+  return {
+    sourceTitleIds: source.filter((id) => !movedIds.has(id)),
+    destinationTitleIds: inserted.titleIds,
+    moved: movedIds.size,
+    added: inserted.added,
+    duplicates: inserted.duplicates,
+    full: inserted.full,
+  };
+}
+
 export function mergeReorderedVisibleIds(allIds: number[], orderedVisibleIds: number[]) {
   const visible = new Set(orderedVisibleIds);
   let visibleIndex = 0;

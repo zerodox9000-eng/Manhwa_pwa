@@ -4,7 +4,7 @@ import defaultFeedSegmentsJson from "../domain/defaultFeedSegments.generated.jso
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import defaultSettingsJson from "../domain/defaultSettings.generated.json";
 import { feedUsesAniListOnlyParameters } from "../domain/query";
-import { CUSTOM_FEED_MAX_TITLES, insertCustomTitleIds, mergeReorderedVisibleIds, normalizeCustomTitleIds } from "../domain/customFeeds";
+import { CUSTOM_FEED_MAX_TITLES, insertCustomTitleIds, mergeReorderedVisibleIds, moveCustomTitleIds, normalizeCustomTitleIds } from "../domain/customFeeds";
 import { builtInCreatorFavouriteFeeds, builtInCreatorFavouriteSegments, mergeBuiltInCreatorFavourites, normalizeBuiltInCreatorFavouriteMetadata } from "../domain/creatorFavouritesDefaults";
 import { builtInSensitiveFeeds, builtInSensitiveSegments, mergeBuiltInSensitiveDefaults, normalizeBuiltInSensitiveNames } from "../domain/sensitiveFeedSegments";
 import { parseAppStateSnapshot, parseSettings } from "../domain/validation";
@@ -99,6 +99,7 @@ interface StoreState {
   moveFeedSegment: (id: string, targetId: string) => void;
   moveFeedLibrary: (id: FeedLibraryKind, targetId: FeedLibraryKind) => void;
   addTitlesToCustomFeeds: (feedIds: string[], titleIds: number[]) => { added: number; duplicates: number; full: number };
+  moveTitlesToCustomFeed: (sourceFeedId: string, destinationFeedId: string, titleIds: number[]) => { moved: number; added: number; duplicates: number; full: number };
   removeTitlesFromCustomFeed: (feedId: string, titleIds: number[]) => void;
   reorderCustomFeedTitles: (feedId: string, orderedVisibleIds: number[]) => void;
   upsertFolder: (folder: Folder) => void;
@@ -814,6 +815,24 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       : feed));
   }, []);
 
+  const moveTitlesToCustomFeed = useCallback((sourceFeedId: string, destinationFeedId: string, titleIds: number[]) => {
+    if (sourceFeedId === destinationFeedId) return { moved: 0, added: 0, duplicates: 0, full: 0 };
+    const source = feeds.find((feed) => feed.id === sourceFeedId && feed.kind === "custom");
+    const destination = feeds.find((feed) => feed.id === destinationFeedId && feed.kind === "custom");
+    if (!source || !destination) return { moved: 0, added: 0, duplicates: 0, full: 0 };
+
+    const result = moveCustomTitleIds(source.titleIds, destination.titleIds, titleIds, destination.newTitlePlacement);
+    if (result.moved > 0) {
+      const updatedAt = new Date().toISOString();
+      setFeeds((current) => current.map((feed) => {
+        if (feed.id === source.id && feed.kind === "custom") return { ...feed, titleIds: result.sourceTitleIds, updatedAt };
+        if (feed.id === destination.id && feed.kind === "custom") return { ...feed, titleIds: result.destinationTitleIds, updatedAt };
+        return feed;
+      }));
+    }
+    return { moved: result.moved, added: result.added, duplicates: result.duplicates, full: result.full };
+  }, [feeds]);
+
   const reorderCustomFeedTitles = useCallback((feedId: string, orderedVisibleIds: number[]) => {
     setFeeds((current) => current.map((feed) => {
       if (feed.id !== feedId || feed.kind !== "custom") return feed;
@@ -936,6 +955,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       moveFeedSegment,
       moveFeedLibrary,
       addTitlesToCustomFeeds,
+      moveTitlesToCustomFeed,
       removeTitlesFromCustomFeed,
       reorderCustomFeedTitles,
       upsertFolder,
@@ -983,6 +1003,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       moveFeedSegment,
       moveFeedLibrary,
       addTitlesToCustomFeeds,
+      moveTitlesToCustomFeed,
       removeTitlesFromCustomFeed,
       reorderCustomFeedTitles,
       upsertFolder,

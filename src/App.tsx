@@ -20,6 +20,7 @@ import {
   Info,
   Library,
   ListFilter,
+  MoveRight,
   Pencil,
   Plus,
   Search,
@@ -741,6 +742,7 @@ function TitleSelectionDock() {
   );
   const { mode, selectedIds } = selectionSnapshot;
   const [destinationOpen, setDestinationOpen] = useState(false);
+  const [destinationAction, setDestinationAction] = useState<"add" | "copy" | "move">("add");
   const [destinationIds, setDestinationIds] = useState<Set<string>>(() => new Set());
   const [newListName, setNewListName] = useState("");
   const [summary, setSummary] = useState("");
@@ -761,8 +763,30 @@ function TitleSelectionDock() {
   }, [summary]);
 
   if (!mode && !summary) return null;
+  const openDestinations = (action: "add" | "copy" | "move") => {
+    setDestinationAction(action);
+    setDestinationIds(new Set());
+    setDestinationOpen(true);
+  };
   const applyDestinations = () => {
+    if (destinationAction === "move" && mode?.kind === "remove") {
+      const destinationFeedId = [...destinationIds][0];
+      if (!destinationFeedId) return;
+      const result = store.moveTitlesToCustomFeed(mode.feedId, destinationFeedId, [...selectedIds]);
+      setSummary(`${result.moved} moved${result.duplicates ? `; ${result.duplicates} already there` : ""}${result.full ? `; ${result.full} stayed here (full)` : ""}`);
+      setDestinationOpen(false);
+      setDestinationIds(new Set());
+      selection.clear();
+      return;
+    }
     const result = store.addTitlesToCustomFeeds([...destinationIds], [...selectedIds]);
+    if (destinationAction === "copy") {
+      setSummary(`${result.added} copied${result.duplicates ? `; ${result.duplicates} already there` : ""}${result.full ? `; ${result.full} skipped (full)` : ""}`);
+      setDestinationOpen(false);
+      setDestinationIds(new Set());
+      selection.clear();
+      return;
+    }
     setSummary(`${result.added} added${result.duplicates ? ` · ${result.duplicates} already there` : ""}${result.full ? ` · ${result.full} skipped (full)` : ""}`);
     setDestinationOpen(false);
     setDestinationIds(new Set());
@@ -772,29 +796,33 @@ function TitleSelectionDock() {
   return (
     <>
       {mode && !destinationOpen ? (
-        <div className="title-selection-dock" role="toolbar" aria-label="Selected titles">
-          <button className="button ghost" type="button" onClick={selection.clear}>Cancel</button>
+        <div className={`title-selection-dock ${mode.kind === "remove" ? "custom-feed-selection-dock" : ""}`} role="toolbar" aria-label="Selected titles">
+          <button className={mode.kind === "remove" ? "icon-button glass selection-cancel-button" : "button ghost"} type="button" onClick={selection.clear} aria-label="Cancel selection">
+            {mode.kind === "remove" ? <X size={17} /> : "Cancel"}
+          </button>
           <strong className="title-selection-count" aria-label={`${selectedCount} selected`}>{selectedCount}</strong>
           {mode.kind === "remove" ? (
-            <>
+            <div className="custom-selection-actions">
               <button className="button ghost" type="button" disabled={(removalFeed?.titleIds.length ?? 0) < 2} onClick={() => {
                 if (!removalFeed) return;
                 const feedId = removalFeed.id;
                 selection.clear();
                 window.dispatchEvent(new CustomEvent("aeon:rearrange-custom-feed", { detail: { feedId } }));
               }}><GripVertical size={17} /> Drag</button>
+              <button className="button ghost" type="button" disabled={selectedCount === 0} onClick={() => openDestinations("copy")}><Copy size={17} /> Copy</button>
+              <button className="button ghost" type="button" disabled={selectedCount === 0} onClick={() => openDestinations("move")}><MoveRight size={17} /> Move</button>
               <button className="button danger" type="button" disabled={selectedCount === 0} onClick={() => {
                 store.removeTitlesFromCustomFeed(mode.kind === "remove" ? mode.feedId : "", [...selectedIds]);
                 selection.clear();
               }}><Trash2 size={17} /> Remove</button>
-            </>
+            </div>
           ) : (
-            <button className="button primary" type="button" disabled={selectedCount === 0} onClick={() => setDestinationOpen(true)}><Plus size={17} /> Add</button>
+            <button className="button primary" type="button" disabled={selectedCount === 0} onClick={() => openDestinations("add")}><Plus size={17} /> Add</button>
           )}
         </div>
       ) : null}
       {summary ? <div className="selection-result-toast" role="status">{summary}</div> : null}
-      <BottomDrawer title="Add to MY LIST" open={destinationOpen} onOpenChange={(open) => {
+      <BottomDrawer title={`${destinationAction === "move" ? "Move" : destinationAction === "copy" ? "Copy" : "Add"} to MY LIST`} open={destinationOpen} onOpenChange={(open) => {
         setDestinationOpen(open);
         if (!open) setDestinationIds(new Set());
       }}>
@@ -802,7 +830,7 @@ function TitleSelectionDock() {
           {customSegments.map((segment) => {
             const feeds = segment.feedIds.flatMap((id) => {
               const feed = customFeedsById.get(id);
-              return feed ? [feed] : [];
+              return feed && (mode?.kind !== "remove" || feed.id !== mode.feedId) ? [feed] : [];
             });
             if (feeds.length === 0) return null;
             return <section key={segment.id}>
@@ -810,6 +838,7 @@ function TitleSelectionDock() {
               {feeds.map((feed) => {
                 const checked = destinationIds.has(feed.id);
                 return <button className={`custom-destination-row ${checked ? "selected" : ""}`} type="button" key={feed.id} onClick={() => setDestinationIds((current) => {
+                  if (destinationAction === "move") return new Set([feed.id]);
                   const next = new Set(current);
                   if (next.has(feed.id)) next.delete(feed.id); else next.add(feed.id);
                   return next;
@@ -829,9 +858,10 @@ function TitleSelectionDock() {
                 const feed = createCustomFeed(newListName.trim());
                 feed.titleIds = [...selectedIds].slice(0, CUSTOM_FEED_TITLE_LIMIT);
                 store.upsertFeed(feed);
+                if (destinationAction === "move" && mode?.kind === "remove") store.removeTitlesFromCustomFeed(mode.feedId, feed.titleIds);
                 setNewListName("");
                 setDestinationOpen(false);
-                setSummary(`${feed.titleIds.length} added to ${feed.name}`);
+                setSummary(`${feed.titleIds.length} ${destinationAction === "move" ? "moved" : destinationAction === "copy" ? "copied" : "added"} to ${feed.name}`);
                 selection.clear();
               }}><Plus size={16} /> Create</button>
             </div>
@@ -839,7 +869,7 @@ function TitleSelectionDock() {
           <div className="toolbar">
             <button className="button" type="button" onClick={() => setDestinationOpen(false)}>Cancel</button>
             <span className="spacer" />
-            <button className="button primary" type="button" disabled={destinationIds.size === 0} onClick={applyDestinations}><Check size={16} /> Add to selected</button>
+            <button className="button primary" type="button" disabled={destinationIds.size === 0} onClick={applyDestinations}><Check size={16} /> {destinationAction === "move" ? "Move" : destinationAction === "copy" ? "Copy" : "Add"}</button>
           </div>
         </div>
       </BottomDrawer>
