@@ -1567,6 +1567,7 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
           history={store.history}
           latestDate={store.syncMeta?.historyLastDate}
           rankById={originalRanks}
+          catalogReady={store.ready}
         />
       )}
       <BottomDrawer title="MY LIST actions" open={customActionOpen} onOpenChange={setCustomActionOpen}>
@@ -1842,25 +1843,41 @@ function FitSingleLineTitle({ text, expanded = false, maxChars = FEED_TITLE_EXPA
 
 function HomeFeedPaneSkeleton({ feed }: { feed: Feed }) {
   return (
-    <section className="section feed-summary-section">
-      <div className="feed-summary-card">
-        <FeedBarCoverWash items={[]} />
-        <div className="feed-summary-content">
-          <div className="feed-title-button skeleton-feed-title">
-            <h1 className="single-line-title skeleton-line skeleton-line-title" />
-          </div>
-          <div className={`feed-summary-lower ${feed.showDescription ? "" : "empty"}`}>
-            {feed.showDescription ? (
-              <div className="feed-description-button skeleton-feed-description">
-                <span className="skeleton-line skeleton-line-body" />
-              </div>
-            ) : null}
+    <>
+      <section className="section feed-summary-section">
+        <div className="feed-summary-card">
+          <FeedBarCoverWash items={[]} />
+          <div className="feed-summary-content">
+            <div className="feed-title-button skeleton-feed-title">
+              <h1 className="single-line-title skeleton-line skeleton-line-title" />
+            </div>
+            <div className={`feed-summary-lower ${feed.showDescription ? "" : "empty"}`}>
+              {feed.showDescription ? (
+                <div className="feed-description-button skeleton-feed-description">
+                  <span className="skeleton-line skeleton-line-body" />
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
+      </section>
       <TitleCollectionSkeleton columns={feed.view.gridColumns} />
-    </section>
+    </>
   );
+}
+
+function readPersistedVisibleCount(countKey: string, legacyCountKey: string, pageSize: number) {
+  try {
+    return (
+      Number(localStorage.getItem(countKey)) ||
+      Number(sessionStorage.getItem(countKey)) ||
+      Number(localStorage.getItem(legacyCountKey)) ||
+      Number(sessionStorage.getItem(legacyCountKey)) ||
+      pageSize
+    );
+  } catch {
+    return pageSize;
+  }
 }
 
 function TitleCollection({
@@ -1870,6 +1887,7 @@ function TitleCollection({
   latestDate,
   rankById,
   loading = false,
+  catalogReady = true,
 }: {
   items: SeriesCatalog[];
   feed: Feed;
@@ -1877,17 +1895,27 @@ function TitleCollection({
   latestDate?: string | null;
   rankById?: ReadonlyMap<number, number>;
   loading?: boolean;
+  catalogReady?: boolean;
 }) {
   const pageSize = feed.view.gridColumns >= 5 ? 60 : feed.view.gridColumns === 4 ? 72 : 120;
-  const countKey = `manhwa-visible-count:${feed.id}:${feed.view.gridColumns}`;
-  const [visibleCount, setVisibleCount] = useState(() => Number(sessionStorage.getItem(countKey)) || pageSize);
+  const countKey = `manhwa-visible-count:${feed.id}:${feed.view.gridColumns}:${feed.view.gridDensity}`;
+  const legacyCountKey = `manhwa-visible-count:${feed.id}:${feed.view.gridColumns}`;
+  const [visibleCount, setVisibleCount] = useState(() => readPersistedVisibleCount(countKey, legacyCountKey, pageSize));
   useEffect(() => {
-    const saved = Number(sessionStorage.getItem(countKey)) || pageSize;
+    if (!catalogReady) return;
+    const saved = readPersistedVisibleCount(countKey, legacyCountKey, pageSize);
     setVisibleCount(Math.max(pageSize, Math.min(saved, Math.max(pageSize, items.length))));
-  }, [countKey, items.length, pageSize]);
+  }, [catalogReady, countKey, items.length, legacyCountKey, pageSize]);
   useEffect(() => {
-    sessionStorage.setItem(countKey, String(visibleCount));
-  }, [countKey, visibleCount]);
+    if (!catalogReady) return;
+    try {
+      const value = String(visibleCount);
+      sessionStorage.setItem(countKey, value);
+      localStorage.setItem(countKey, value);
+    } catch {
+      // Keep the current in-memory count if persistent storage is unavailable.
+    }
+  }, [catalogReady, countKey, visibleCount]);
   const visibleItems = items.slice(0, visibleCount);
   const metricWindow = useMemo(() => resolveRollingWindow(feed.filters.rolling, latestDate), [feed.filters.rolling, latestDate]);
 
@@ -4186,19 +4214,27 @@ function SettingsPage() {
         <ToggleRow label="Restore last session" description="Reopen at the prior route/feed/scroll when possible." value={store.settings.restoreLastSession} onChange={(restoreLastSession) => store.updateSettings({ restoreLastSession })} />
       </SettingsSection>
 
-      <SettingsSection title="Search">
-        <ToggleRow
-          label="Show BL / GL families"
-          description="Global title search includes Boys Love, Girls Love, Yaoi, Yuri, and child tags. It also reveals the Yuri & Yaoi built-in segment in Feeds."
-          value={store.settings.searchRelationshipTags}
-          onChange={(searchRelationshipTags) => store.updateSettings({ searchRelationshipTags })}
-        />
-        <ToggleRow
-          label="Show Smut / Erotica"
-          description="Global title search includes adult-rated titles plus Smut, Erotica, and child tags. It also reveals the SMUT/EROTICA built-in segment in Feeds."
-          value={store.settings.searchAdultTags}
-          onChange={(searchAdultTags) => store.updateSettings({ searchAdultTags })}
-        />
+      <SettingsSection title="Sensitive content">
+        <details className="settings-disclosure">
+          <summary>
+            <span>Visibility options</span>
+            <ChevronDown size={18} aria-hidden="true" />
+          </summary>
+          <div className="settings-list">
+            <ToggleRow
+              label="Show BL / GL families"
+              description="Global title search includes Boys Love, Girls Love, Yaoi, Yuri, and child tags. It also reveals the Yuri & Yaoi built-in segment in Feeds."
+              value={store.settings.searchRelationshipTags}
+              onChange={(searchRelationshipTags) => store.updateSettings({ searchRelationshipTags })}
+            />
+            <ToggleRow
+              label="Show Smut / Erotica"
+              description="Global title search includes adult-rated titles plus Smut, Erotica, and child tags. It also reveals the SMUT/EROTICA built-in segment in Feeds."
+              value={store.settings.searchAdultTags}
+              onChange={(searchAdultTags) => store.updateSettings({ searchAdultTags })}
+            />
+          </div>
+        </details>
       </SettingsSection>
 
       <SettingsSection title="Backup & Help">
@@ -4497,12 +4533,12 @@ function DetailSkeleton({ series }: { series: SeriesCatalog | null }) {
         <div className="detail-copy">
           <div className="skeleton-line skeleton-line-title" />
           <div className="skeleton-line skeleton-line-creators" />
+          <section className="detail-meta-strip detail-skeleton-strip">
+            <div className="detail-meta-chip skeleton-chip" />
+            <div className="detail-meta-chip skeleton-chip" />
+            <div className="detail-meta-chip skeleton-chip" />
+          </section>
         </div>
-      </section>
-      <section className="detail-meta-strip detail-skeleton-strip" aria-hidden="true">
-        <div className="detail-meta-chip skeleton-chip" />
-        <div className="detail-meta-chip skeleton-chip" />
-        <div className="detail-meta-chip skeleton-chip" />
       </section>
       <section className="detail-stat-grid detail-skeleton-grid detail-skeleton-stats" aria-hidden="true">
         <div className="detail-stat skeleton-stat skeleton-stat-compact" />

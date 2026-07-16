@@ -3224,6 +3224,11 @@ textarea,
   padding-right: 44px;
 }
 
+.search-input-wrap input[type="search"]::-webkit-search-cancel-button {
+  display: none;
+  -webkit-appearance: none;
+}
+
 .input-clear {
   position: absolute;
   top: 50%;
@@ -4402,6 +4407,42 @@ textarea,
 .settings-page .settings-list > .button:hover,
 .settings-page .settings-list > .button:focus-visible {
   background: rgba(255, 255, 255, 0.055);
+}
+
+.settings-disclosure {
+  overflow: hidden;
+}
+
+.settings-disclosure > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 0 14px;
+  color: rgba(242, 245, 252, 0.92);
+  font-weight: 750;
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-disclosure > summary svg {
+  transition: transform 160ms ease;
+}
+
+.settings-disclosure[open] > summary {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.075);
+}
+
+.settings-disclosure[open] > summary svg {
+  transform: rotate(180deg);
+}
+
+.settings-disclosure > .settings-list {
+  display: grid;
 }
 
 .setting-stack {

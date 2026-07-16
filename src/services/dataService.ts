@@ -1,6 +1,6 @@
 import { db, saveSyncMeta } from "../db/appDb";
 import { DATA_SOURCE_CANDIDATES } from "../domain/defaults";
-import { normalizeCatalog, resolveDisplayTitle } from "../domain/catalog";
+import { normalizeCatalog } from "../domain/catalog";
 import type { RecommendationFeature, SeriesCatalog, SeriesDetail, SyncMeta } from "../domain/types";
 import { parseCatalogList, parseDetail, parseHistory, parseTags } from "../domain/validation";
 import { decodeJsonBytes, fetchChunkedFrontendData, parseFrontendDataManifest } from "./chunkedData";
@@ -36,25 +36,6 @@ async function fetchJsonValidated<T>(base: string, path: string, parser: (value:
   return parser(raw);
 }
 
-async function fetchLocalJson<T>(path: string): Promise<T | null> {
-  try {
-    const response = await fetch(`${import.meta.env.BASE_URL}${path}`, {
-      cache: "no-cache",
-    });
-
-    if (!response.ok) return null;
-
-    if (path.endsWith(".gz")) {
-      const buffer = await response.arrayBuffer();
-      return JSON.parse(decodeJsonBytes(new Uint8Array(buffer))) as T;
-    }
-
-    return (await response.json()) as T;
-  } catch {
-    return null;
-  }
-}
-
 function fixMangaBakaLink<T extends SeriesCatalog>(item: T): T {
   if (item.links?.mangabaka?.includes("/series/")) {
     return { ...item, links: { ...item.links, mangabaka: `https://mangabaka.org/${item.id}` } };
@@ -72,44 +53,48 @@ function indexCatalog(catalog: SeriesCatalog[] | null | undefined) {
   return index;
 }
 
+function titleCaseAnimePlanetSlug(value: string) {
+  const minorWords = new Set(["a", "an", "and", "as", "at", "but", "by", "for", "from", "in", "into", "nor", "of", "on", "or", "per", "the", "to", "vs", "via", "with"]);
+  const words = decodeURIComponent(value)
+    .replace(/\.[a-z0-9]+$/i, "")
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+
+  return words
+    .map((word, index) => {
+      const lower = word.toLowerCase();
+      if (index > 0 && minorWords.has(lower)) return lower;
+      return lower.replace(/^\p{L}/u, (letter) => letter.toUpperCase());
+    })
+    .join(" ");
+}
+
+export function deriveAnimePlanetTitle(item: SeriesCatalog) {
+  if (item.animeplanet_title?.trim()) return item.animeplanet_title;
+  const source = item.source?.animeplanet;
+  const slug = source?.id || source?.url?.split("/").filter(Boolean).at(-1);
+  if (!slug) return null;
+  const title = titleCaseAnimePlanetSlug(slug);
+  return /^(unknown title|untitled|no title|n\/a|-)?$/i.test(title) ? null : title || null;
+}
+
 function mergeLiveCatalog(
   liveCatalog: SeriesCatalog[],
-  enrichedCatalog: SeriesCatalog[] | null,
   previousCatalog: SeriesCatalog[] | null,
 ) {
-  const enrichedById = new Map((enrichedCatalog ?? []).map((item) => [item.id, fixMangaBakaLink(item)]));
   const previousById = indexCatalog(previousCatalog);
-  const liveIds = new Set<number>();
-  const merged = liveCatalog.map((live) => {
-    liveIds.add(live.id);
-    const enriched = enrichedById.get(live.id);
+  return liveCatalog.map((live) => {
     const previous = previousById.get(live.id);
     const fixedLive = fixMangaBakaLink(live);
-    if (!enriched) return fixedLive;
-    const livePublished = fixedLive.published;
-    return fixMangaBakaLink({
-      ...enriched,
+    return {
       ...fixedLive,
-      stats: fixedLive.stats ?? enriched.stats,
-      analytics: fixedLive.analytics ?? enriched.analytics,
-      source: fixedLive.source ?? enriched.source,
-      published: livePublished?.start_date || livePublished?.end_date ? livePublished : enriched.published,
-      last_updated_at: fixedLive.last_updated_at ?? enriched.last_updated_at,
-      anilist_first_seen_at: fixedLive.anilist_first_seen_at ?? enriched.anilist_first_seen_at ?? previous?.anilist_first_seen_at ?? null,
-      display_title: resolveDisplayTitle(enriched, fixedLive),
-      animeplanet_title: fixedLive.animeplanet_title ?? enriched.animeplanet_title,
-      mangabaka_title: fixedLive.mangabaka_title ?? enriched.mangabaka_title,
-      native_title: fixedLive.native_title ?? enriched.native_title,
-      romanized_title: fixedLive.romanized_title ?? enriched.romanized_title,
-      authors: fixedLive.authors?.length ? fixedLive.authors : enriched.authors,
-      artists: fixedLive.artists?.length ? fixedLive.artists : enriched.artists,
-      links: { ...(enriched.links ?? {}), ...(fixedLive.links ?? {}) },
-    });
+      animeplanet_title: deriveAnimePlanetTitle(fixedLive),
+      anilist_first_seen_at: fixedLive.anilist_first_seen_at ?? previous?.anilist_first_seen_at ?? null,
+    };
   });
-  for (const enriched of enrichedById.values()) {
-    if (!liveIds.has(enriched.id)) merged.push(enriched);
-  }
-  return merged;
 }
 
 export async function resolveDataSource(preferred?: string) {
@@ -216,13 +201,12 @@ export async function syncFrontendData(
     chunkedData?.catalog ??
     await fetchJsonValidated(source, "series/all.json", parseCatalogList, true);
 
-  onProgress?.("Merging query-ready fields");
+  onProgress?.("Preparing search fields");
 
-  const localCatalog = parseCatalogList(await fetchLocalJson<unknown>("data/query-index.json.gz"));
   const cachedCatalog = parseCatalogList(await db.catalog.toArray());
   const cachedIndex = indexCatalog(cachedCatalog);
 
-  const mergedCatalog = mergeLiveCatalog(liveCatalog, localCatalog, cachedCatalog);
+  const mergedCatalog = mergeLiveCatalog(liveCatalog, cachedCatalog);
 
   onProgress?.("Downloading tags");
 
@@ -306,12 +290,6 @@ export async function loadCachedData() {
     history,
     recommendationFeatures: [],
   };
-}
-
-export async function loadBundledCatalog() {
-  const catalog = parseCatalogList(await fetchLocalJson<unknown>("data/query-index.json.gz"));
-  if (!catalog?.length) return [];
-  return normalizeCatalog(catalog, {}).catalog;
 }
 
 function hasDetailDescription(detail: SeriesDetail | null | undefined) {

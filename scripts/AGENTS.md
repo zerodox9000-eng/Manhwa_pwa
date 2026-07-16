@@ -15,6 +15,7 @@ Owns frontend maintenance and generation scripts.
 
 - Prefer deterministic scripts with clear input/output paths.
 - `generate-icons.mjs` owns the platform icon outputs and uses `assets/aeon-icon-master.png` as the single visual source.
+- `generate-wiki-fan-rank-assets.mjs` reads the current sibling backend frontend-data manifest and every catalog chunk, plus `manhwa_db/db/exports/frontend/meta/tags.json.gz`. It writes chart data and SVGs to `%TEMP%/aeon-wiki-assets` by default, or a supplied `--output-dir` such as a temporary Wiki clone. It validates the manifest record count before writing and uses the tag hierarchy to keep sensitive-tagged titles out of safe-normal examples.
 - Keep destructive behavior opt-in and documented.
 
 ## Verification
