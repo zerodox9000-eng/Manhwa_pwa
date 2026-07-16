@@ -1574,6 +1574,27 @@ select {
   overflow-wrap: anywhere;
 }
 
+.detail-title-copy {
+  all: unset;
+  display: inline;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  overflow-wrap: anywhere;
+  cursor: copy;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.detail-title-copy:active {
+  opacity: 0.76;
+}
+
+.detail-title-copy:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .detail-creators,
 .detail-facts {
   margin: 7px 0;

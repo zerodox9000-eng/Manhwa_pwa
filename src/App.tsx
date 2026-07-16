@@ -3674,6 +3674,7 @@ function SearchPage() {
     });
   }, []);
   const rememberOpenedTitleFromClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
+    if (event.defaultPrevented) return;
     const card = (event.target as HTMLElement).closest<HTMLElement>("[data-series-id]");
     const id = Number(card?.dataset.seriesId);
     if (Number.isSafeInteger(id) && id > 0) rememberOpenedTitle(id);
@@ -3687,10 +3688,17 @@ function SearchPage() {
           <div className="search-input-wrap">
             <input
               className="input"
+              type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Titles, aliases, creators"
+              name="aeon-global-title-search"
               autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              inputMode="search"
+              enterKeyHint="search"
             />
             {query && (
               <button className="input-clear" type="button" onClick={() => setQuery("")} aria-label="Clear search">
@@ -3701,7 +3709,7 @@ function SearchPage() {
         </form>
       </div>
       {query.trim() ? (
-        <section className="search-results-surface" onClickCapture={rememberOpenedTitleFromClick}>
+        <section className="search-results-surface" onClick={rememberOpenedTitleFromClick}>
           <MemoSearchTitleCollection
             items={results}
             feed={searchFeed}
@@ -3721,7 +3729,7 @@ function SearchPage() {
             )}
           </div>
           {recentItems.length > 0 ? (
-            <div onClickCapture={rememberOpenedTitleFromClick}>
+            <div onClick={rememberOpenedTitleFromClick}>
               <MemoSearchTitleCollection
                 items={recentItems}
                 feed={recentFeed}
@@ -4231,6 +4239,7 @@ function TitleDetailPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("Loading detail");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [titleCopyStatus, setTitleCopyStatus] = useState("");
   const detailLayoutKey = `manhwa-detail-layout:${store.activeFeedId ?? "default"}`;
   const [visible, setVisible] = useState(() => {
     try {
@@ -4311,6 +4320,18 @@ function TitleDetailPage() {
       : { ...detail, display_title: localTitle };
   }, [catalogItem, detail, id]);
 
+  useEffect(() => {
+    if (!titleCopyStatus) return;
+    const timer = window.setTimeout(() => setTitleCopyStatus(""), 1800);
+    return () => window.clearTimeout(timer);
+  }, [titleCopyStatus]);
+
+  const copyDisplayedTitle = useCallback(async () => {
+    if (!series?.display_title) return;
+    const copied = await copyTextToClipboard(series.display_title);
+    if (!copied) setTitleCopyStatus("Could not copy title");
+  }, [series?.display_title]);
+
   const loadingDetail = !invalidRoute && (loading || Boolean(detail && detail.id !== id));
   const showError = invalidRoute || (!loading && !detail && status && status !== "Loading detail");
 
@@ -4337,7 +4358,19 @@ function TitleDetailPage() {
               </div>
             )}
             <div className="detail-copy">
-              {visible.title && <h1 className="detail-title">{series.display_title}</h1>}
+              {visible.title && (
+                <h1 className="detail-title">
+                  <button
+                    className="detail-title-copy"
+                    type="button"
+                    onClick={() => void copyDisplayedTitle()}
+                    aria-label={`Copy title: ${series.display_title}`}
+                    title="Copy title"
+                  >
+                    {series.display_title}
+                  </button>
+                </h1>
+              )}
               {visible.authorsArtists && (
                 <p className="detail-creators">{uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable"}</p>
               )}
@@ -4412,6 +4445,7 @@ function TitleDetailPage() {
       <BottomDrawer title="Detail Settings" open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DetailSettingsDrawer visible={visible} onChange={setVisible} />
       </BottomDrawer>
+      {titleCopyStatus ? <div className="selection-result-toast" role="status">{titleCopyStatus}</div> : null}
     </div>
   );
 }
@@ -4655,6 +4689,11 @@ function LearnPage() {
           <a href="https://www.reddit.com/u/ZERO_DOX/" target="_blank" rel="noreferrer">ZERO_DOX</a>.
         </LearnItem>
       </div>
+      <p className="muted learn-guide-link">
+        <a href="https://github.com/zerodox9000-eng/Manhwa_pwa/wiki" target="_blank" rel="noreferrer">
+          Open the full user guide
+        </a>
+      </p>
     </div>
   );
 }
