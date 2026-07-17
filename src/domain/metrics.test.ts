@@ -70,20 +70,20 @@ describe("metrics", () => {
     expect(formatMetricValue(filteredOut, "underratedScore")).toBe("n/a");
   });
 
-  it("does not use untrusted first-seen or last-updated as release fallback when no start date exists", () => {
-    const untrusted: SeriesCatalog = {
+  it("does not use first-seen or last-updated as a release fallback when no start date exists", () => {
+    const missingReleaseDate: SeriesCatalog = {
       ...series,
       id: 3,
       year: 2026,
       first_seen_at: "2026-06-07T04:00:00.000Z",
-      first_seen_at_is_trusted: false,
+      first_seen_at_is_trusted: true,
       last_updated_at: "2026-06-08T04:00:00.000Z",
       published: {
         start_date: null,
         end_date: null,
       },
     };
-    expect(metricValue(untrusted, "releaseDate")).toBe(-Infinity);
-    expect(formatMetricValue(untrusted, "releaseDate")).toBe("n/a");
+    expect(metricValue(missingReleaseDate, "releaseDate")).toBe(-Infinity);
+    expect(formatMetricValue(missingReleaseDate, "releaseDate")).toBe("n/a");
   });
 });

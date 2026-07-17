@@ -366,10 +366,13 @@ export function normalizeCatalog(
       (hasAniListNow && !hadAniListBefore ? datePart(syncTimestamp) : null) ??
       (hasAniListNow ? firstSeen : null);
     const published = { ...(merged.published ?? {}) };
+    // A supplied estimated date is still the title's release placement.
+    // Discovery/update timestamps are catalogue metadata, never release-date fallbacks.
+    const hasStartDate = Boolean(published.start_date);
     const hasActualStartDate = Boolean(published.start_date && !published.start_date_is_estimated);
-    if (!hasActualStartDate) {
-      published.start_date = firstSeen ?? lastUpdatedDate ?? null;
-      published.start_date_is_estimated = Boolean(firstSeen);
+    if (!hasStartDate) {
+      published.start_date = null;
+      published.start_date_is_estimated = false;
     }
     if (published.end_date_is_estimated) {
       published.end_date = null;

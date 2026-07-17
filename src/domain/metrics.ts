@@ -54,15 +54,9 @@ function closestHistory(entries: HistoryMap[string], targetDate: string, directi
   return direction === "before" ? filtered.at(-1) : filtered[0];
 }
 
-function datePart(value?: string | null) {
-  return value?.slice(0, 10) ?? null;
-}
-
 export function effectiveReleaseDate(series: SeriesCatalog) {
   const published = series.published;
-  const actualOrEstimated = published?.start_date ?? null;
-  const trustedFirstSeen = series.first_seen_at_is_trusted ? datePart(series.first_seen_at) : null;
-  const date = actualOrEstimated ?? trustedFirstSeen ?? null;
+  const date = published?.start_date ?? null;
   return date && !isFutureDate(date) ? date : null;
 }
 

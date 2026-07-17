@@ -16,6 +16,7 @@ Owns the frontend application source: React routes, UI, domain rules, data loadi
 - Read the root AGENTS.md first.
 - Keep frontend data consumption compatible with `manhwa_db/db/exports/frontend`.
 - Do not make the frontend read backend raw, processed, enrichment, cache, or state files.
+- Release-date sorting and date-window filters use only `published.start_date`. Estimated start dates remain in their estimated chronological position; titles without a start date are excluded, and discovery/update timestamps are never substituted.
 - Do not add a blanket no-recognized-tag exclusion unless the user explicitly asks; backend/API tag coverage can differ from the MangaBaka site.
 - Installed PWA users may already have IndexedDB state; migrations must be backward-compatible and recoverable.
 - The default PWA identity is `Aeon`; preserve an intentionally customized app name in saved user settings.

@@ -306,7 +306,7 @@ describe("runFeedQuery", () => {
     expect(result.items.map((item) => item.id)).toEqual([3, 2, 1]);
   });
 
-  it("uses id fallback instead of last-updated or alphabetical order when release dates are missing", () => {
+  it("omits titles with no release date when sorting by release", () => {
     const feed = createFeed("missing non anilist values");
     feed.filters.sourceMode = "non-anilist";
     feed.filters.sourceModes = ["non-anilist"];
@@ -325,7 +325,29 @@ describe("runFeedQuery", () => {
       metaHistoryFirst: null,
       metaHistoryLast: null,
     });
-    expect(result.items.map((item) => item.id)).toEqual([600, 500]);
+    expect(result.items).toEqual([]);
+  });
+
+  it("keeps estimated release dates in their own chronological position", () => {
+    const feed = createFeed("release chronology");
+    feed.filters.sourceMode = "mixed";
+    feed.filters.sourceModes = ["anilist", "non-anilist"];
+    feed.sort = [{ id: "release", metric: "releaseDate", direction: "desc" }];
+    const result = runFeedQuery({
+      feed,
+      series: [
+        { ...baseSeries[0], id: 700, display_title: "Confirmed 2026", published: { start_date: "2026-06-05", end_date: null, start_date_is_estimated: false } },
+        { ...baseSeries[0], id: 701, display_title: "Estimated 2025", published: { start_date: "2025-01-01", end_date: null, start_date_is_estimated: true }, first_seen_at: "2026-06-10T00:00:00.000Z", first_seen_at_is_trusted: true },
+        { ...baseSeries[0], id: 702, display_title: "Estimated 2014", published: { start_date: "2014-01-01", end_date: null, start_date_is_estimated: true }, first_seen_at: "2026-06-10T00:00:00.000Z", first_seen_at_is_trusted: true },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+      metaHistoryFirst: "2024-05-01",
+      metaHistoryLast: "2024-05-10",
+    });
+    expect(result.items.map((item) => item.id)).toEqual([700, 701, 702]);
   });
 
   it("can exclude estimated release dates while keeping real dates", () => {
@@ -523,7 +545,7 @@ describe("runFeedQuery", () => {
       metaHistoryFirst: "2024-05-01",
       metaHistoryLast: "2024-05-10",
     });
-    expect(result.items.map((item) => item.id)).toEqual([42, 41]);
+    expect(result.items.map((item) => item.id)).toEqual([42]);
 
     feed.filters.dateField = "release";
     feed.filters.rolling = { mode: "fixed", amount: 1, unit: "days", from: "2998-01-01", to: "2999-12-31" };

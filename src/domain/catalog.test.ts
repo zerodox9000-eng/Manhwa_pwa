@@ -49,24 +49,30 @@ describe("catalog normalization", () => {
     expect(normalized.history[String(normalized.catalog[0].id)]).toHaveLength(2);
   });
 
-  it("uses first database history date for estimated releases", () => {
+  it("keeps an estimated release date instead of using the first history date", () => {
     const normalized = normalizeCatalog([base], history);
-    expect(normalized.catalog[0].published?.start_date).toBe("2026-05-20");
+    expect(normalized.catalog[0].published?.start_date).toBe("2020-01-01");
     expect(normalized.catalog[0].year).toBeNull();
   });
 
-  it("does not turn the global history start into every old title release date", () => {
+  it("does not replace an old estimated release with a history timestamp", () => {
     const oldHistory: HistoryMap = {
       "1": [
         { d: "2026-05-15", p: 70, f: 7, s: 70, r: 10, rp: 40, pp: 20, ds: 30, dp: 45 },
       ],
     };
     const normalized = normalizeCatalog([base], oldHistory);
-    expect(normalized.catalog[0].published?.start_date).toBeNull();
+    expect(normalized.catalog[0].published?.start_date).toBe("2020-01-01");
   });
 
-  it("drops estimated release dates when no first-seen date exists", () => {
+  it("keeps an estimated release date when first-seen data is absent", () => {
     const normalized = normalizeCatalog([{ ...base, id: 5 }], {});
+    expect(normalized.catalog[0].published?.start_date).toBe("2020-01-01");
+    expect(normalized.catalog[0].year).toBeNull();
+  });
+
+  it("leaves release date empty when no published start date exists", () => {
+    const normalized = normalizeCatalog([{ ...base, id: 55, published: { start_date: null } }], {});
     expect(normalized.catalog[0].published?.start_date).toBeNull();
     expect(normalized.catalog[0].year).toBeNull();
   });
@@ -82,7 +88,7 @@ describe("catalog normalization", () => {
     expect(normalized.catalog[0].year).toBe(2021);
   });
 
-  it("does not overwrite catalog year with estimated first-seen release date", () => {
+  it("preserves an estimated release date instead of replacing it with first seen", () => {
     const estimated = {
       ...base,
       id: 66,
@@ -91,7 +97,7 @@ describe("catalog normalization", () => {
       published: { start_date: "2026-01-01", end_date: null, start_date_is_estimated: true },
     };
     const normalized = normalizeCatalog([estimated], {});
-    expect(normalized.catalog[0].published?.start_date).toBe("2026-06-10");
+    expect(normalized.catalog[0].published?.start_date).toBe("2026-01-01");
     expect(normalized.catalog[0].year).toBe(2024);
   });
 

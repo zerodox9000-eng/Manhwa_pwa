@@ -296,6 +296,7 @@ export function runFeedQuery(args: {
   const window = resolveRollingWindow(filters.rolling, metaHistoryLast);
   const growthWindow = window ?? resolveRollingWindow({ mode: "last", amount: 1, unit: "days" }, metaHistoryLast);
   const usesHistorySort = feed.sort.some((rule) => rule.metric.includes("Growth") || rule.metric.includes("Delta"));
+  const usesReleaseDateSort = feed.sort.some((rule) => rule.metric === "releaseDate");
   if (window && usesHistorySort) {
     activeNotes.push(`Growth window: ${window.from} to ${window.to}.`);
     if (Object.keys(history).length === 0) activeNotes.push("Growth sorting will update after history sync finishes.");
@@ -318,6 +319,7 @@ export function runFeedQuery(args: {
 
     if (filters.statuses.length > 0 && (!item.status || !filters.statuses.includes(item.status))) return false;
     if (filters.includeEstimatedDates === false && !displayReleaseDate(item)) return false;
+    if (usesReleaseDateSort && !effectiveReleaseDate(item)) return false;
 
     if (filters.minYear != null && (item.year == null || item.year < filters.minYear)) return false;
     if (filters.maxYear != null && (item.year == null || item.year > filters.maxYear)) return false;
