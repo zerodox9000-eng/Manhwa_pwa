@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveAnimePlanetTitle, detailSourceCandidates } from "./dataService";
+import { CATALOG_NORMALIZATION_VERSION, deriveAnimePlanetTitle, detailSourceCandidates, needsCatalogNormalizationRepair } from "./dataService";
 
 describe("detailSourceCandidates", () => {
   it("keeps the preferred detail source first and falls back to configured sources", () => {
@@ -13,6 +13,14 @@ describe("detailSourceCandidates", () => {
     const sources = detailSourceCandidates("https://raw.githubusercontent.com/zerodox9000-eng/manhwa_db/main/db/exports/frontend");
 
     expect(sources.filter((source) => source.includes("raw.githubusercontent.com"))).toHaveLength(1);
+  });
+});
+
+describe("catalog normalization repair", () => {
+  it("repairs only caches from before the current normalization rule", () => {
+    expect(needsCatalogNormalizationRepair(null)).toBe(true);
+    expect(needsCatalogNormalizationRepair({ catalogNormalizationVersion: CATALOG_NORMALIZATION_VERSION - 1 })).toBe(true);
+    expect(needsCatalogNormalizationRepair({ catalogNormalizationVersion: CATALOG_NORMALIZATION_VERSION })).toBe(false);
   });
 });
 

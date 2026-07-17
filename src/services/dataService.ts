@@ -5,6 +5,13 @@ import type { RecommendationFeature, SeriesCatalog, SeriesDetail, SyncMeta } fro
 import { parseCatalogList, parseDetail, parseHistory, parseTags } from "../domain/validation";
 import { decodeJsonBytes, fetchChunkedFrontendData, parseFrontendDataManifest } from "./chunkedData";
 
+// Bump only when stored catalogue records need a one-time repair after a frontend rule change.
+export const CATALOG_NORMALIZATION_VERSION = 2;
+
+export function needsCatalogNormalizationRepair(meta: Pick<SyncMeta, "catalogNormalizationVersion"> | null | undefined) {
+  return meta?.catalogNormalizationVersion !== CATALOG_NORMALIZATION_VERSION;
+}
+
 async function fetchJson<T>(base: string, path: string, preferGzip = true): Promise<T> {
   const targets = preferGzip ? [`${path}.gz`, path] : [path];
   let lastError: unknown;
@@ -267,6 +274,7 @@ export async function syncFrontendData(
     versionHash: chunkedData
       ? `chunked-${chunkedData.buildId}`
       : `live-merged-${catalog.length}-${historyDates.at(-1) ?? "no-history"}`,
+    catalogNormalizationVersion: CATALOG_NORMALIZATION_VERSION,
     source,
   };
 

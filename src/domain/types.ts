@@ -346,6 +346,7 @@ export interface SyncMeta {
   historyFirstDate: string | null;
   historyLastDate: string | null;
   versionHash: string | null;
+  catalogNormalizationVersion?: number;
   fileSizes?: Record<string, number>;
   source: string;
 }

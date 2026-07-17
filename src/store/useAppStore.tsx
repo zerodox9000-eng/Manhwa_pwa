@@ -23,7 +23,7 @@ import type {
   UserLabel,
 } from "../domain/types";
 import { db, loadSyncMeta } from "../db/appDb";
-import { checkFrontendDataVersion, loadCachedData, syncFrontendData } from "../services/dataService";
+import { checkFrontendDataVersion, loadCachedData, needsCatalogNormalizationRepair, syncFrontendData } from "../services/dataService";
 
 const STORAGE_KEY = "manhwa-library-state-v1";
 const THREE_COLUMN_FEEDS_MIGRATION_KEY = "manhwa-three-column-feeds-v1";
@@ -534,7 +534,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       ]);
       const hasQueryDates = cachedCatalog.some((item) => item.published?.start_date || item.published?.end_date);
       const online = typeof navigator === "undefined" || navigator.onLine;
-      const hasUsableCache = cachedCatalog.length > 0 && hasQueryDates && Boolean(meta?.versionHash);
+      const needsCatalogRepair = needsCatalogNormalizationRepair(meta);
+      const hasUsableCache = cachedCatalog.length > 0 && hasQueryDates && Boolean(meta?.versionHash) && !needsCatalogRepair;
       let remote: Awaited<ReturnType<typeof checkFrontendDataVersion>> | null = null;
 
       if (online) {
@@ -608,7 +609,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           ]);
           const currentVersion = latestMeta?.versionHash ?? syncMeta?.versionHash;
           const hasCachedCatalog = catalog.length > 0 || Number(latestMeta?.totalSeries ?? 0) > 0;
-          if (remote.versionHash && currentVersion === remote.versionHash && hasCachedCatalog) {
+          const needsCatalogRepair = needsCatalogNormalizationRepair(latestMeta);
+          if (remote.versionHash && currentVersion === remote.versionHash && hasCachedCatalog && !needsCatalogRepair) {
             if (latestMeta && latestMeta.versionHash !== syncMeta?.versionHash) setSyncMeta(latestMeta);
             setSyncStatus("Library already current");
             return;
