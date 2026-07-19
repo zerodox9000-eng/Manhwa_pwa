@@ -118,7 +118,7 @@ describe("catalog normalization", () => {
     expect(normalized.catalog[0].anilist_first_seen_at).toBe("2026-06-19");
   });
 
-  it("derives a usable title from source slugs when the backend title is a placeholder", () => {
+  it("does not derive a display title from a source slug", () => {
     const normalized = normalizeCatalog([
       {
         ...base,
@@ -131,7 +131,7 @@ describe("catalog normalization", () => {
         },
       },
     ], {});
-    expect(normalized.catalog[0].display_title).toBe("The Demonic Warrior");
+    expect(normalized.catalog[0].display_title).toBe("Unknown Title");
   });
 
   it("keeps the bundled English title ahead of a raw MangaBaka romanized detail title", () => {
@@ -161,7 +161,7 @@ describe("catalog normalization", () => {
     expect(resolveDisplayTitle(detail, catalogItem)).toBe("Why She Helps the Villain");
   });
 
-  it("uses MangaBaka primary English title entries before romanized raw titles", () => {
+  it("keeps the backend-selected title when no audited override is present", () => {
     const detail = {
       ...base,
       id: 9,
@@ -173,7 +173,7 @@ describe("catalog normalization", () => {
       ],
     } as SeriesCatalog;
 
-    expect(resolveDisplayTitle(detail)).toBe("I Became a Married Man in Another World");
+    expect(resolveDisplayTitle(detail)).toBe("Isegyeseo Yubunamdoen Sseol");
   });
 
   it("keeps MangaBaka display titles ahead of external source slugs", () => {
@@ -200,7 +200,7 @@ describe("catalog normalization", () => {
     expect(resolveDisplayTitle(detail)).toBe("Her Game of Go");
   });
 
-  it("uses source slugs only when MangaBaka title fields are missing or placeholders", () => {
+  it("keeps an unknown display title when MangaBaka has no title fields", () => {
     const detail = {
       ...base,
       id: 11,
@@ -217,10 +217,10 @@ describe("catalog normalization", () => {
       },
     } as SeriesCatalog;
 
-    expect(resolveDisplayTitle(detail)).toBe("I Became a Married Man in Another World");
+    expect(resolveDisplayTitle(detail)).toBe("Unknown Title");
   });
 
-  it("prefers the Anime-Planet title when it exists", () => {
+  it("ignores a legacy Anime-Planet title when it exists", () => {
     const detail = {
       ...base,
       id: 13,
@@ -229,7 +229,7 @@ describe("catalog normalization", () => {
       animeplanet_title: "Anime-Planet English Title",
     } as SeriesCatalog;
 
-    expect(resolveVisibleTitle(detail)).toBe("Anime-Planet English Title");
+    expect(resolveVisibleTitle(detail)).toBe("Her Game of Go");
   });
 
   it("falls back to romanized titles when no English or display title exists", () => {

@@ -6,7 +6,7 @@ import { parseCatalogList, parseDetail, parseHistory, parseTags } from "../domai
 import { decodeJsonBytes, fetchChunkedFrontendData, parseFrontendDataManifest } from "./chunkedData";
 
 // Bump only when stored catalogue records need a one-time repair after a frontend rule change.
-export const CATALOG_NORMALIZATION_VERSION = 2;
+export const CATALOG_NORMALIZATION_VERSION = 3;
 
 export function needsCatalogNormalizationRepair(meta: Pick<SyncMeta, "catalogNormalizationVersion"> | null | undefined) {
   return meta?.catalogNormalizationVersion !== CATALOG_NORMALIZATION_VERSION;
@@ -60,34 +60,6 @@ function indexCatalog(catalog: SeriesCatalog[] | null | undefined) {
   return index;
 }
 
-function titleCaseAnimePlanetSlug(value: string) {
-  const minorWords = new Set(["a", "an", "and", "as", "at", "but", "by", "for", "from", "in", "into", "nor", "of", "on", "or", "per", "the", "to", "vs", "via", "with"]);
-  const words = decodeURIComponent(value)
-    .replace(/\.[a-z0-9]+$/i, "")
-    .replace(/[-_]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .filter(Boolean);
-
-  return words
-    .map((word, index) => {
-      const lower = word.toLowerCase();
-      if (index > 0 && minorWords.has(lower)) return lower;
-      return lower.replace(/^\p{L}/u, (letter) => letter.toUpperCase());
-    })
-    .join(" ");
-}
-
-export function deriveAnimePlanetTitle(item: SeriesCatalog) {
-  if (item.animeplanet_title?.trim()) return item.animeplanet_title;
-  const source = item.source?.animeplanet;
-  const slug = source?.id || source?.url?.split("/").filter(Boolean).at(-1);
-  if (!slug) return null;
-  const title = titleCaseAnimePlanetSlug(slug);
-  return /^(unknown title|untitled|no title|n\/a|-)?$/i.test(title) ? null : title || null;
-}
-
 function mergeLiveCatalog(
   liveCatalog: SeriesCatalog[],
   previousCatalog: SeriesCatalog[] | null,
@@ -96,9 +68,10 @@ function mergeLiveCatalog(
   return liveCatalog.map((live) => {
     const previous = previousById.get(live.id);
     const fixedLive = fixMangaBakaLink(live);
+    const catalog = { ...fixedLive };
+    delete catalog.animeplanet_title;
     return {
-      ...fixedLive,
-      animeplanet_title: deriveAnimePlanetTitle(fixedLive),
+      ...catalog,
       anilist_first_seen_at: fixedLive.anilist_first_seen_at ?? previous?.anilist_first_seen_at ?? null,
     };
   });
@@ -343,11 +316,18 @@ export async function fetchSeriesDetail(source: string, id: number) {
     if (!hasDetailDescription(cached)) {
       return fetchFreshSeriesDetail(source, id, 3, true);
     }
+    // Catalogues are refreshed before details. Keep a cached detail's title aligned
+    // with the catalogue instead of letting an old detail response win indefinitely.
+    const catalogRecord = await db.catalog.get(id);
+    const detail = catalogRecord?.display_title && cached.display_title !== catalogRecord.display_title
+      ? { ...cached, display_title: catalogRecord.display_title }
+      : cached;
+    if (detail !== cached) await db.details.put(detail);
     void fetchFreshSeriesDetail(source, id, 1)
       .catch(() => {
         // Cached detail keeps route changes instant; refresh failures can wait for the next sync.
       });
-    return cached;
+    return detail;
   }
   return fetchFreshSeriesDetail(source, id, 3, true);
 }

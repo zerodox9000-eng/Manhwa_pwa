@@ -6,36 +6,6 @@ function cleanText(value?: string | null) {
   return (value ?? "").trim();
 }
 
-function titleCaseSlug(value: string) {
-  const minorWords = new Set(["a", "an", "and", "as", "at", "but", "by", "for", "from", "in", "into", "nor", "of", "on", "or", "per", "the", "to", "vs", "via", "with"]);
-  const words = decodeURIComponent(value)
-    .replace(/\.[a-z0-9]+$/i, "")
-    .replace(/[-_]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .filter(Boolean);
-
-  return words
-    .map((word, index) => {
-      const lower = word.toLocaleLowerCase();
-      if (index > 0 && minorWords.has(lower)) return lower;
-      return lower.replace(/^\p{L}/u, (letter) => letter.toLocaleUpperCase());
-    })
-    .join(" ");
-}
-
-function lastUrlSegment(value?: string | null) {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    const parts = url.pathname.split("/").filter(Boolean);
-    return parts.at(-1) ?? null;
-  } catch {
-    return null;
-  }
-}
-
 function candidateStrings(values: unknown[]) {
   return values
     .flatMap((candidate) => {
@@ -45,17 +15,6 @@ function candidateStrings(values: unknown[]) {
     })
     .map(cleanText)
     .filter((candidate) => candidate && !PLACEHOLDER_TITLE.test(candidate));
-}
-
-function sourceTitleCandidates(item: SeriesCatalog) {
-  const candidates: string[] = [];
-  const animePlanetSlug = item.source?.animeplanet?.id ?? lastUrlSegment(item.source?.animeplanet?.url);
-  if (animePlanetSlug) candidates.push(titleCaseSlug(animePlanetSlug));
-
-  const readSlug = lastUrlSegment(item.links?.read_en);
-  if (readSlug && !/^(info|list|detail|series)$/i.test(readSlug)) candidates.push(titleCaseSlug(readSlug));
-
-  return candidates;
 }
 
 function titleEntryGroups(item: SeriesCatalog) {
@@ -82,54 +41,10 @@ function titleEntryGroups(item: SeriesCatalog) {
 function preferredTitleCandidates(item: SeriesCatalog) {
   const raw = item as SeriesCatalog & Record<string, unknown>;
   const titleGroups = titleEntryGroups(item);
-  const animePlanet = candidateStrings([
-    item.animeplanet_title,
-    raw.animeplanet_title,
-    raw.animePlanetTitle,
-    raw.animeplanetTitle,
-  ]);
-  const explicitEnglish = candidateStrings([
-    raw.english_title,
-    raw.title_english,
-    raw.englishTitle,
-    raw.titleEnglish,
-    raw.nameEnglish,
-  ]);
   const displayTitle = cleanText(item.display_title);
-  const bestEnglishTitle = firstCandidate([
-    titleGroups.primaryOfficial,
-    titleGroups.primary,
-    titleGroups.official,
-    titleGroups.anyEnglish,
-  ]);
-  const rawTitles = new Set(
-    candidateStrings([
-      item.mangabaka_title,
-      raw.mangabakaTitle,
-      raw.series_title,
-      raw.original_title,
-      raw.title,
-      raw.name,
-      item.native_title,
-      item.romanized_title,
-    ]).map((title) => title.toLocaleLowerCase()),
-  );
-  const displayIsRawAlias = rawTitles.has(displayTitle.toLocaleLowerCase());
-  const betterEnglishTitleExists = Boolean(
-    bestEnglishTitle &&
-      displayTitle &&
-      bestEnglishTitle.toLocaleLowerCase() !== displayTitle.toLocaleLowerCase(),
-  );
 
   return {
-    animeplanet: animePlanet,
-    display:
-      displayTitle &&
-      !PLACEHOLDER_TITLE.test(displayTitle) &&
-      !(displayIsRawAlias && betterEnglishTitleExists)
-        ? [displayTitle]
-        : [],
-    explicitEnglish,
+    display: displayTitle && !PLACEHOLDER_TITLE.test(displayTitle) ? [displayTitle] : [],
     englishPrimaryOfficial: titleGroups.primaryOfficial,
     englishPrimary: titleGroups.primary,
     englishOfficial: titleGroups.official,
@@ -144,7 +59,6 @@ function preferredTitleCandidates(item: SeriesCatalog) {
     })(),
     native: candidateStrings([item.native_title]),
     romanized: candidateStrings([item.romanized_title]),
-    sources: sourceTitleCandidates(item),
   };
 }
 
@@ -166,9 +80,7 @@ export function resolveDisplayTitle(item: SeriesCatalog, fallback?: SeriesCatalo
   const records = fallback ? [fallback, item] : [item];
   const tiers = records.map(preferredTitleCandidates);
   const title = firstCandidate([
-    tiers.flatMap((tier) => tier.animeplanet),
     tiers.flatMap((tier) => tier.display),
-    tiers.flatMap((tier) => tier.explicitEnglish),
     tiers.flatMap((tier) => tier.englishPrimaryOfficial),
     tiers.flatMap((tier) => tier.englishPrimary),
     tiers.flatMap((tier) => tier.englishOfficial),
@@ -177,7 +89,6 @@ export function resolveDisplayTitle(item: SeriesCatalog, fallback?: SeriesCatalo
     tiers.flatMap((tier) => tier.aliases),
     tiers.flatMap((tier) => tier.native),
     tiers.flatMap((tier) => tier.romanized),
-    tiers.flatMap((tier) => tier.sources),
     [cleanText(item.display_title)],
   ]);
   return title || "Unknown Title";
@@ -243,7 +154,6 @@ function mergeRecord(left: SeriesCatalog, right: SeriesCatalog) {
       ...(left.merged_ids ?? []),
       ...(right.merged_ids ?? []),
     ]),
-    animeplanet_title: preferred.animeplanet_title ?? secondary.animeplanet_title ?? null,
     mangabaka_title: preferred.mangabaka_title ?? secondary.mangabaka_title ?? null,
     native_title: preferred.native_title ?? secondary.native_title ?? null,
     romanized_title: preferred.romanized_title ?? secondary.romanized_title ?? null,
@@ -382,7 +292,6 @@ export function normalizeCatalog(
       ...merged,
       merged_ids: ids,
       display_title: resolveDisplayTitle(merged),
-      animeplanet_title: merged.animeplanet_title ?? null,
       first_seen_at: firstSeen,
       anilist_first_seen_at: anilistFirstSeen,
       published,

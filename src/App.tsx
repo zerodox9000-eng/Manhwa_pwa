@@ -1372,7 +1372,6 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
     keys: [
       { name: "display_title", weight: 0.5 },
       { name: "titles.title", weight: 0.42 },
-      { name: "animeplanet_title", weight: 0.3 },
       { name: "mangabaka_title", weight: 0.24 },
       { name: "native_title", weight: 0.22 },
       { name: "romanized_title", weight: 0.22 },
@@ -3667,7 +3666,6 @@ function SearchPage() {
         keys: [
           { name: "display_title", weight: 0.5 },
           { name: "titles.title", weight: 0.42 },
-          { name: "animeplanet_title", weight: 0.3 },
           { name: "mangabaka_title", weight: 0.24 },
           { name: "native_title", weight: 0.22 },
           { name: "romanized_title", weight: 0.22 },
@@ -4369,7 +4367,10 @@ function TitleDetailPage() {
 
   const series = useMemo(() => {
     if (!detail || detail.id !== id) return null;
-    const localTitle = resolveVisibleTitle(detail, catalogItem ?? undefined);
+    // Detail responses are the current record for this route. Cached details are
+    // reconciled to the catalogue in fetchSeriesDetail, so an older catalogue
+    // fallback must not overwrite a corrected backend display title here.
+    const localTitle = resolveVisibleTitle(detail);
     return catalogItem
       ? {
           ...detail,

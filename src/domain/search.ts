@@ -3,7 +3,6 @@ import type { SeriesCatalog } from "./types";
 export function seriesSearchText(series: SeriesCatalog) {
   return [
     series.display_title,
-    series.animeplanet_title,
     series.mangabaka_title,
     series.native_title,
     series.romanized_title,
