@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createFeed } from "../domain/defaults";
 import type { FeedSegment } from "../domain/types";
-import { addNewFeedToUnsegmentedSegment, correctDefaultFeedDescriptions, MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID, normalizeFeed, normalizeFeedSegments, UNSEGMENTED_FEED_SEGMENT_ID } from "./useAppStore";
+import { addNewFeedToUnsegmentedSegment, correctDefaultFeedDescriptions, MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID, normalizeFeed, normalizeFeedSegments, removeRetiredDefaultFeeds, UNSEGMENTED_FEED_SEGMENT_ID } from "./useAppStore";
 
 const now = "2026-07-10T00:00:00.000Z";
 
@@ -104,5 +104,24 @@ describe("default feed description fixes", () => {
     expect(corrected[1].description).toContain("50% < Popularity");
     expect(corrected[2]).toBe(custom);
     expect(corrected[3].description).toContain("Ranked by Engagement");
+  });
+});
+
+describe("retired default feed migration", () => {
+  it("removes only Latest Listings and clears its segment reference", () => {
+    const latestListings = createFeed("LATEST LISTINGS");
+    latestListings.id = "089d6f0f-cd06-4e94-9d43-d80071d427fb";
+    const retainedDefault = createFeed("TRENDING");
+    retainedDefault.id = "retained-default";
+    const customFeed = createFeed("My list");
+    customFeed.id = "custom-feed";
+    customFeed.kind = "custom";
+
+    const feeds = removeRetiredDefaultFeeds([latestListings, retainedDefault, customFeed]);
+    const segments = normalizeFeedSegments(feeds, [segment("updates", [retainedDefault.id, latestListings.id]), segment(UNSEGMENTED_FEED_SEGMENT_ID, []), { ...segment(MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID, [customFeed.id]), library: "custom" }]);
+
+    expect(feeds.map((feed) => feed.id)).toEqual([retainedDefault.id, customFeed.id]);
+    expect(segments.find((item) => item.id === "updates")?.feedIds).toEqual([retainedDefault.id]);
+    expect(segments.find((item) => item.id === MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID)?.feedIds).toEqual([customFeed.id]);
   });
 });

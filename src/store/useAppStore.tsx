@@ -35,6 +35,9 @@ const CREATOR_FAVOURITES_VERSION_KEY = "manhwa-creator-favourites-version";
 const CREATOR_FAVOURITES_VERSION = "v1";
 const DEFAULT_FEED_DESCRIPTION_FIX_VERSION_KEY = "manhwa-default-feed-description-fix";
 const DEFAULT_FEED_DESCRIPTION_FIX_VERSION = "v2";
+const LATEST_LISTINGS_DEFAULT_FEED_ID = "089d6f0f-cd06-4e94-9d43-d80071d427fb";
+const LATEST_LISTINGS_REMOVAL_VERSION_KEY = "manhwa-latest-listings-removal";
+const LATEST_LISTINGS_REMOVAL_VERSION = "v1";
 const LEGACY_APP_NAME = "Manhwa Lib";
 const DEFAULT_APP_NAME = "Aeon";
 export const UNSEGMENTED_FEED_SEGMENT_ID = "unsegmented";
@@ -395,6 +398,10 @@ export function correctDefaultFeedDescriptions(feeds: Feed[]) {
   });
 }
 
+export function removeRetiredDefaultFeeds(feeds: Feed[]) {
+  return feeds.filter((feed) => feed.id !== LATEST_LISTINGS_DEFAULT_FEED_ID);
+}
+
 const BUILT_IN_DEFAULT_FEED_IDS = new Set([
   ...(defaultFeedsJson as unknown as Feed[]).map((feed) => feed.id),
   ...builtInSensitiveFeeds().map((feed) => feed.id),
@@ -443,11 +450,16 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     () => hasSavedState && localStorage.getItem(DEFAULT_FEED_DESCRIPTION_FIX_VERSION_KEY) !== DEFAULT_FEED_DESCRIPTION_FIX_VERSION,
     [hasSavedState],
   );
+  const shouldRemoveLatestListings = useMemo(
+    () => hasSavedState && localStorage.getItem(LATEST_LISTINGS_REMOVAL_VERSION_KEY) !== LATEST_LISTINGS_REMOVAL_VERSION,
+    [hasSavedState],
+  );
   const initialFeeds = useMemo(
     () => {
       if (replaceDefaultLikeSavedFeeds || !hasSavedState) return defaultFeeds();
       const savedFeeds = (local.feeds ?? []).map((feed) => normalizeFeed(feed));
-      const correctedFeeds = shouldCorrectDefaultFeedDescriptions ? correctDefaultFeedDescriptions(savedFeeds) : savedFeeds;
+      const retiredFeedsRemoved = shouldRemoveLatestListings ? removeRetiredDefaultFeeds(savedFeeds) : savedFeeds;
+      const correctedFeeds = shouldCorrectDefaultFeedDescriptions ? correctDefaultFeedDescriptions(retiredFeedsRemoved) : retiredFeedsRemoved;
       const creatorCanonicalFeeds = normalizeBuiltInCreatorFavouriteMetadata(correctedFeeds);
       const canonicalFeeds = normalizeBuiltInSensitiveNames(creatorCanonicalFeeds, local.feedSegments ?? []).feeds;
       const sensitiveMerged = shouldInstallSensitiveFeedSegments
@@ -458,7 +470,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         : sensitiveMerged;
       return creatorMerged.map((feed) => normalizeFeed(feed, { preserveMetricSlots: true, preserveFeedSettings: true }));
     },
-    [hasSavedState, local.feedSegments, local.feeds, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallCreatorFavourites, shouldInstallSensitiveFeedSegments],
+    [hasSavedState, local.feedSegments, local.feeds, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallCreatorFavourites, shouldInstallSensitiveFeedSegments, shouldRemoveLatestListings],
   );
   const shouldMigrateFeedsToThreeColumns = useMemo(
     () => localStorage.getItem(THREE_COLUMN_FEEDS_MIGRATION_KEY) !== "1",
@@ -493,7 +505,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       ? defaultSettings()
       : mergeSettings(parseSettings(local.settings) ?? local.settings),
   );
-  const [activeFeedId, setActiveFeedId] = useState<string | null>(local.activeFeedId ?? null);
+  const [activeFeedId, setActiveFeedId] = useState<string | null>(() =>
+    initialFeeds.some((feed) => feed.id === local.activeFeedId) ? local.activeFeedId ?? null : initialFeeds[0]?.id ?? null,
+  );
   const [homePreviewSegmentId, setHomePreviewSegmentId] = useState<string | null>(null);
   const [homeResetRequested, setHomeResetRequested] = useState(false);
   const [homeOpenFeedRequestId, setHomeOpenFeedRequestId] = useState<string | null>(null);
@@ -522,7 +536,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (shouldCorrectDefaultFeedDescriptions || !hasSavedState) {
       localStorage.setItem(DEFAULT_FEED_DESCRIPTION_FIX_VERSION_KEY, DEFAULT_FEED_DESCRIPTION_FIX_VERSION);
     }
-  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallCreatorFavourites, shouldInstallSensitiveFeedSegments, shouldMigrateFeedsToThreeColumns]);
+    if (shouldRemoveLatestListings || !hasSavedState) {
+      localStorage.setItem(LATEST_LISTINGS_REMOVAL_VERSION_KEY, LATEST_LISTINGS_REMOVAL_VERSION);
+    }
+  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallCreatorFavourites, shouldInstallSensitiveFeedSegments, shouldMigrateFeedsToThreeColumns, shouldRemoveLatestListings]);
 
   useEffect(() => {
     void (async () => {
