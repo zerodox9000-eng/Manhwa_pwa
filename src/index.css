@@ -1540,6 +1540,15 @@ select {
   background: rgba(10, 11, 15, 0.96);
 }
 
+.detail-add-to-list {
+  margin-right: 6px;
+}
+
+.detail-add-to-list.already-added {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 54%, rgb(255 255 255 / 0.16));
+}
+
 .detail-identity {
   display: grid;
   grid-template-columns: minmax(116px, 190px) minmax(0, 1fr);
@@ -3788,6 +3797,8 @@ textarea,
   text-align: left;
 }
 .custom-destination-row.selected { border-color: color-mix(in srgb, var(--accent) 74%, white 12%); }
+.custom-destination-row:disabled { cursor: default; opacity: 0.72; }
+.custom-destination-row.selected:disabled { opacity: 1; }
 .custom-destination-row small { color: var(--muted); }
 .selection-check { display: grid; place-items: center; color: var(--accent); }
 

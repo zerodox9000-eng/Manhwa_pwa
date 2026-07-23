@@ -836,15 +836,25 @@ function TitleSelectionDock() {
             return <section key={segment.id}>
               <h3 className="small-label">{segment.name}</h3>
               {feeds.map((feed) => {
-                const checked = destinationIds.has(feed.id);
-                return <button className={`custom-destination-row ${checked ? "selected" : ""}`} type="button" key={feed.id} onClick={() => setDestinationIds((current) => {
+                const alreadyAddedCount = [...selectedIds].reduce((count, titleId) => count + (feed.titleIds.includes(titleId) ? 1 : 0), 0);
+                const alreadyAddedAll = destinationAction !== "move" && selectedCount > 0 && alreadyAddedCount === selectedCount;
+                const checked = alreadyAddedAll || destinationIds.has(feed.id);
+                const full = feed.titleIds.length >= CUSTOM_FEED_TITLE_LIMIT;
+                const unavailable = destinationAction !== "move" && (alreadyAddedAll || full);
+                return <button className={`custom-destination-row ${checked ? "selected" : ""}`} type="button" key={feed.id} disabled={unavailable} onClick={() => setDestinationIds((current) => {
                   if (destinationAction === "move") return new Set([feed.id]);
                   const next = new Set(current);
                   if (next.has(feed.id)) next.delete(feed.id); else next.add(feed.id);
                   return next;
                 })}>
                   <span>{feed.name}</span>
-                  <small>{feed.titleIds.length} / {CUSTOM_FEED_TITLE_LIMIT}</small>
+                  <small>{alreadyAddedAll
+                    ? "Already added"
+                    : alreadyAddedCount > 0
+                      ? `${alreadyAddedCount} already added · ${feed.titleIds.length} / ${CUSTOM_FEED_TITLE_LIMIT}`
+                      : full
+                        ? "Full"
+                        : `${feed.titleIds.length} / ${CUSTOM_FEED_TITLE_LIMIT}`}</small>
                   <span className="selection-check">{checked ? <Check size={16} /> : null}</span>
                 </button>;
               })}
@@ -4292,6 +4302,98 @@ function ToggleRow({ label, description, value, onChange }: { label: string; des
   );
 }
 
+function DetailAddToMyListDrawer({
+  open,
+  onOpenChange,
+  titleId,
+  onStatus,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  titleId: number;
+  onStatus: (status: string) => void;
+}) {
+  const store = useAppStore();
+  const [destinationIds, setDestinationIds] = useState<Set<string>>(() => new Set());
+  const [newListName, setNewListName] = useState("");
+  const customFeeds = useMemo(() => store.feeds.filter((feed) => feed.kind === "custom"), [store.feeds]);
+  const customFeedsById = useMemo(() => new Map(customFeeds.map((feed) => [feed.id, feed])), [customFeeds]);
+  const customSegments = useMemo(() => store.feedSegments.filter((segment) => segment.library === "custom"), [store.feedSegments]);
+
+  const close = () => {
+    setDestinationIds(new Set());
+    setNewListName("");
+    onOpenChange(false);
+  };
+
+  const addToSelectedLists = () => {
+    const result = store.addTitlesToCustomFeeds([...destinationIds], [titleId]);
+    onStatus(`${result.added} added${result.duplicates ? ` · ${result.duplicates} already there` : ""}${result.full ? ` · ${result.full} skipped (full)` : ""}`);
+    close();
+  };
+
+  return (
+    <BottomDrawer title="Add to MY LIST" open={open} onOpenChange={(nextOpen) => {
+      if (nextOpen) onOpenChange(true); else close();
+    }}>
+      <div className="setting-stack custom-destination-list">
+        {customSegments.map((segment) => {
+          const feeds = segment.feedIds.flatMap((feedId) => {
+            const feed = customFeedsById.get(feedId);
+            return feed ? [feed] : [];
+          });
+          if (feeds.length === 0) return null;
+          return (
+            <section key={segment.id}>
+              <h3 className="small-label">{segment.name}</h3>
+              {feeds.map((feed) => {
+                const alreadyAdded = feed.titleIds.includes(titleId);
+                const selected = destinationIds.has(feed.id);
+                const full = feed.titleIds.length >= CUSTOM_FEED_TITLE_LIMIT;
+                return (
+                  <button
+                    className={`custom-destination-row ${alreadyAdded || selected ? "selected" : ""}`}
+                    type="button"
+                    key={feed.id}
+                    disabled={alreadyAdded || full}
+                    onClick={() => setDestinationIds((current) => {
+                      const next = new Set(current);
+                      if (next.has(feed.id)) next.delete(feed.id); else next.add(feed.id);
+                      return next;
+                    })}
+                  >
+                    <span>{feed.name}</span>
+                    <small>{alreadyAdded ? "Already added" : `${feed.titleIds.length} / ${CUSTOM_FEED_TITLE_LIMIT}`}</small>
+                    <span className="selection-check">{alreadyAdded || selected ? <Check size={16} /> : null}</span>
+                  </button>
+                );
+              })}
+            </section>
+          );
+        })}
+        <div className="field">
+          <label htmlFor="detail-new-list">Create a new list</label>
+          <div className="row">
+            <input id="detail-new-list" className="input" value={newListName} onChange={(event) => setNewListName(event.target.value)} placeholder="List name" autoComplete="off" />
+            <button className="button" type="button" disabled={!newListName.trim()} onClick={() => {
+              const feed = createCustomFeed(newListName.trim());
+              feed.titleIds = [titleId];
+              store.upsertFeed(feed);
+              onStatus(`1 added to ${feed.name}`);
+              close();
+            }}><Plus size={16} /> Create</button>
+          </div>
+        </div>
+        <div className="toolbar">
+          <button className="button" type="button" onClick={close}>Cancel</button>
+          <span className="spacer" />
+          <button className="button primary" type="button" disabled={destinationIds.size === 0} onClick={addToSelectedLists}><Check size={16} /> Add</button>
+        </div>
+      </div>
+    </BottomDrawer>
+  );
+}
+
 function TitleDetailPage() {
   const store = useAppStore();
   const navigate = useNavigate();
@@ -4303,6 +4405,8 @@ function TitleDetailPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("Loading detail");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [addToMyListOpen, setAddToMyListOpen] = useState(false);
+  const [addToMyListStatus, setAddToMyListStatus] = useState("");
   const [titleCopyStatus, setTitleCopyStatus] = useState("");
   const detailLayoutKey = `manhwa-detail-layout:${store.activeFeedId ?? "default"}`;
   const [visible, setVisible] = useState(() => {
@@ -4321,7 +4425,10 @@ function TitleDetailPage() {
     }
   });
   const tagsById = useMemo(() => new Map(store.tags.map((tag) => [tag.id, tag])), [store.tags]);
-
+  const isInMyList = useMemo(
+    () => store.feeds.some((feed) => feed.kind === "custom" && feed.titleIds.includes(id)),
+    [id, store.feeds],
+  );
   useLayoutEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [id]);
@@ -4393,6 +4500,12 @@ function TitleDetailPage() {
     return () => window.clearTimeout(timer);
   }, [titleCopyStatus]);
 
+  useEffect(() => {
+    if (!addToMyListStatus) return;
+    const timer = window.setTimeout(() => setAddToMyListStatus(""), 2600);
+    return () => window.clearTimeout(timer);
+  }, [addToMyListStatus]);
+
   const copyDisplayedTitle = useCallback(async () => {
     if (!series?.display_title) return;
     const copied = await copyTextToClipboard(series.display_title);
@@ -4410,6 +4523,16 @@ function TitleDetailPage() {
           <ArrowLeft size={22} />
         </button>
         <span className="spacer" />
+        <button
+          className={`icon-button detail-add-to-list ${isInMyList ? "already-added" : ""}`}
+          type="button"
+          disabled={invalidRoute || (!catalogItem && !series)}
+          onClick={() => setAddToMyListOpen(true)}
+          aria-label={isInMyList ? "Already in MY LIST; manage lists" : "Add to MY LIST"}
+          title={isInMyList ? "Already in MY LIST" : "Add to MY LIST"}
+        >
+          {isInMyList ? <Check size={20} /> : <Plus size={20} />}
+        </button>
         <button className="icon-button" type="button" onClick={() => setSettingsOpen(true)} aria-label="Detail settings">
           <EllipsisVertical size={20} />
         </button>
@@ -4512,7 +4635,9 @@ function TitleDetailPage() {
       <BottomDrawer title="Detail Settings" open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DetailSettingsDrawer visible={visible} onChange={setVisible} />
       </BottomDrawer>
+      <DetailAddToMyListDrawer open={addToMyListOpen} onOpenChange={setAddToMyListOpen} titleId={id} onStatus={setAddToMyListStatus} />
       {titleCopyStatus ? <div className="selection-result-toast" role="status">{titleCopyStatus}</div> : null}
+      {addToMyListStatus ? <div className="selection-result-toast" role="status">{addToMyListStatus}</div> : null}
     </div>
   );
 }
