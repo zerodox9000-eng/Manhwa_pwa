@@ -94,6 +94,7 @@
     "home",
     "feeds",
     "search",
+    "trends",
     "settings"
   ],
   "controlPlacement": "toolbar",

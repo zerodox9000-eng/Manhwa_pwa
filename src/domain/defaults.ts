@@ -142,7 +142,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     popularityGrowth: "Popularity Growth",
     favouritesGrowth: "Favourites Growth",
   },
-  bottomNavItems: ["home", "feeds", "search", "settings"],
+  bottomNavItems: ["home", "feeds", "search", "trends", "settings"],
   controlPlacement: "toolbar",
   restoreLastSession: true,
   nonAniListPlacement: "bottom",

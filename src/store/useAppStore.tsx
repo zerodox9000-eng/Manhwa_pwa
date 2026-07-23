@@ -155,7 +155,10 @@ function normalizeRecommendationShelves(settings?: Partial<AppSettings>) {
 
 function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
   const recommendationShelves = normalizeRecommendationShelves(settings);
-  const bottomNavItems = (settings?.bottomNavItems ?? DEFAULT_SETTINGS.bottomNavItems).filter((item) => item !== "recommendations");
+  const savedBottomNavItems = (settings?.bottomNavItems ?? DEFAULT_SETTINGS.bottomNavItems).filter((item) => item !== "recommendations");
+  const bottomNavItems = savedBottomNavItems.includes("trends")
+    ? savedBottomNavItems
+    : savedBottomNavItems.flatMap((item) => item === "settings" ? ["trends", item] : [item]);
   const relationshipTags =
     settings?.searchRelationshipTags ?? settings?.searchSensitiveTags ?? DEFAULT_SETTINGS.searchRelationshipTags;
   const adultTags = settings?.searchAdultTags ?? settings?.searchSensitiveTags ?? DEFAULT_SETTINGS.searchAdultTags;

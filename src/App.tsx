@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ChevronUp,
   Check,
+  ChartNoAxesCombined,
   Copy,
   Database,
   Download,
@@ -30,7 +31,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { createContext, memo, startTransition, useCallback, useContext, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { memo, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Fuse from "fuse.js";
 import { appDebugLog } from "./lib/debug";
 import { useRegisterSW } from "virtual:pwa-register/react";
@@ -77,11 +78,14 @@ import type {
 } from "./domain/types";
 import { fetchSeriesDetail } from "./services/dataService";
 import { AppStoreProvider, CUSTOM_FEED_TITLE_LIMIT, isBuiltInDefaultFeed, MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID, UNSEGMENTED_FEED_SEGMENT_ID, useAppStore } from "./store/useAppStore";
+import { TrendsPage, UPDATES_DETAIL_ORIGIN_KEY } from "./TrendsPage";
+import { createTitleSelectionStore, TitleSelectionContext, useTitleSelection, type TitleSelectionValue } from "./titleSelection";
 
 const NAV_ITEMS = [
   { id: "home", to: "/", label: "Home", icon: Home },
   { id: "feeds", to: "/feeds", label: "Feeds", icon: ListFilter },
   { id: "search", to: "/search", label: "Search", icon: Search },
+  { id: "trends", to: "/updates", label: "Updates", icon: ChartNoAxesCombined },
   { id: "settings", to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -165,74 +169,6 @@ const DEFAULT_FEED_PALETTE: [RgbColor, RgbColor, RgbColor] = [
   [170, 92, 132],
 ];
 const coverPaletteCache = new Map<string, Promise<RgbColor>>();
-
-type TitleSelectionMode = { kind: "collect" } | { kind: "remove"; feedId: string };
-interface TitleSelectionSnapshot {
-  mode: TitleSelectionMode | null;
-  selectedIds: ReadonlySet<number>;
-}
-interface TitleSelectionStore {
-  getSnapshot: () => TitleSelectionSnapshot;
-  isSelected: (titleId: number) => boolean;
-  subscribe: (titleId: number, listener: () => void) => () => void;
-  subscribeAll: (listener: () => void) => () => void;
-  replace: (mode: TitleSelectionMode, titleIds: Iterable<number>) => void;
-  toggle: (titleId: number) => void;
-  clear: () => void;
-}
-interface TitleSelectionValue {
-  store: TitleSelectionStore;
-  begin: (feed: Feed, titleId: number) => void;
-  toggle: (feed: Feed, titleId: number) => void;
-  clear: () => void;
-}
-
-function createTitleSelectionStore(): TitleSelectionStore {
-  let snapshot: TitleSelectionSnapshot = { mode: null, selectedIds: new Set() };
-  const titleListeners = new Map<number, Set<() => void>>();
-  const allListeners = new Set<() => void>();
-  const publish = (next: TitleSelectionSnapshot) => {
-    const changedIds = new Set<number>([...snapshot.selectedIds, ...next.selectedIds]);
-    for (const titleId of [...changedIds]) {
-      if (snapshot.selectedIds.has(titleId) === next.selectedIds.has(titleId)) changedIds.delete(titleId);
-    }
-    snapshot = next;
-    for (const titleId of changedIds) for (const listener of titleListeners.get(titleId) ?? []) listener();
-    for (const listener of allListeners) listener();
-  };
-  return {
-    getSnapshot: () => snapshot,
-    isSelected: (titleId) => snapshot.selectedIds.has(titleId),
-    subscribe: (titleId, listener) => {
-      const listeners = titleListeners.get(titleId) ?? new Set<() => void>();
-      listeners.add(listener);
-      titleListeners.set(titleId, listeners);
-      return () => {
-        listeners.delete(listener);
-        if (listeners.size === 0) titleListeners.delete(titleId);
-      };
-    },
-    subscribeAll: (listener) => {
-      allListeners.add(listener);
-      return () => allListeners.delete(listener);
-    },
-    replace: (mode, titleIds) => publish({ mode, selectedIds: new Set(titleIds) }),
-    toggle: (titleId) => {
-      const selectedIds = new Set(snapshot.selectedIds);
-      if (selectedIds.has(titleId)) selectedIds.delete(titleId);
-      else selectedIds.add(titleId);
-      publish({ ...snapshot, selectedIds });
-    },
-    clear: () => publish({ mode: null, selectedIds: new Set() }),
-  };
-}
-
-const TitleSelectionContext = createContext<TitleSelectionValue | null>(null);
-function useTitleSelection() {
-  const value = useContext(TitleSelectionContext);
-  if (!value) throw new Error("Title selection must be used inside AppFrame");
-  return value;
-}
 
 function extractBrightCoverColor(image: HTMLImageElement): RgbColor {
   const canvas = document.createElement("canvas");
@@ -452,7 +388,11 @@ function AppFrame() {
   const nav = NAV_ITEMS.filter((item) => store.settings.bottomNavItems.includes(item.id));
   const showingHome = location.pathname === "/";
   const showingTitle = location.pathname.startsWith("/title/");
-  const keepHomeMounted = showingHome || showingTitle;
+  const showingUpdates = location.pathname === "/updates";
+  const keepHomeMounted = showingHome
+    || (showingTitle && sessionStorage.getItem(HOME_RETURNING_FROM_TITLE_KEY) === "1");
+  const keepUpdatesMounted = showingUpdates
+    || (showingTitle && sessionStorage.getItem(UPDATES_DETAIL_ORIGIN_KEY) === "1");
   const defaultHomeFeeds = useMemo(
     () => orderedFeedsForSegments(store.feeds, store.feedSegments, store.settings, { homeOnly: true }, store.feedLibraryOrder),
     [store.feeds, store.feedLibraryOrder, store.feedSegments, store.settings],
@@ -467,6 +407,10 @@ function AppFrame() {
     document.documentElement.style.setProperty("--accent", store.settings.accentColor);
     document.title = store.settings.appName || "Aeon";
   }, [store.settings.accentColor, store.settings.appName]);
+
+  useEffect(() => {
+    if (!showingTitle && !showingUpdates) sessionStorage.removeItem(UPDATES_DETAIL_ORIGIN_KEY);
+  }, [showingTitle, showingUpdates]);
 
   useEffect(() => {
     let themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
@@ -510,6 +454,21 @@ function AppFrame() {
     }
     titleSelectionStore.replace(feed.kind === "custom" ? { kind: "remove", feedId: feed.id } : { kind: "collect" }, [titleId]);
   }, [titleSelectionStore]);
+  const beginCollectTitleSelection = useCallback((titleId: number) => {
+    if (!titleSelectionStore.getSnapshot().mode && !titleSelectionHistoryEntryRef.current) {
+      window.history.pushState({ ...window.history.state, aeonTitleSelection: true }, "", window.location.href);
+      titleSelectionHistoryEntryRef.current = true;
+    }
+    titleSelectionStore.replace({ kind: "collect" }, [titleId]);
+  }, [titleSelectionStore]);
+  const toggleCollectTitleSelection = useCallback((titleId: number) => {
+    const { mode } = titleSelectionStore.getSnapshot();
+    if (!mode) {
+      beginCollectTitleSelection(titleId);
+      return;
+    }
+    if (mode.kind === "collect") titleSelectionStore.toggle(titleId);
+  }, [beginCollectTitleSelection, titleSelectionStore]);
   const toggleTitleSelection = useCallback((feed: Feed, titleId: number) => {
     const { mode } = titleSelectionStore.getSnapshot();
     if (mode?.kind === "remove" && mode.feedId !== feed.id) return;
@@ -534,8 +493,10 @@ function AppFrame() {
     store: titleSelectionStore,
     begin: beginTitleSelection,
     toggle: toggleTitleSelection,
+    beginCollect: beginCollectTitleSelection,
+    toggleCollect: toggleCollectTitleSelection,
     clear: clearTitleSelection,
-  }), [beginTitleSelection, clearTitleSelection, titleSelectionStore, toggleTitleSelection]);
+  }), [beginCollectTitleSelection, beginTitleSelection, clearTitleSelection, titleSelectionStore, toggleCollectTitleSelection, toggleTitleSelection]);
 
   return (
     <TitleSelectionContext.Provider value={selectionValue}>
@@ -547,6 +508,11 @@ function AppFrame() {
             <HomePage />
           </div>
         )}
+        {keepUpdatesMounted && (
+          <div className={!showingUpdates ? "route-cache-hidden" : undefined} aria-hidden={!showingUpdates || undefined}>
+            <TrendsPage />
+          </div>
+        )}
         {showingTitle ? (
           <Routes>
             <Route path="/title/:id" element={<TitleDetailPage />} />
@@ -556,6 +522,8 @@ function AppFrame() {
             <Routes>
               <Route path="/feeds" element={<FeedsPage />} />
               <Route path="/search" element={<SearchPage />} />
+              <Route path="/updates" element={null} />
+              <Route path="/trends" element={<Navigate to="/updates" replace />} />
               <Route path="/recommendations/*" element={<Navigate to="/" replace />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/learn" element={<LearnPage />} />
