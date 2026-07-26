@@ -5,6 +5,7 @@ const source = await fs.readFile("scripts/assets/aeon-icon-master.png");
 const png = (size) => sharp(source).resize(size, size, { fit: "cover", kernel: "lanczos3" }).png();
 
 await png(32).toFile("public/favicon-32.png");
+await png(96).toFile("public/favicon-96.png");
 await png(180).toFile("public/apple-touch-icon.png");
 await png(192).toFile("public/pwa-192.png");
 await png(512).toFile("public/pwa-512.png");
