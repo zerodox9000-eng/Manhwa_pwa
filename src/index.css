@@ -441,6 +441,16 @@ a {
   grid-template-columns: repeat(var(--grid-columns), minmax(0, 1fr));
 }
 
+.home-feed-skeleton-card {
+  min-width: 0;
+}
+
+.home-feed-skeleton-cover {
+  aspect-ratio: 2 / 3;
+  margin-bottom: 8px;
+  border-radius: 7px;
+}
+
 .title-grid.columns-4,
 .title-grid.columns-5 {
   gap: 9px;

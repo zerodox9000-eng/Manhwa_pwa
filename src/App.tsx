@@ -71,10 +71,12 @@ import type {
   MetricId,
   MetricRange,
   RecommendationShelf,
+  QueryResult,
   SeriesCatalog,
   SeriesDetail,
   SourceMode,
   TagNode,
+  UserLabel,
 } from "./domain/types";
 import { fetchSeriesDetail } from "./services/dataService";
 import { AppStoreProvider, CUSTOM_FEED_TITLE_LIMIT, isBuiltInDefaultFeed, MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID, UNSEGMENTED_FEED_SEGMENT_ID, useAppStore } from "./store/useAppStore";
@@ -95,7 +97,7 @@ const CUSTOM_ADDITIONAL_RANGE_METRICS = RANGE_METRICS.filter((definition) => def
 const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.id !== "title" && definition.id !== "mangabakaLatestRank");
 const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
-const HOME_FEED_INITIAL_RENDER_RADIUS = 4;
+const HOME_FEED_INITIAL_RENDER_RADIUS = 0;
 const SEARCH_OPENED_HISTORY_KEY = "manhwa-search-opened-title-ids";
 const SEARCH_OPENED_HISTORY_LIMIT = 99;
 type SegmentPalette = { colors: [RgbColor, RgbColor, RgbColor]; dark: RgbColor };
@@ -169,6 +171,53 @@ const DEFAULT_FEED_PALETTE: [RgbColor, RgbColor, RgbColor] = [
   [170, 92, 132],
 ];
 const coverPaletteCache = new Map<string, Promise<RgbColor>>();
+type FeedQueryCacheEntry = {
+  catalog: SeriesCatalog[];
+  tags: TagNode[];
+  history: HistoryMap;
+  labels: UserLabel[];
+  settings: AppSettings;
+  metaHistoryFirst?: string | null;
+  metaHistoryLast?: string | null;
+  result: QueryResult;
+};
+const feedQueryCache = new WeakMap<Feed, FeedQueryCacheEntry>();
+
+function cachedFeedQuery(args: {
+  feed: Feed;
+  catalog: SeriesCatalog[];
+  tags: TagNode[];
+  history: HistoryMap;
+  labels: UserLabel[];
+  settings: AppSettings;
+  metaHistoryFirst?: string | null;
+  metaHistoryLast?: string | null;
+}) {
+  const cached = feedQueryCache.get(args.feed);
+  if (
+    cached
+    && cached.catalog === args.catalog
+    && cached.tags === args.tags
+    && cached.history === args.history
+    && cached.labels === args.labels
+    && cached.settings === args.settings
+    && cached.metaHistoryFirst === args.metaHistoryFirst
+    && cached.metaHistoryLast === args.metaHistoryLast
+  ) return cached.result;
+
+  const result = runFeedQuery({
+    feed: args.feed,
+    series: args.catalog,
+    tags: args.tags,
+    history: args.history,
+    labels: args.labels,
+    settings: args.settings,
+    metaHistoryFirst: args.metaHistoryFirst,
+    metaHistoryLast: args.metaHistoryLast,
+  });
+  feedQueryCache.set(args.feed, { ...args, result });
+  return result;
+}
 
 function extractBrightCoverColor(image: HTMLImageElement): RgbColor {
   const canvas = document.createElement("canvas");
@@ -1103,7 +1152,9 @@ function HomePage() {
       didInitialPagerAlignRef.current = true;
       renderCenterIndexRef.current = activeFeedIndex;
       setRenderCenterIndex(activeFeedIndex);
-      pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
+      const pager = pagerRef.current;
+      if (pager) pager.scrollTo({ left: pane.offsetLeft, behavior: "auto" });
+      else pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
       restoreHomeScroll(activeFeed);
     }
   }, [activeFeed, activeFeedIndex, returningFromTitle, store.ready, warmFeedAt]);
@@ -1123,18 +1174,18 @@ function HomePage() {
   }, [activeFeed?.id, libraryLoaderVisible, renderCenterIndex, store.homePreviewSegmentId]);
 
   useEffect(() => {
-    if (!store.ready || activeFeedIndex < 0) return;
-    const warmOrder = [5, -1, -2, -3, -4, -5];
+    if (!store.ready || libraryLoaderVisible || activeFeedIndex < 0) return;
+    const warmOrder = [1, -1, 2, -2, 3, -3, 4, -4, 5, -5];
     const timers = warmOrder.map((offset, step) =>
-      window.setTimeout(() => warmFeedAt(activeFeedIndex + offset), 450 + step * 220),
+      window.setTimeout(() => warmFeedAt(activeFeedIndex + offset), 2000 + step * 650),
     );
     return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [activeFeedIndex, store.ready, warmFeedAt]);
+  }, [activeFeedIndex, libraryLoaderVisible, store.ready, warmFeedAt]);
 
   const warmFeedsAroundScrollPosition = useCallback(() => {
-    setPreloadReady(true);
     const pager = pagerRef.current;
     if (!pager || feeds.length === 0 || !homeRestoreReadyRef.current) return;
+    setPreloadReady(true);
     const handleScroll = () => {
       const firstPane = paneRefs.current.get(feeds[0]?.id);
       const secondPane = paneRefs.current.get(feeds[1]?.id);
@@ -1313,9 +1364,9 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
   const lastTitleTapRef = useRef(0);
   const query = useMemo(
     () =>
-      runFeedQuery({
+      cachedFeedQuery({
         feed,
-        series: store.catalog,
+        catalog: store.catalog,
         tags: store.tags,
         history: store.history,
         labels: store.labels,
@@ -1330,43 +1381,48 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
   const descriptionCanExpand = hasDescription;
   const descriptionText = hasDescription ? cappedText(feed.description, FEED_DESCRIPTION_EXPANDED_MAX) : "";
   const deferredLocalSearchQuery = useDeferredValue(localSearchQuery);
+  const deferredCustomMode = useDeferredValue(customMode);
   const originalRanks = useMemo(() => new Map(query.items.map((item, index) => [item.id, index + 1])), [query.items]);
   const displayedItems = useMemo(() => {
     const words = searchWords(deferredLocalSearchQuery);
     if (words.length === 0) return query.items;
     return query.items.filter((item) => matchesSearchTextWords(seriesSearchText(item), words));
   }, [deferredLocalSearchQuery, query.items]);
-  const sensitiveTagIds = useMemo(() => buildSensitiveTagGroups(store.tags), [store.tags]);
-  const visibleAddCatalog = useMemo(
-    () => store.catalog.filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds)),
-    [sensitiveTagIds, store.catalog, store.settings],
-  );
-  const addSearchTextById = useMemo(() => new Map(visibleAddCatalog.map((item) => [item.id, seriesSearchText(item)])), [visibleAddCatalog]);
-  const addSearchIndex = useMemo(() => new Fuse(visibleAddCatalog, {
-    shouldSort: true,
-    ignoreLocation: true,
-    threshold: 0.28,
-    minMatchCharLength: 2,
-    keys: [
-      { name: "display_title", weight: 0.5 },
-      { name: "titles.title", weight: 0.42 },
-      { name: "mangabaka_title", weight: 0.24 },
-      { name: "native_title", weight: 0.22 },
-      { name: "romanized_title", weight: 0.22 },
-      { name: "authors", weight: 0.2 },
-      { name: "artists", weight: 0.18 },
-    ],
-  }), [visibleAddCatalog]);
+  const addSearchResources = useMemo(() => {
+    if (deferredCustomMode !== "add" || feed.kind !== "custom") return null;
+    const sensitiveTagIds = buildSensitiveTagGroups(store.tags);
+    const visibleCatalog = store.catalog.filter((item) => isSearchVisible(item, store.settings, sensitiveTagIds));
+    return {
+      visibleCatalog,
+      textById: new Map(visibleCatalog.map((item) => [item.id, seriesSearchText(item)])),
+      index: new Fuse(visibleCatalog, {
+        shouldSort: true,
+        ignoreLocation: true,
+        threshold: 0.28,
+        minMatchCharLength: 2,
+        keys: [
+          { name: "display_title", weight: 0.5 },
+          { name: "titles.title", weight: 0.42 },
+          { name: "mangabaka_title", weight: 0.24 },
+          { name: "native_title", weight: 0.22 },
+          { name: "romanized_title", weight: 0.22 },
+          { name: "authors", weight: 0.2 },
+          { name: "artists", weight: 0.18 },
+        ],
+      }),
+    };
+  }, [deferredCustomMode, feed.kind, store.catalog, store.settings, store.tags]);
   const deferredAddQuery = useDeferredValue(customAddQuery);
   const addResults = useMemo(() => {
+    if (!addSearchResources) return [];
     const term = deferredAddQuery.trim();
     if (term.length < 2) return [];
     const words = searchWords(term);
-    const direct = visibleAddCatalog
-      .filter((item) => matchesSearchTextWords(addSearchTextById.get(item.id) ?? "", words))
-      .sort((left, right) => searchTextWordPosition(addSearchTextById.get(left.id) ?? "", words) - searchTextWordPosition(addSearchTextById.get(right.id) ?? "", words));
-    return (direct.length ? direct : addSearchIndex.search(term, { limit: 120 }).map((result) => result.item)).slice(0, 120);
-  }, [addSearchIndex, addSearchTextById, deferredAddQuery, visibleAddCatalog]);
+    const direct = addSearchResources.visibleCatalog
+      .filter((item) => matchesSearchTextWords(addSearchResources.textById.get(item.id) ?? "", words))
+      .sort((left, right) => searchTextWordPosition(addSearchResources.textById.get(left.id) ?? "", words) - searchTextWordPosition(addSearchResources.textById.get(right.id) ?? "", words));
+    return (direct.length ? direct : addSearchResources.index.search(term, { limit: 120 }).map((result) => result.item)).slice(0, 120);
+  }, [addSearchResources, deferredAddQuery]);
   const existingCustomIds = useMemo(() => new Set(feed.titleIds), [feed.titleIds]);
   useEffect(() => { pendingAddIdsRef.current = pendingAddIds; }, [pendingAddIds]);
   useEffect(() => { customModeRef.current = customMode; }, [customMode]);
@@ -1838,8 +1894,25 @@ function HomeFeedPaneSkeleton({ feed }: { feed: Feed }) {
           </div>
         </div>
       </section>
-      <TitleCollectionSkeleton columns={feed.view.gridColumns} />
+      <HomeFeedGridSkeleton columns={feed.view.gridColumns} />
     </>
+  );
+}
+
+function HomeFeedGridSkeleton({ columns }: { columns: 1 | 2 | 3 | 4 | 5 }) {
+  return (
+    <div
+      className={`title-grid columns-${columns} density-standard home-feed-grid-skeleton`}
+      style={{ "--grid-columns": columns } as React.CSSProperties}
+      aria-hidden="true"
+    >
+      {Array.from({ length: columns * 2 }).map((_, index) => (
+        <div className="home-feed-skeleton-card" key={index}>
+          <div className="home-feed-skeleton-cover skeleton-box" />
+          <span className="skeleton-line skeleton-line-title" />
+        </div>
+      ))}
+    </div>
   );
 }
 
