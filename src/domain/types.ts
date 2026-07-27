@@ -188,6 +188,7 @@ export interface FeedFilters {
   maxMeanScore: number | null;
   metricRanges: MetricRange[];
   includeEstimatedDates: boolean;
+  requireOfficialEnglishLink: boolean;
   dateField: "none" | "release" | "end";
   rolling: RollingWindow;
   labelIds: string[];

@@ -72,11 +72,28 @@ const history: HistoryMap = {
 describe("runFeedQuery", () => {
   it("keeps fixed custom membership in manual order while applying status filters", () => {
     const feed = createCustomFeed("Manual");
+    feed.orderMode = "manual";
     feed.titleIds = [3, 1, 2];
     const query = () => runFeedQuery({ feed, series: baseSeries, tags, history, labels: [], settings: DEFAULT_SETTINGS });
     expect(query().items.map((item) => item.id)).toEqual([3, 1, 2]);
     feed.filters.statuses = ["completed"];
     expect(query().items.map((item) => item.id)).toEqual([3, 2]);
+  });
+
+  it("filters both logic and custom feeds to titles with an official English link", () => {
+    const series = [
+      { ...baseSeries[0], links: { read_en: "https://example.com/read" } },
+      { ...baseSeries[1], links: { read_en: null } },
+    ];
+    const logic = createFeed("Official English");
+    logic.filters.requireOfficialEnglishLink = true;
+    expect(runFeedQuery({ feed: logic, series, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id)).toEqual([1]);
+
+    const custom = createCustomFeed("Official English");
+    custom.titleIds = [2, 1];
+    custom.filters.requireOfficialEnglishLink = true;
+    expect(runFeedQuery({ feed: custom, series, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id)).toEqual([1]);
+    expect(custom.titleIds).toEqual([2, 1]);
   });
 
   it("automatically sorts AniList members while pinning non-AniList titles", () => {
@@ -604,5 +621,29 @@ describe("runFeedQuery", () => {
       metaHistoryLast: "2024-05-10",
     });
     expect(result.items.map((item) => item.id)).toEqual([71, 70]);
+  });
+
+  it("ORs ranges for one metric while keeping different metrics as AND", () => {
+    const feed = createFeed("popularity bands");
+    feed.filters.metricRanges = [
+      { id: "deep", metric: "popularityPercentile", min: null, max: 69 },
+      { id: "mainstream", metric: "popularityPercentile", min: 90, max: 98 },
+      { id: "fan-rank", metric: "fanFavouriteDiscoveryPercentile", min: 60, max: null },
+    ];
+    const result = runFeedQuery({
+      feed,
+      series: [
+        { ...baseSeries[0], id: 74, analytics: { popularityPercentile: 65, fanFavouriteDiscoveryPercentile: 80 } },
+        { ...baseSeries[0], id: 75, analytics: { popularityPercentile: 95, fanFavouriteDiscoveryPercentile: 70 } },
+        { ...baseSeries[0], id: 76, analytics: { popularityPercentile: 85, fanFavouriteDiscoveryPercentile: 90 } },
+        { ...baseSeries[0], id: 77, analytics: { popularityPercentile: 95, fanFavouriteDiscoveryPercentile: 40 } },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+    });
+
+    expect(result.items.map((item) => item.id)).toEqual([74, 75]);
   });
 });

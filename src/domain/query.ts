@@ -3,6 +3,7 @@ import type {
   AppSettings,
   Feed,
   HistoryMap,
+  MetricRange,
   QueryResult,
   SeriesCatalog,
   TagNode,
@@ -305,6 +306,11 @@ export function runFeedQuery(args: {
     activeNotes.push(`History is currently available from ${metaHistoryFirst} to ${metaHistoryLast}.`);
   }
 
+  const rangeGroups = new Map<MetricRange["metric"], MetricRange[]>();
+  for (const range of filters.metricRanges ?? []) {
+    rangeGroups.set(range.metric, [...(rangeGroups.get(range.metric) ?? []), range]);
+  }
+
   const result = candidates.filter((item) => {
     const rating = item.content_rating as AppSettings["contentRatings"][number] | null;
     if (feed.kind === "logic" && rating && !filters.contentRatings.includes(rating)) return false;
@@ -317,6 +323,7 @@ export function runFeedQuery(args: {
     }
 
     if (filters.statuses.length > 0 && (!item.status || !filters.statuses.includes(item.status))) return false;
+    if (filters.requireOfficialEnglishLink && !item.links?.read_en?.trim()) return false;
     if (filters.includeEstimatedDates === false && !displayReleaseDate(item)) return false;
     if (usesReleaseDateSort && !effectiveReleaseDate(item)) return false;
 
@@ -333,13 +340,15 @@ export function runFeedQuery(args: {
     if (filters.maxFavourites != null && (item.stats.favourites == null || item.stats.favourites > filters.maxFavourites)) return false;
     if (filters.minMeanScore != null && (item.stats.meanScore == null || item.stats.meanScore < filters.minMeanScore)) return false;
     if (filters.maxMeanScore != null && (item.stats.meanScore == null || item.stats.meanScore > filters.maxMeanScore)) return false;
-    for (const range of filters.metricRanges ?? []) {
-      const value = (growthWindow && (range.metric.includes("Growth") || range.metric.includes("Delta")))
-        ? historyDeltaForWindow(item.id, range.metric, history, growthWindow.from, growthWindow.to)
-        : displayComparableMetricValue(item, range.metric, history, metaHistoryLast);
+    for (const [metric, ranges] of rangeGroups) {
+      const value = (growthWindow && (metric.includes("Growth") || metric.includes("Delta")))
+        ? historyDeltaForWindow(item.id, metric, history, growthWindow.from, growthWindow.to)
+        : displayComparableMetricValue(item, metric, history, metaHistoryLast);
       if (typeof value !== "number" || !Number.isFinite(value)) return false;
-      if (range.min != null && value < range.min) return false;
-      if (range.max != null && value > range.max) return false;
+      const matchesAnyRange = ranges.some((range) => (
+        (range.min == null || value >= range.min) && (range.max == null || value <= range.max)
+      ));
+      if (!matchesAnyRange) return false;
     }
 
     if (feed.kind === "logic" && includeTagIds.length > 0) {

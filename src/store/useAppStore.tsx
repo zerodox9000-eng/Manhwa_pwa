@@ -221,6 +221,7 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
       contentRatings: feed.filters.contentRatings ?? DEFAULT_SETTINGS.contentRatings,
       metricRanges: feed.filters.metricRanges ?? [],
       includeEstimatedDates: feed.filters.includeEstimatedDates ?? true,
+      requireOfficialEnglishLink: feed.filters.requireOfficialEnglishLink ?? false,
       excludeTagIds,
       labelIds: options.preserveFeedSettings ? feed.filters.labelIds ?? [] : [],
       query: options.preserveFeedSettings ? feed.filters.query ?? "" : "",

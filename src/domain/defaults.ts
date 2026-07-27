@@ -95,6 +95,7 @@ export const DEFAULT_FILTERS: FeedFilters = {
   maxMeanScore: null,
   metricRanges: [],
   includeEstimatedDates: true,
+  requireOfficialEnglishLink: false,
   dateField: "none",
   rolling: {
     mode: "none",
@@ -197,8 +198,7 @@ export function createCustomFeed(name = "New List"): Feed {
     ...feed,
     kind: "custom",
     titleIds: [],
-    orderMode: "manual",
-    sort: [],
+    orderMode: "automatic",
     filters: {
       ...feed.filters,
       sourceMode: "mixed",

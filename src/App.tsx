@@ -51,6 +51,26 @@ import {
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { createCustomFeed, createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
+import {
+  CHAPTER_PRESETS,
+  FAN_RANK_PRESETS,
+  isFeedPresetRange,
+  PERIOD_PRESETS,
+  PERIOD_PURPOSES,
+  POPULARITY_PRESETS,
+  selectPeriodPreset,
+  selectPeriodPurpose,
+  selectSingleFeedPreset,
+  selectSortPreset,
+  selectStatusPreset,
+  selectedPeriodPresetId,
+  selectedFeedPresetIds,
+  selectedSortPresetId,
+  selectedStatusPresetId,
+  SORT_PRESETS,
+  STATUS_PRESETS,
+  togglePopularityPreset,
+} from "./domain/feedPresets";
 import { isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments";
 import { resolveRollingWindow } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
@@ -93,7 +113,6 @@ const NAV_ITEMS = [
 
 const SORT_OPTIONS: MetricId[] = METRIC_DEFINITIONS.map((definition) => definition.id);
 const RANGE_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.filterable);
-const CUSTOM_ADDITIONAL_RANGE_METRICS = RANGE_METRICS.filter((definition) => definition.id !== "year" && definition.id !== "chapters");
 const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.id !== "title" && definition.id !== "mangabakaLatestRank");
 const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
@@ -2845,6 +2864,7 @@ function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onS
   const [statuses, setStatuses] = useState<string[]>(() =>
     feed.filters.statuses.filter((status) => status === "completed" || status === "hiatus"),
   );
+  const [requireOfficialEnglishLink, setRequireOfficialEnglishLink] = useState(feed.filters.requireOfficialEnglishLink);
   const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : ["fanFavouriteDiscoveryPercentile"]);
   const coverStatsVisible = view.metricSlots.length > 0;
 
@@ -2907,6 +2927,12 @@ function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onS
           ? [...current.filter((status) => status !== "hiatus"), "hiatus"]
           : current.filter((status) => status !== "hiatus"))}
       />
+      <ToggleRow
+        label="Official English link"
+        description="Only show titles with an official English reading link."
+        value={requireOfficialEnglishLink}
+        onChange={setRequireOfficialEnglishLink}
+      />
       <div className="toolbar">
         <button className="button" type="button" onClick={onCancel}>
           Cancel
@@ -2915,7 +2941,11 @@ function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onS
         <button
           className="button primary"
           type="button"
-          onClick={() => onSave({ ...feed, view, filters: { ...feed.filters, statuses } })}
+          onClick={() => onSave({
+            ...feed,
+            view,
+            filters: { ...feed.filters, statuses, requireOfficialEnglishLink },
+          })}
         >
           Save
         </button>
@@ -2924,21 +2954,225 @@ function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onS
   );
 }
 
-function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Feed) => void; onCancel: () => void }) {
+function FeedDescriptionControl({
+  id,
+  value,
+  visible,
+  onChange,
+  onVisibleChange,
+}: {
+  id: string;
+  value: string;
+  visible: boolean;
+  onChange: (value: string) => void;
+  onVisibleChange: (visible: boolean) => void;
+}) {
+  return (
+    <>
+      <ToggleRow label="Show description" description="Show a description below the feed name." value={visible} onChange={onVisibleChange} />
+      {visible ? (
+        <div className="field">
+          <label htmlFor={id}>Description</label>
+          <textarea id={id} className="textarea" value={value} onChange={(event) => onChange(event.target.value)} placeholder="Optional context for this feed" />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function FeedGridColumnsControl({ view, onChange }: { view: FeedViewSettings; onChange: (patch: Partial<FeedViewSettings>) => void }) {
   const isDesktop = useDesktopLayout();
+  return (
+    <div className="field">
+      <label>Grid columns</label>
+      <div className="segmented compact-segments">
+        {(isDesktop ? DESKTOP_GRID_OPTIONS : [1, 2, 3, 4, 5]).map((columns) => (
+          <button
+            className={`segment ${(isDesktop ? resolvedDesktopGridColumns(view) : view.gridColumns) === columns ? "active" : ""}`}
+            type="button"
+            key={columns}
+            onClick={() => onChange(isDesktop
+              ? { desktopGridColumns: columns as FeedViewSettings["desktopGridColumns"] }
+              : { gridColumns: columns as FeedViewSettings["gridColumns"] })}
+          >
+            {columns}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FeedPresetControls({
+  filters,
+  sort,
+  onChange,
+  onCustomSort,
+  customSortActive = false,
+}: {
+  filters: Feed["filters"];
+  sort: Feed["sort"];
+  onChange: (filters: Feed["filters"], sort: Feed["sort"]) => void;
+  onCustomSort?: () => void;
+  customSortActive?: boolean;
+}) {
+  const popularity = new Set(selectedFeedPresetIds(filters, "popularity"));
+  const fanRank = new Set(selectedFeedPresetIds(filters, "fan-rank"));
+  const chapters = new Set(selectedFeedPresetIds(filters, "chapters"));
+  const status = selectedStatusPresetId(filters);
+  const sorting = selectedSortPresetId(sort);
+  const customSorting = customSortActive || (!sorting && sort.length > 0);
+  const period = selectedPeriodPresetId(filters);
+  const periodPurpose = PERIOD_PURPOSES.find((option) => option.dateField === filters.dateField)?.id ?? "growth";
+  const renderOptions = (
+    options: ReadonlyArray<{ id: string; label: string }>,
+    selected: Set<string>,
+    onSelect: (id: string) => void,
+    className = "",
+    disabled = false,
+  ) => (
+    <div className={`feed-preset-grid ${className}`.trim()}>
+      {options.map((option) => (
+        <button
+          className={`feed-preset-option ${selected.has(option.id) ? "active" : ""}`}
+          type="button"
+          key={option.id}
+          aria-pressed={selected.has(option.id)}
+          disabled={disabled}
+          onClick={() => onSelect(option.id)}
+        >
+          <span>{option.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <section className="feed-preset-panel">
+      <h2 className="section-title">Presets</h2>
+      <div className="field">
+        <span className="small-label">Popularity</span>
+        <p className="muted tiny">Choose one or more catalogue ranges.</p>
+        {renderOptions(POPULARITY_PRESETS, popularity, (id) => onChange(togglePopularityPreset(filters, id), sort))}
+      </div>
+      <div className="field">
+        <span className="small-label">Fan Rank</span>
+        {renderOptions(FAN_RANK_PRESETS, fanRank, (id) => onChange(selectSingleFeedPreset(filters, "fan-rank", id), sort))}
+      </div>
+      <div className="field">
+        <span className="small-label">Chapters</span>
+        {renderOptions(CHAPTER_PRESETS, chapters, (id) => onChange(selectSingleFeedPreset(filters, "chapters", id), sort))}
+      </div>
+      <div className="field">
+        <span className="small-label">Status</span>
+        {renderOptions(STATUS_PRESETS, new Set(status ? [status] : []), (id) => onChange(selectStatusPreset(filters, id), sort))}
+      </div>
+      <div className="field">
+        <span className="small-label">Availability</span>
+        {renderOptions(
+          [{ id: "official-en", label: "Official English link" }],
+          new Set(filters.requireOfficialEnglishLink ? ["official-en"] : []),
+          () => onChange({ ...filters, requireOfficialEnglishLink: !filters.requireOfficialEnglishLink }, sort),
+          "single-option",
+        )}
+      </div>
+      <div className="field">
+        <span className="small-label">Sort by</span>
+        {renderOptions(onCustomSort ? [...SORT_PRESETS, { id: "custom", label: "Custom" }] : SORT_PRESETS, new Set(customSorting ? ["custom"] : sorting ? [sorting] : []), (id) => {
+          if (id === "custom") {
+            onCustomSort?.();
+            return;
+          }
+          const option = SORT_PRESETS.find((item) => item.id === id);
+          const usesGrowth = option?.metric === "popularityGrowthPercent" || option?.metric === "discoveryPercentileDelta";
+          const nextFilters = usesGrowth && filters.rolling.mode === "none"
+            ? { ...filters, dateField: "none" as const, rolling: { ...filters.rolling, mode: "last" as const, amount: 1, unit: "weeks" as const } }
+            : filters;
+          onChange(nextFilters, selectSortPreset(sort, id));
+        }, "wide-labels")}
+      </div>
+      <div className="field">
+        <span className="small-label">Time period</span>
+        {renderOptions(PERIOD_PRESETS, new Set(period ? [period] : []), (id) => onChange(selectPeriodPreset(filters, id), sort), "two-column")}
+      </div>
+      <div className="field">
+        <span className="small-label">Use time period for</span>
+        {renderOptions(
+          PERIOD_PURPOSES,
+          new Set(period ? [periodPurpose] : []),
+          (id) => onChange(selectPeriodPurpose(filters, id), sort),
+          "",
+          !period,
+        )}
+      </div>
+    </section>
+  );
+}
+
+function manualParameterRanges(filters: Feed["filters"]): MetricRange[] {
+  const direct = ([
+    { id: "direct:chapters", metric: "chapters", min: filters.minChapters, max: filters.maxChapters },
+    { id: "direct:year", metric: "year", min: filters.minYear, max: filters.maxYear },
+    { id: "direct:popularity", metric: "popularity", min: filters.minPopularity, max: filters.maxPopularity },
+    { id: "direct:favourites", metric: "favourites", min: filters.minFavourites, max: filters.maxFavourites },
+    { id: "direct:meanScore", metric: "meanScore", min: filters.minMeanScore, max: filters.maxMeanScore },
+  ] satisfies MetricRange[]).filter((range) => range.min != null || range.max != null);
+  return [...direct, ...(filters.metricRanges ?? []).filter((range) => !isFeedPresetRange(range))];
+}
+
+function applyManualParameterRanges(filters: Feed["filters"], ranges: MetricRange[]) {
+  const manualMetrics = new Set(ranges.map((range) => range.metric));
+  const metricRanges = (filters.metricRanges ?? []).filter((range) => isFeedPresetRange(range) && !manualMetrics.has(range.metric));
+  const next = {
+    ...filters,
+    minChapters: null,
+    maxChapters: null,
+    minYear: null,
+    maxYear: null,
+    minPopularity: null,
+    maxPopularity: null,
+    minFavourites: null,
+    maxFavourites: null,
+    minMeanScore: null,
+    maxMeanScore: null,
+  };
+  for (const range of ranges) {
+    if (range.id === `direct:${range.metric}`) {
+      if (range.metric === "chapters") Object.assign(next, { minChapters: range.min, maxChapters: range.max });
+      else if (range.metric === "year") Object.assign(next, { minYear: range.min, maxYear: range.max });
+      else if (range.metric === "popularity") Object.assign(next, { minPopularity: range.min, maxPopularity: range.max });
+      else if (range.metric === "favourites") Object.assign(next, { minFavourites: range.min, maxFavourites: range.max });
+      else if (range.metric === "meanScore") Object.assign(next, { minMeanScore: range.min, maxMeanScore: range.max });
+      else metricRanges.push(range);
+    } else {
+      metricRanges.push(range);
+    }
+  }
+  return { ...next, metricRanges };
+}
+
+function FeedParameterEditor({ filters, onChange }: { filters: Feed["filters"]; onChange: (filters: Feed["filters"]) => void }) {
+  return (
+    <MetricRangeEditor
+      title="Parameters"
+      emptyText="Add a parameter when a preset does not provide the exact min/max range you need."
+      ranges={manualParameterRanges(filters)}
+      onChange={(ranges) => onChange(applyManualParameterRanges(filters, ranges))}
+    />
+  );
+}
+
+function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Feed) => void; onCancel: () => void }) {
   const [draft, setDraft] = useState<Feed>(() => structuredClone(feed));
   const [advanced, setAdvanced] = useState(false);
+  const [coverStatsEnabled, setCoverStatsEnabled] = useState(feed.view.metricSlots.length > 0);
   const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : ["fanFavouriteDiscoveryPercentile"]);
   const updateFilters = (patch: Partial<Feed["filters"]>) => setDraft((current) => ({ ...current, filters: { ...current.filters, ...patch } }));
   const updateView = (patch: Partial<FeedViewSettings>) => setDraft((current) => ({ ...current, view: { ...current.view, ...patch } }));
-  const toggleStatus = (status: "completed" | "hiatus", selected: boolean) => updateFilters({
-    statuses: selected
-      ? [...draft.filters.statuses.filter((item) => item !== status), status]
-      : draft.filters.statuses.filter((item) => item !== status),
-  });
-  const setCoverStatsVisible = (visible: boolean) => updateView({
-    metricSlots: visible ? [...savedMetricSlotsRef.current] : [],
-  });
+  const setCoverStatsVisible = (visible: boolean) => {
+    setCoverStatsEnabled(visible);
+    updateView({ metricSlots: visible ? [...savedMetricSlotsRef.current] : [] });
+  };
 
   return (
     <div className="setting-stack custom-feed-settings">
@@ -2946,30 +3180,31 @@ function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSa
         <label htmlFor="custom-feed-name">List name</label>
         <input id="custom-feed-name" className="input" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} autoComplete="off" />
       </div>
-      <div className="field">
-        <label htmlFor="custom-feed-description">Description</label>
-        <textarea id="custom-feed-description" className="textarea" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
-      </div>
-      <ToggleRow label="Show description" description="Show this text below the list name." value={draft.showDescription} onChange={(showDescription) => setDraft({ ...draft, showDescription })} />
-      <div className="field">
-        <label>Grid columns</label>
-        <div className="segmented compact-segments">
-          {(isDesktop ? DESKTOP_GRID_OPTIONS : [1, 2, 3, 4, 5]).map((columns) => (
-            <button className={`segment ${(isDesktop ? resolvedDesktopGridColumns(draft.view) : draft.view.gridColumns) === columns ? "active" : ""}`} type="button" key={columns} onClick={() => updateView(isDesktop
-              ? { desktopGridColumns: columns as FeedViewSettings["desktopGridColumns"] }
-              : { gridColumns: columns as FeedViewSettings["gridColumns"] })}>
-              {columns}
-            </button>
-          ))}
-        </div>
-      </div>
+      <FeedDescriptionControl
+        id="custom-feed-description"
+        value={draft.description}
+        visible={draft.showDescription}
+        onChange={(description) => setDraft({ ...draft, description })}
+        onVisibleChange={(showDescription) => setDraft({ ...draft, showDescription })}
+      />
+      <FeedGridColumnsControl view={draft.view} onChange={updateView} />
       <ToggleRow label="Show rank" description="Show each title's position on its cover." value={draft.view.visible.rank} onChange={(rank) => updateView({ visible: { ...draft.view.visible, rank } })} />
-      <ToggleRow label="Show cover stats" description="Show the configured stat strip on covers." value={draft.view.metricSlots.length > 0} onChange={(visible) => {
+      <ToggleRow label="Show cover stats" description="Show the configured stat strip on covers." value={coverStatsEnabled} onChange={(visible) => {
         if (!visible && draft.view.metricSlots.length) savedMetricSlotsRef.current = [...draft.view.metricSlots];
         setCoverStatsVisible(visible);
       }} />
-      <ToggleRow label="Completed" description="Only show completed titles when selected." value={draft.filters.statuses.includes("completed")} onChange={(selected) => toggleStatus("completed", selected)} />
-      <ToggleRow label="Hiatus" description="Only show titles on hiatus when selected." value={draft.filters.statuses.includes("hiatus")} onChange={(selected) => toggleStatus("hiatus", selected)} />
+      <FeedPresetControls
+        filters={draft.filters}
+        sort={draft.sort}
+        customSortActive={draft.orderMode === "manual"}
+        onCustomSort={() => setAdvanced(true)}
+        onChange={(filters, sort) => setDraft((current) => ({
+          ...current,
+          filters,
+          sort,
+          orderMode: sort === current.sort ? current.orderMode : "automatic",
+        }))}
+      />
       <div className="field">
         <label>New titles</label>
         <div className="segmented">
@@ -2987,23 +3222,13 @@ function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSa
       </button>
       {advanced ? (
         <div className="custom-feed-advanced">
-          <div className="field">
-            <label>Order mode</label>
-            <div className="segmented">
-              {(["manual", "automatic"] as const).map((mode) => <button className={`segment ${draft.orderMode === mode ? "active" : ""}`} type="button" key={mode} onClick={() => setDraft({ ...draft, orderMode: mode })}>{mode === "manual" ? "Manual" : "Automatic"}</button>)}
-            </div>
-          </div>
-          <div className="field-grid">
-            <NumberField label="Min chapters" value={draft.filters.minChapters} onChange={(value) => updateFilters({ minChapters: value })} />
-            <NumberField label="Max chapters" value={draft.filters.maxChapters} onChange={(value) => updateFilters({ maxChapters: value })} />
-            <NumberField label="Min year" value={draft.filters.minYear} onChange={(value) => updateFilters({ minYear: value })} />
-            <NumberField label="Max year" value={draft.filters.maxYear} onChange={(value) => updateFilters({ maxYear: value })} />
-          </div>
-          <MetricRangeEditor
-            ranges={(draft.filters.metricRanges ?? []).filter((range) => range.metric !== "year" && range.metric !== "chapters")}
-            metrics={CUSTOM_ADDITIONAL_RANGE_METRICS}
-            onChange={(metricRanges) => updateFilters({ metricRanges })}
-          />
+          {coverStatsEnabled ? (
+            <MetricSlotPicker slots={draft.view.metricSlots} onChange={(metricSlots) => {
+              savedMetricSlotsRef.current = [...metricSlots];
+              updateView({ metricSlots });
+            }} />
+          ) : null}
+          <FeedParameterEditor filters={draft.filters} onChange={(filters) => setDraft((current) => ({ ...current, filters }))} />
           <h2 className="section-title">Rolling Dates</h2>
           <div className="field-grid">
             <div className="field">
@@ -3061,7 +3286,7 @@ function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSa
                 <div className="metric-choice">{SORT_OPTIONS.map((option) => <button className={`metric-option ${rule.metric === option ? "active" : ""}`} type="button" key={option} onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.map((item) => item.id === rule.id ? { ...item, metric: option } : item) }))}>{metricDefinition(option).shortLabel}</button>)}</div>
                 <div className="segmented compact-segments">{(["desc", "asc"] as const).map((direction) => <button className={`segment ${rule.direction === direction ? "active" : ""}`} type="button" key={direction} onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.map((item) => item.id === rule.id ? { ...item, direction } : item) }))}>{direction === "desc" ? "High first" : "Low first"}</button>)}</div>
               </div>
-              <button className="icon-button" type="button" onClick={() => setDraft((current) => ({ ...current, sort: current.sort.filter((item) => item.id !== rule.id) }))} aria-label={`Remove sort ${index + 1}`}><Trash2 size={16} /></button>
+              <button className="icon-button" type="button" onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.filter((item) => item.id !== rule.id) }))} aria-label={`Remove sort ${index + 1}`}><Trash2 size={16} /></button>
             </div>)}
             <button className="button" type="button" onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: [...current.sort, { ...DEFAULT_SORT[0], id: makeId() }] }))}><Plus size={16} /> Add sort</button>
           </div>
@@ -3073,16 +3298,6 @@ function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSa
         <button className="button primary" type="button" disabled={!draft.name.trim()} onClick={() => onSave({
           ...draft,
           name: draft.name.trim(),
-          filters: {
-            ...draft.filters,
-            minPopularity: null,
-            maxPopularity: null,
-            minFavourites: null,
-            maxFavourites: null,
-            minMeanScore: null,
-            maxMeanScore: null,
-            metricRanges: (draft.filters.metricRanges ?? []).filter((range) => range.metric !== "year" && range.metric !== "chapters"),
-          },
         })}><Check size={16} /> Save list</button>
       </div>
     </div>
@@ -3090,10 +3305,13 @@ function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSa
 }
 
 function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Feed) => void; onCancel: () => void }) {
-  const isDesktop = useDesktopLayout();
   const store = useAppStore();
   const [draft, setDraft] = useState<Feed>(() => structuredClone(feed));
   const [tagSearch, setTagSearch] = useState("");
+  const [advanced, setAdvanced] = useState(false);
+  const [showMoreTags, setShowMoreTags] = useState(false);
+  const [coverStatsEnabled, setCoverStatsEnabled] = useState(feed.view.metricSlots.length > 0);
+  const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : ["fanFavouriteDiscoveryPercentile"]);
   const statusOptions = useMemo(
     () => [...new Set(store.catalog.map((item) => item.status).filter(Boolean) as string[])].sort(),
     [store.catalog],
@@ -3115,6 +3333,10 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
   };
   const updateView = (patch: Partial<FeedViewSettings>) => {
     setDraft((current) => ({ ...current, view: { ...current.view, ...patch } }));
+  };
+  const setCoverStatsVisible = (visible: boolean) => {
+    setCoverStatsEnabled(visible);
+    updateView({ metricSlots: visible ? [...savedMetricSlotsRef.current] : [] });
   };
   const toggleArrayValue = <T,>(values: T[], value: T) => (values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
   const toggleSourceMode = (mode: "anilist" | "non-anilist") => {
@@ -3148,7 +3370,7 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
   };
 
   return (
-    <div>
+    <div className="setting-stack logic-feed-settings">
       <div className="field">
         <label htmlFor="feed-name">Feed name</label>
         <input
@@ -3162,24 +3384,56 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
           spellCheck={false}
         />
       </div>
-      <div className="field">
-        <label htmlFor="feed-description">Description</label>
-        <textarea
-          id="feed-description"
-          className="textarea"
-          value={draft.description}
-          onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-          placeholder="Optional context for this feed"
-        />
-      </div>
+      <FeedDescriptionControl
+        id="feed-description"
+        value={draft.description}
+        visible={draft.showDescription}
+        onChange={(description) => setDraft({ ...draft, description })}
+        onVisibleChange={(showDescription) => setDraft({ ...draft, showDescription })}
+      />
+      <FeedGridColumnsControl view={draft.view} onChange={updateView} />
       <ToggleRow
-        label="Show description"
-        description="Show the description directly below the feed name."
-        value={draft.showDescription}
-        onChange={(showDescription) => setDraft({ ...draft, showDescription })}
+        label="Show rank"
+        description="Show each title's position on its cover."
+        value={draft.view.visible.rank}
+        onChange={(rank) => updateView({ visible: { ...draft.view.visible, rank } })}
+      />
+      <ToggleRow label="Show cover stats" description="Show the configured stat strip on covers." value={coverStatsEnabled} onChange={(visible) => {
+        if (!visible && draft.view.metricSlots.length) savedMetricSlotsRef.current = [...draft.view.metricSlots];
+        setCoverStatsVisible(visible);
+      }} />
+      <FeedPresetControls
+        filters={draft.filters}
+        sort={draft.sort}
+        onChange={(filters, sort) => setDraft((current) => ({ ...current, filters, sort }))}
       />
 
-      <h2 className="section-title">Filters</h2>
+      <h2 className="section-title">Tags</h2>
+      {showMoreTags ? (
+        <div className="field">
+          <label>Tag search</label>
+          <input className="input" value={tagSearch} onChange={(event) => setTagSearch(event.target.value)} placeholder="Genres, themes, tropes" />
+        </div>
+      ) : null}
+      <TagChipCloud
+        tags={filteredTags}
+        selectedSourceTags={store.tags}
+        feed={draft}
+        onTagClick={cycleTag}
+        showNonGenres={showMoreTags}
+        tagMatch={draft.filters.tagMatch}
+        onTagMatchChange={(tagMatch) => updateFilters({ tagMatch })}
+      />
+      <button className="button ghost feed-tag-more" type="button" onClick={() => setShowMoreTags((open) => !open)} aria-expanded={showMoreTags}>
+        {showMoreTags ? <ChevronUp size={16} /> : <ChevronDown size={16} />} {showMoreTags ? "Show fewer tag groups" : "Show more tag groups"}
+      </button>
+
+      <button className="button ghost" type="button" onClick={() => setAdvanced((open) => !open)} aria-expanded={advanced}>
+        <SlidersHorizontal size={16} /> Advanced {advanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
+      {advanced ? (
+        <div className="logic-feed-advanced">
+      <h2 className="section-title">Advanced Filters</h2>
       <div className="field">
         <span className="small-label">Source</span>
         <div className="segmented">
@@ -3233,23 +3487,13 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
         </div>
       </div>
 
-      <div className="field-grid">
-        <NumberField label="Min chapters" value={draft.filters.minChapters} onChange={(value) => updateFilters({ minChapters: value })} />
-        <NumberField label="Max chapters" value={draft.filters.maxChapters} onChange={(value) => updateFilters({ maxChapters: value })} />
-        <NumberField label="Min year" value={draft.filters.minYear} onChange={(value) => updateFilters({ minYear: value })} />
-        <NumberField label="Max year" value={draft.filters.maxYear} onChange={(value) => updateFilters({ maxYear: value })} />
-        <NumberField label="Min popularity" value={draft.filters.minPopularity} onChange={(value) => updateFilters({ minPopularity: value })} />
-        <NumberField label="Max popularity" value={draft.filters.maxPopularity} onChange={(value) => updateFilters({ maxPopularity: value })} />
-        <NumberField label="Min favourites" value={draft.filters.minFavourites} onChange={(value) => updateFilters({ minFavourites: value })} />
-        <NumberField label="Max favourites" value={draft.filters.maxFavourites} onChange={(value) => updateFilters({ maxFavourites: value })} />
-        <NumberField label="Min mean score" value={draft.filters.minMeanScore} onChange={(value) => updateFilters({ minMeanScore: value })} />
-        <NumberField label="Max mean score" value={draft.filters.maxMeanScore} onChange={(value) => updateFilters({ maxMeanScore: value })} />
-      </div>
-
-      <MetricRangeEditor
-        ranges={draft.filters.metricRanges ?? []}
-        onChange={(metricRanges) => updateFilters({ metricRanges })}
-      />
+      {coverStatsEnabled ? (
+        <MetricSlotPicker slots={draft.view.metricSlots} onChange={(metricSlots) => {
+          savedMetricSlotsRef.current = [...metricSlots];
+          updateView({ metricSlots });
+        }} />
+      ) : null}
+      <FeedParameterEditor filters={draft.filters} onChange={(filters) => setDraft((current) => ({ ...current, filters }))} />
 
       <h2 className="section-title">Rolling Dates</h2>
       <div className="field-grid">
@@ -3321,24 +3565,6 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
         </div>
       </div>
 
-      <h2 className="section-title">Tags</h2>
-      <div className="field">
-        <label>Tag search</label>
-        <input className="input" value={tagSearch} onChange={(event) => setTagSearch(event.target.value)} placeholder="Genres, themes, tropes" />
-      </div>
-      <div className="field">
-        <label>Tag match</label>
-        <button
-          className={`switch-row ${draft.filters.tagMatch === "any" ? "" : "on"}`}
-          type="button"
-          onClick={() => updateFilters({ tagMatch: draft.filters.tagMatch === "any" ? "all" : "any" })}
-        >
-          <span>{draft.filters.tagMatch === "any" ? "Match ANY included tag" : "Match ALL included tags"}</span>
-          <span className="switch-dot" />
-        </button>
-      </div>
-      <TagChipCloud tags={filteredTags} feed={draft} onTagClick={cycleTag} />
-
       <h2 className="section-title">Sort</h2>
       <div className="settings-list">
         {draft.sort.map((rule, index) => (
@@ -3393,47 +3619,14 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
         <button
           className="button"
           type="button"
-          onClick={() => setDraft((current) => ({ ...current, sort: [...current.sort, { ...DEFAULT_SORT[0], id: crypto.randomUUID() }] }))}
+          onClick={() => setDraft((current) => ({ ...current, sort: [...current.sort, { ...DEFAULT_SORT[0], id: makeId() }] }))}
         >
           <Plus size={16} /> Add sort
         </button>
       </div>
 
-      <h2 className="section-title">Title View</h2>
-      <div className="field-grid">
-        <div className="field">
-          <label>Grid columns</label>
-          <div className="segmented compact-segments">
-            {(isDesktop ? DESKTOP_GRID_OPTIONS : [1, 2, 3, 4, 5]).map((value) => (
-              <button
-                className={`segment ${(isDesktop ? resolvedDesktopGridColumns(draft.view) : draft.view.gridColumns) === value ? "active" : ""}`}
-                type="button"
-                key={value}
-                onClick={() => updateView(isDesktop
-                  ? { desktopGridColumns: value as FeedViewSettings["desktopGridColumns"] }
-                  : { gridColumns: value as FeedViewSettings["gridColumns"] })}
-              >
-                {value}
-              </button>
-            ))}
-          </div>
         </div>
-      </div>
-      <MetricSlotPicker
-        slots={draft.view.metricSlots ?? []}
-        onChange={(metricSlots) => updateView({ metricSlots })}
-      />
-      <ToggleRow
-        label="Show rank"
-        description="Places the rank inside the cover stat strip."
-        value={draft.view.visible.rank}
-        onChange={(rank) =>
-          setDraft((current) => ({
-            ...current,
-            view: { ...current.view, visible: { ...current.view.visible, rank } },
-          }))
-        }
-      />
+      ) : null}
 
       <div className="toolbar">
         <button className="button" type="button" onClick={onCancel}>
@@ -3518,24 +3711,27 @@ function MetricRangeEditor({
   ranges,
   onChange,
   metrics = RANGE_METRICS,
+  title = "Additional Stat Ranges",
+  emptyText = "Add min/max filters for stats such as Fan%, popularity, favourites, scores, and growth.",
 }: {
   ranges: MetricRange[];
   onChange: (ranges: MetricRange[]) => void;
   metrics?: typeof RANGE_METRICS;
+  title?: string;
+  emptyText?: string;
 }) {
   const newestRangeRef = useRef<HTMLDivElement | null>(null);
   const previousRangeCountRef = useRef(ranges.length);
+  const [adding, setAdding] = useState(false);
   useEffect(() => {
     if (ranges.length > previousRangeCountRef.current) {
       window.requestAnimationFrame(() => newestRangeRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" }));
     }
     previousRangeCountRef.current = ranges.length;
   }, [ranges.length]);
-  const addRange = () => {
-    const used = new Set(ranges.map((range) => range.metric));
-    const nextMetric = metrics.find((metric) => !used.has(metric.id))?.id ?? metrics[0]?.id;
-    if (!nextMetric) return;
-    onChange([...ranges, { id: crypto.randomUUID(), metric: nextMetric, min: null, max: null }]);
+  const addRange = (metric: MetricId) => {
+    onChange([...ranges, { id: makeId(), metric, min: null, max: null }]);
+    setAdding(false);
   };
   const update = (id: string, patch: Partial<MetricRange>) => {
     onChange(ranges.map((range) => (range.id === id ? { ...range, ...patch } : range)));
@@ -3543,33 +3739,35 @@ function MetricRangeEditor({
   return (
     <section className="section compact-section">
       <div className="row">
-        <h2 className="section-title">Additional Stat Ranges</h2>
+        <h2 className="section-title">{title}</h2>
         <span className="spacer" />
-        <button className="button" type="button" onClick={addRange} disabled={ranges.length >= metrics.length}>
-          <Plus size={16} /> Add
+        <button className="button" type="button" onClick={() => setAdding((open) => !open)} aria-expanded={adding}>
+          {adding ? <X size={16} /> : <Plus size={16} />} {adding ? "Close" : "Add"}
         </button>
       </div>
-      {ranges.length === 0 ? <p className="muted tiny">Add min/max filters for stats such as Fan%, popularity, favourites, scores, and growth.</p> : null}
+      {ranges.length === 0 ? <p className="muted tiny">{emptyText}</p> : null}
+      {adding ? (
+        <div className="parameter-add-picker" aria-label="Choose a parameter">
+          {metrics.map((metric) => (
+            <button className="feed-preset-option" type="button" key={metric.id} onClick={() => addRange(metric.id)}>
+              <span>{metric.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
       <div className="settings-list">
         {ranges.map((range, index) => (
           <div className="range-row" key={range.id} ref={index === ranges.length - 1 ? newestRangeRef : undefined}>
-            <div className="metric-choice">
-              {metrics.map((metric) => (
-                <button
-                  className={`metric-option ${range.metric === metric.id ? "active" : ""}`}
-                  type="button"
-                  key={metric.id}
-                  onClick={() => update(range.id, { metric: metric.id })}
-                >
-                  {metric.shortLabel}
-                </button>
-              ))}
+            <div className="range-row-header">
+              <strong>{metricDefinition(range.metric).label}</strong>
+              <button className="icon-button" type="button" onClick={() => onChange(ranges.filter((item) => item.id !== range.id))} aria-label={`Remove ${metricDefinition(range.metric).label} range`}>
+                <Trash2 size={16} />
+              </button>
             </div>
-            <NumberField label="Min" value={range.min} onChange={(min) => update(range.id, { min })} />
-            <NumberField label="Max" value={range.max} onChange={(max) => update(range.id, { max })} />
-            <button className="icon-button" type="button" onClick={() => onChange(ranges.filter((item) => item.id !== range.id))} aria-label="Remove stat range">
-              <Trash2 size={16} />
-            </button>
+            <div className="range-row-inputs">
+              <NumberField label="Min" value={range.min} onChange={(min) => update(range.id, { min })} />
+              <NumberField label="Max" value={range.max} onChange={(max) => update(range.id, { max })} />
+            </div>
           </div>
         ))}
       </div>
@@ -3581,6 +3779,7 @@ function MetricSlotPicker({ slots, onChange }: { slots: MetricId[]; onChange: (s
   const current = slots.slice(0, 3);
   const toggle = (metric: MetricId) => {
     if (current.includes(metric)) {
+      if (current.length === 1) return;
       onChange(current.filter((item) => item !== metric));
       return;
     }
@@ -3590,10 +3789,6 @@ function MetricSlotPicker({ slots, onChange }: { slots: MetricId[]; onChange: (s
     <div className="field">
       <div className="row">
         <span className="small-label">Cover stats - max 3</span>
-        <span className="spacer" />
-        <button className="button ghost tiny-button" type="button" onClick={() => onChange([])}>
-          None
-        </button>
       </div>
       <div className="metric-choice">
         {COVER_STAT_METRICS.map((metric) => (
@@ -3612,8 +3807,25 @@ function MetricSlotPicker({ slots, onChange }: { slots: MetricId[]; onChange: (s
   );
 }
 
-function TagChipCloud({ tags, feed, onTagClick }: { tags: TagNode[]; feed: Feed; onTagClick: (id: number) => void }) {
+function TagChipCloud({
+  tags,
+  selectedSourceTags,
+  feed,
+  onTagClick,
+  showNonGenres = true,
+  tagMatch,
+  onTagMatchChange,
+}: {
+  tags: TagNode[];
+  selectedSourceTags: TagNode[];
+  feed: Feed;
+  onTagClick: (id: number) => void;
+  showNonGenres?: boolean;
+  tagMatch: Feed["filters"]["tagMatch"];
+  onTagMatchChange: (tagMatch: Feed["filters"]["tagMatch"]) => void;
+}) {
   const [expandedRoots, setExpandedRoots] = useState<Record<string, boolean>>({});
+  const [selectedOpen, setSelectedOpen] = useState(false);
   const grouped = useMemo(() => {
     const map = new Map<string, TagNode[]>();
     for (const tag of tags) {
@@ -3627,13 +3839,24 @@ function TagChipCloud({ tags, feed, onTagClick }: { tags: TagNode[]; feed: Feed;
       return ai - bi || a[0].localeCompare(b[0]);
     }).map(([root, group]) => [root, group.sort((a, b) => a.path.localeCompare(b.path) || a.name.localeCompare(b.name))] as [string, TagNode[]]);
   }, [tags]);
-  const selectedTags = tags.filter((tag) => feed.filters.includeTagIds.includes(tag.id) || feed.filters.excludeTagIds.includes(tag.id));
+  const selectedTags = selectedSourceTags.filter((tag) => feed.filters.includeTagIds.includes(tag.id) || feed.filters.excludeTagIds.includes(tag.id));
+  const selectedSignature = [...feed.filters.includeTagIds, -1, ...feed.filters.excludeTagIds].join(",");
+  const previousSelectedSignatureRef = useRef(selectedSignature);
+  useEffect(() => {
+    if (previousSelectedSignatureRef.current !== selectedSignature) setSelectedOpen(true);
+    previousSelectedSignatureRef.current = selectedSignature;
+  }, [selectedSignature]);
+  const defaultRoots = new Set(["Genres", "Themes", "Settings"]);
 
   return (
     <div className="tag-tree">
-      {selectedTags.length > 0 && (
-        <div className="selected-tags">
-          <span className="small-label">Selected</span>
+      <details className="selected-tags tag-group" open={selectedOpen} onToggle={(event) => setSelectedOpen(event.currentTarget.open)}>
+        <summary className="tag-summary">
+          <span>Selected</span>
+          <span className="muted tiny">{selectedTags.length}</span>
+        </summary>
+        <div className="selected-tag-rules">
+          {selectedTags.length > 0 ? (
           <div className="chips">
             {selectedTags.map((tag) => (
               <button
@@ -3646,10 +3869,19 @@ function TagChipCloud({ tags, feed, onTagClick }: { tags: TagNode[]; feed: Feed;
               </button>
             ))}
           </div>
+          ) : <p className="muted tiny">No tag rules selected.</p>}
+          <button
+            className={`switch-row ${tagMatch === "any" ? "" : "on"}`}
+            type="button"
+            onClick={() => onTagMatchChange(tagMatch === "any" ? "all" : "any")}
+          >
+            <span>{tagMatch === "any" ? "Match ANY included tag" : "Match ALL included tags"}</span>
+            <span className="switch-dot" />
+          </button>
         </div>
-      )}
-      {grouped.map(([root, group]) => (
-        <details className="tag-group" key={root} open={root === "Genres"}>
+      </details>
+      {grouped.filter(([root]) => showNonGenres || defaultRoots.has(root)).map(([root, group]) => (
+        <details className="tag-group" key={root}>
           <summary className="tag-summary">
             <span>{root}</span>
             <span className="muted tiny">{group.length}</span>
@@ -4087,12 +4319,12 @@ function RecommendationShelfEditor({
   const [draft, setDraft] = useState<RecommendationShelf>(
     () =>
       shelf ?? {
-        id: crypto.randomUUID(),
+        id: makeId(),
         name: "Custom matches",
         statusMode: "any",
         dateMode: "any",
         sourceModes: ["anilist", "non-anilist"],
-        sort: [{ id: crypto.randomUUID(), metric: "fanFavouriteDiscoveryPercentile", direction: "desc" }],
+        sort: [{ id: makeId(), metric: "fanFavouriteDiscoveryPercentile", direction: "desc" }],
         metricRanges: [],
       },
   );
@@ -4136,7 +4368,7 @@ function RecommendationShelfEditor({
             onClick={() =>
               setDraft({
                 ...draft,
-                sort: [...draft.sort, { id: crypto.randomUUID(), metric: "fanFavouriteDiscoveryPercentile", direction: "desc" }],
+                sort: [...draft.sort, { id: makeId(), metric: "fanFavouriteDiscoveryPercentile", direction: "desc" }],
               })
             }
           >

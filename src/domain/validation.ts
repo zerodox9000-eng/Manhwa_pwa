@@ -201,6 +201,7 @@ const feedFiltersSchema = z
         .passthrough(),
     ).optional(),
     includeEstimatedDates: z.boolean().optional(),
+    requireOfficialEnglishLink: z.boolean().optional(),
     dateField: z.enum(["none", "release", "end"]).optional(),
     rolling: z
       .object({
