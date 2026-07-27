@@ -908,12 +908,16 @@ function LibraryLoadingState({
   complete,
   downloadProgress,
   onVisualComplete,
+  progressLabel = "Library download in progress",
   status,
+  title = "Preparing your library",
 }: {
   complete: boolean;
   downloadProgress: number | null;
-  onVisualComplete: () => void;
+  onVisualComplete?: () => void;
+  progressLabel?: string;
   status: string;
+  title?: string;
 }) {
   const fillRef = useRef<HTMLSpanElement>(null);
   const actualTargetRef = useRef(20);
@@ -930,13 +934,13 @@ function LibraryLoadingState({
     if (finishingRef.current || (!complete && !status.toLowerCase().includes("saving"))) return;
     if (complete && downloadProgress === null && !status.toLowerCase().includes("saving")) {
       finishingRef.current = true;
-      onVisualComplete();
+      onVisualComplete?.();
       return;
     }
     finishingRef.current = true;
     const fill = fillRef.current;
     if (!fill) {
-      onVisualComplete();
+      onVisualComplete?.();
       return;
     }
     const currentTransform = getComputedStyle(fill).transform;
@@ -948,7 +952,7 @@ function LibraryLoadingState({
     completionAnimationRef.current = animation;
     void animation.finished.then(() => {
       fill.style.transform = "scaleX(1)";
-      onVisualComplete();
+      onVisualComplete?.();
     }).catch(() => undefined);
   }, [complete, downloadProgress, onVisualComplete, status]);
 
@@ -977,13 +981,13 @@ function LibraryLoadingState({
           <Database size={28} strokeWidth={1.8} />
         </div>
         <div className="library-loading-copy">
-          <strong>Preparing your library</strong>
+          <strong>{title}</strong>
           <span>{status}</span>
         </div>
         <div
           className="library-loading-progress"
           role="progressbar"
-          aria-label="Library download in progress"
+          aria-label={progressLabel}
           aria-valuetext={status}
         >
           <span ref={fillRef} />
@@ -4988,13 +4992,25 @@ function ImportPage() {
     navigate("/");
   };
 
+  if (payload?.kind === "feed") {
+    return (
+      <div className="page">
+        <LibraryLoadingState
+          complete={store.ready}
+          downloadProgress={store.syncProgress}
+          progressLabel="Shared feed library download in progress"
+          status={store.syncStatus || `Opening ${payload.feed.name}`}
+          title="Opening shared feed"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="page">
       <h1>Import Preview</h1>
       {!payload ? (
         <div className="empty-state">This share link could not be decoded.</div>
-      ) : payload.kind === "feed" ? (
-        <div className="empty-state">Opening {payload.feed.name}...</div>
       ) : (
         <div className="empty-state">
           <Import size={28} />
