@@ -58,7 +58,7 @@ import { matchesSearchTextWords, searchTextWordPosition, searchWords, seriesSear
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
-import { decodeSharePayload, makeShareUrl, type SharePayload } from "./domain/share";
+import { decodeSharePayload, makeShareUrl, makeTitleShareUrl, type SharePayload } from "./domain/share";
 import type {
   AppSettings,
   AppStateSnapshot,
@@ -559,7 +559,7 @@ function AppFrame() {
         )}
         {keepUpdatesMounted && (
           <div className={!showingUpdates ? "route-cache-hidden" : undefined} aria-hidden={!showingUpdates || undefined}>
-            <TrendsPage />
+            {store.ready ? <TrendsPage /> : <CatalogLoadingPage />}
           </div>
         )}
         {showingTitle ? (
@@ -569,8 +569,8 @@ function AppFrame() {
         ) : (
           !showingHome && (
             <Routes>
-              <Route path="/feeds" element={<FeedsPage />} />
-              <Route path="/search" element={<SearchPage />} />
+              <Route path="/feeds" element={store.ready ? <FeedsPage /> : <CatalogLoadingPage />} />
+              <Route path="/search" element={store.ready ? <SearchPage /> : <CatalogLoadingPage />} />
               <Route path="/updates" element={null} />
               <Route path="/trends" element={<Navigate to="/updates" replace />} />
               <Route path="/recommendations/*" element={<Navigate to="/" replace />} />
@@ -993,6 +993,19 @@ function LibraryLoadingState({
           <span ref={fillRef} />
         </div>
       </div>
+    </div>
+  );
+}
+
+function CatalogLoadingPage() {
+  const store = useAppStore();
+  return (
+    <div className="page">
+      <LibraryLoadingState
+        complete={store.ready}
+        downloadProgress={store.syncProgress}
+        status={store.syncStatus || "Preparing library data"}
+      />
     </div>
   );
 }
@@ -4441,6 +4454,7 @@ function DetailAddToMyListDrawer({
 
 function TitleDetailPage() {
   const store = useAppStore();
+  const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
   const id = Number(params.id);
@@ -4450,10 +4464,12 @@ function TitleDetailPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("Loading detail");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [addToMyListOpen, setAddToMyListOpen] = useState(false);
   const [addToMyListStatus, setAddToMyListStatus] = useState("");
   const [titleCopyStatus, setTitleCopyStatus] = useState("");
   const detailLayoutKey = `manhwa-detail-layout:${store.activeFeedId ?? "default"}`;
+  const sharedLaunch = new URLSearchParams(location.search).get("shared") === "1";
   const [visible, setVisible] = useState(() => {
     try {
       return {
@@ -4564,7 +4580,7 @@ function TitleDetailPage() {
     <div className="detail-page">
       {series?.cover && <img className="detail-bg" src={series.cover} alt="" />}
       <div className="detail-top-actions">
-        <button className="icon-button" type="button" onClick={() => navigate(-1)} aria-label="Back">
+        <button className="icon-button" type="button" onClick={() => sharedLaunch ? navigate("/", { replace: true }) : navigate(-1)} aria-label="Back">
           <ArrowLeft size={22} />
         </button>
         <span className="spacer" />
@@ -4577,6 +4593,16 @@ function TitleDetailPage() {
           title={isInMyList ? "Already in MY LIST" : "Add to MY LIST"}
         >
           {isInMyList ? <Check size={20} /> : <Plus size={20} />}
+        </button>
+        <button
+          className="icon-button"
+          type="button"
+          disabled={invalidRoute || !series}
+          onClick={() => setShareOpen(true)}
+          aria-label="Share title"
+          title="Share title"
+        >
+          <Share2 size={20} />
         </button>
         <button className="icon-button" type="button" onClick={() => setSettingsOpen(true)} aria-label="Detail settings">
           <EllipsisVertical size={20} />
@@ -4644,7 +4670,7 @@ function TitleDetailPage() {
               <p className="muted">{status}</p>
             </section>
           )}
-          {visible.genreTags && (
+          {visible.genreTags && tagsById.size > 0 && (
             <section className="detail-block">
               <GenreChips series={series} tagsById={tagsById} />
             </section>
@@ -4680,10 +4706,74 @@ function TitleDetailPage() {
       <BottomDrawer title="Detail Settings" open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DetailSettingsDrawer visible={visible} onChange={setVisible} />
       </BottomDrawer>
+      {series ? (
+        <TitleShareDrawer
+          id={series.id}
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          onStatus={setTitleCopyStatus}
+          title={series.display_title}
+        />
+      ) : null}
       <DetailAddToMyListDrawer open={addToMyListOpen} onOpenChange={setAddToMyListOpen} titleId={id} onStatus={setAddToMyListStatus} />
       {titleCopyStatus ? <div className="selection-result-toast" role="status">{titleCopyStatus}</div> : null}
       {addToMyListStatus ? <div className="selection-result-toast" role="status">{addToMyListStatus}</div> : null}
     </div>
+  );
+}
+
+function TitleShareDrawer({
+  id,
+  open,
+  onOpenChange,
+  onStatus,
+  title,
+}: {
+  id: number;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onStatus: (status: string) => void;
+  title: string;
+}) {
+  const url = useMemo(() => makeTitleShareUrl(id), [id]);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (open) setError("");
+  }, [open]);
+  const copyLink = async () => {
+    if (await copyTextToClipboard(url)) {
+      onOpenChange(false);
+      onStatus("Link copied");
+      return;
+    }
+    setError("Could not copy link");
+  };
+  const share = async () => {
+    if (!navigator.share) {
+      await copyLink();
+      return;
+    }
+    try {
+      await navigator.share({ title, url });
+      onOpenChange(false);
+    } catch (shareError) {
+      if (shareError instanceof DOMException && shareError.name === "AbortError") return;
+      setError("Could not share link");
+    }
+  };
+  return (
+    <BottomDrawer title="Share title" open={open} onOpenChange={onOpenChange}>
+      <div>
+        <h2 className="share-title">{title}</h2>
+        <p className="muted">This link opens the title directly while Aeon prepares the library in the background.</p>
+        <textarea className="textarea" readOnly value={url} />
+        <div className="toolbar">
+          <button className="button primary" type="button" onClick={() => void share()}><Share2 size={16} /> Share</button>
+          <button className="button" type="button" onClick={() => void copyLink()}><Copy size={16} /> Copy</button>
+        </div>
+        {error ? <div className="settings-status" role="status">{error}</div> : null}
+      </div>
+    </BottomDrawer>
   );
 }
 

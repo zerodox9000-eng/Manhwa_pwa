@@ -62,6 +62,12 @@ export function makeShareUrl(payload: SharePayload) {
   return result.length <= 8192 ? result : null;
 }
 
+export function makeTitleShareUrl(id: number, href = window.location.href) {
+  const url = new URL(href);
+  url.hash = `#/title/${id}?shared=1`;
+  return url.toString();
+}
+
 export function exportCsv(rows: Record<string, unknown>[]) {
   if (rows.length === 0) return "";
   const headers = Object.keys(rows[0]);

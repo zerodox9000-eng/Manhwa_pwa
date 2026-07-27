@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createFeed } from "./defaults";
 import { createCustomFeed } from "./defaults";
-import { decodeSharePayload, encodeSharePayload } from "./share";
+import { decodeSharePayload, encodeSharePayload, makeTitleShareUrl } from "./share";
 
 describe("share codec", () => {
   it("round-trips compressed feed links", () => {
@@ -22,5 +22,10 @@ describe("share codec", () => {
     feed.newTitlePlacement = "bottom";
     const payload = { kind: "feed" as const, version: 3 as const, feed };
     expect(decodeSharePayload(encodeSharePayload(payload))).toEqual(payload);
+  });
+
+  it("creates a direct shared-title route without carrying the current hash", () => {
+    expect(makeTitleShareUrl(1321, "https://zerodox9000-eng.github.io/Manhwa_pwa/#/search"))
+      .toBe("https://zerodox9000-eng.github.io/Manhwa_pwa/#/title/1321?shared=1");
   });
 });
