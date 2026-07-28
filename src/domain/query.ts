@@ -323,7 +323,12 @@ export function runFeedQuery(args: {
     }
 
     if (filters.statuses.length > 0 && (!item.status || !filters.statuses.includes(item.status))) return false;
-    if (filters.requireOfficialEnglishLink && !item.links?.read_en?.trim()) return false;
+    if (
+      filters.requireOfficialEnglishLink &&
+      !item.links?.read_en?.trim() &&
+      !item.links?.official_en?.trim() &&
+      !item.links?.read_en_all?.some((href) => href.trim())
+    ) return false;
     if (filters.includeEstimatedDates === false && !displayReleaseDate(item)) return false;
     if (usesReleaseDateSort && !effectiveReleaseDate(item)) return false;
 

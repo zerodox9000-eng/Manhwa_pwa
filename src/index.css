@@ -3599,6 +3599,15 @@ textarea,
   backdrop-filter: blur(14px) saturate(1.12);
 }
 
+.detail-all-tags,
+.detail-all-tags .chip {
+  backdrop-filter: none;
+}
+
+.detail-all-tags {
+  background: rgba(20, 22, 29, 0.94);
+}
+
 /* Home pager: native scroll-snap shell. Keep this last. */
 .home-page {
   position: relative;
@@ -4898,6 +4907,47 @@ textarea,
 
 .feed-preset-panel .field > .muted {
   margin: -2px 0 1px;
+}
+
+.feed-preset-disclosure {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.feed-preset-disclosure-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.feed-preset-disclosure-summary::-webkit-details-marker {
+  display: none;
+}
+
+.feed-preset-disclosure-state {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.feed-preset-disclosure-summary svg {
+  color: var(--muted);
+  transition: transform 160ms ease;
+}
+
+.feed-preset-disclosure[open] .feed-preset-disclosure-summary svg {
+  transform: rotate(180deg);
+}
+
+.feed-preset-disclosure-grid {
+  padding: 0 9px 9px;
 }
 
 .feed-preset-grid {

@@ -310,7 +310,11 @@ async function fetchFreshSeriesDetail(source: string, id: number, attempts = 3, 
   throw lastError;
 }
 
-export async function fetchSeriesDetail(source: string, id: number) {
+export async function fetchSeriesDetail(
+  source: string,
+  id: number,
+  onRefresh?: (detail: SeriesDetail) => void,
+) {
   const cached = await db.details.get(id);
   if (cached) {
     if (!hasDetailDescription(cached)) {
@@ -324,6 +328,7 @@ export async function fetchSeriesDetail(source: string, id: number) {
       : cached;
     if (detail !== cached) await db.details.put(detail);
     void fetchFreshSeriesDetail(source, id, 1)
+      .then((freshDetail) => onRefresh?.(freshDetail))
       .catch(() => {
         // Cached detail keeps route changes instant; refresh failures can wait for the next sync.
       });

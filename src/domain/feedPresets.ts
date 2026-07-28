@@ -85,6 +85,7 @@ const optionsByGroup: Record<PresetGroup, FeedPresetOption[]> = {
 };
 
 const presetId = (group: PresetGroup, id: string) => `preset:${group}:${id}`;
+const releaseYearPresetId = (year: number) => `preset:release-year:${year}`;
 
 export function isFeedPresetRange(range: MetricRange) {
   return range.id.startsWith("preset:");
@@ -93,6 +94,30 @@ export function isFeedPresetRange(range: MetricRange) {
 export function selectedFeedPresetIds(filters: FeedFilters, group: PresetGroup) {
   const ids = new Set((filters.metricRanges ?? []).map((range) => range.id));
   return optionsByGroup[group].filter((option) => ids.has(presetId(group, option.id))).map((option) => option.id);
+}
+
+export function releaseYearPresets(currentYear = new Date().getFullYear()) {
+  return Array.from({ length: Math.max(0, currentYear - 2013) }, (_, index) => currentYear - index);
+}
+
+export function selectedReleaseYearPresets(filters: FeedFilters) {
+  return (filters.metricRanges ?? [])
+    .filter((range) => range.id.startsWith("preset:release-year:") && range.metric === "year" && range.min === range.max)
+    .map((range) => range.min)
+    .filter((year): year is number => year != null);
+}
+
+export function toggleReleaseYearPreset(filters: FeedFilters, year: number) {
+  const selected = new Set(selectedReleaseYearPresets(filters));
+  if (selected.has(year)) selected.delete(year);
+  else selected.add(year);
+  const metricRanges = [
+    ...(filters.metricRanges ?? []).filter((range) => range.metric !== "year"),
+    ...[...selected]
+      .sort((left, right) => right - left)
+      .map((value) => ({ id: releaseYearPresetId(value), metric: "year" as const, min: value, max: value })),
+  ];
+  return { ...filters, minYear: null, maxYear: null, metricRanges };
 }
 
 function replaceMetricRanges(filters: FeedFilters, metric: MetricId, ranges: MetricRange[]) {
@@ -144,14 +169,18 @@ export function selectStatusPreset(filters: FeedFilters, id: string) {
 }
 
 export function selectedSortPresetId(sort: SortRule[]) {
-  if (sort.length !== 1 || sort[0].direction !== "desc") return null;
+  if (sort.length !== 1) return null;
   return SORT_PRESETS.find((option) => option.metric === sort[0].metric)?.id ?? null;
 }
 
 export function selectSortPreset(sort: SortRule[], id: string): SortRule[] {
   const option = SORT_PRESETS.find((item) => item.id === id);
   if (!option) return sort;
-  return [{ id: sort[0]?.id ?? `sort:preset:${id}`, metric: option.metric, direction: "desc" }];
+  return [{
+    id: sort[0]?.id ?? `sort:preset:${id}`,
+    metric: option.metric,
+    direction: sort[0]?.direction ?? "desc",
+  }];
 }
 
 export function selectedPeriodPresetId(filters: FeedFilters) {

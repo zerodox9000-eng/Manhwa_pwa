@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SeriesCatalog } from "./types";
-import { matchesSearchWords } from "./search";
+import { matchesSearchWords, rankedDirectSearchMatches } from "./search";
 
 const series: SeriesCatalog = {
   id: 1,
@@ -25,5 +25,19 @@ describe("matchesSearchWords", () => {
 
   it("matches creator-name words in any order", () => {
     expect(matchesSearchWords(series, "Writer Example")).toBe(true);
+  });
+});
+
+describe("rankedDirectSearchMatches", () => {
+  it("keeps only the best bounded matches for a broad query", () => {
+    const items = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
+    const textById = new Map([
+      [1, "the distant cat"],
+      [2, "cat"],
+      [3, "social beginner cat"],
+      [4, "cat at the end"],
+    ]);
+
+    expect(rankedDirectSearchMatches(items, textById, ["cat"], 2)).toEqual([{ id: 2 }, { id: 4 }]);
   });
 });

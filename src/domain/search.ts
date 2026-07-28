@@ -27,6 +27,31 @@ export function searchTextWordPosition(text: string, words: string[]) {
   return words.reduce((score, word) => score + Math.max(0, text.indexOf(word)), 0);
 }
 
+export function rankedDirectSearchMatches<T extends { id: number }>(
+  items: T[],
+  textById: ReadonlyMap<number, string>,
+  words: string[],
+  limit: number,
+) {
+  if (words.length === 0 || limit <= 0) return [];
+  const ranked: { item: T; score: number }[] = [];
+  for (const item of items) {
+    const text = textById.get(item.id) ?? "";
+    if (!matchesSearchTextWords(text, words)) continue;
+    const score = searchTextWordPosition(text, words);
+    let low = 0;
+    let high = ranked.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (ranked[middle].score <= score) low = middle + 1;
+      else high = middle;
+    }
+    ranked.splice(low, 0, { item, score });
+    if (ranked.length > limit) ranked.pop();
+  }
+  return ranked.map(({ item }) => item);
+}
+
 export function matchesSearchWords(series: SeriesCatalog, query: string) {
   return matchesSearchTextWords(seriesSearchText(series), searchWords(query));
 }

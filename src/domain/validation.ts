@@ -112,7 +112,15 @@ const seriesCatalogSchema = z
     mangabaka_latest_snapshot_at: stringNull.default(null),
     authors: z.array(z.string()).optional(),
     artists: z.array(z.string()).optional(),
-    links: z.record(z.string(), z.union([z.string(), z.null()])).optional(),
+    links: z
+      .object({
+        mangabaka: stringNull.optional(),
+        read_en: stringNull.optional(),
+        read_en_all: z.array(z.string()).optional(),
+        official_en: stringNull.optional(),
+      })
+      .passthrough()
+      .optional(),
     source: z
       .object({
         anilist: z

@@ -58,23 +58,26 @@ import {
   PERIOD_PRESETS,
   PERIOD_PURPOSES,
   POPULARITY_PRESETS,
+  releaseYearPresets,
   selectPeriodPreset,
   selectPeriodPurpose,
   selectSingleFeedPreset,
   selectSortPreset,
   selectStatusPreset,
   selectedPeriodPresetId,
+  selectedReleaseYearPresets,
   selectedFeedPresetIds,
   selectedSortPresetId,
   selectedStatusPresetId,
   SORT_PRESETS,
   STATUS_PRESETS,
   togglePopularityPreset,
+  toggleReleaseYearPreset,
 } from "./domain/feedPresets";
 import { isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments";
 import { resolveRollingWindow } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
-import { matchesSearchTextWords, searchTextWordPosition, searchWords, seriesSearchText } from "./domain/search";
+import { matchesSearchTextWords, rankedDirectSearchMatches, searchTextWordPosition, searchWords, seriesSearchText } from "./domain/search";
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
@@ -432,6 +435,35 @@ function faviconForUrl(href: string) {
     return `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=32`;
   } catch {
     return "";
+  }
+}
+
+const READING_PLATFORM_NAMES: Record<string, string> = {
+  "comics.inkr.com": "INKR Comics",
+  "daycomics.com": "DAYcomics",
+  "global.toomics.com": "Toomics",
+  "lezhin.com": "Lezhin Comics",
+  "lezhinus.com": "Lezhin Comics",
+  "lezhinx.com": "Lezhin X",
+  "m.tapas.io": "Tapas",
+  "m.webnovel.com": "WebNovel",
+  "mangaplaza.com": "MangaPlaza",
+  "mangatoon.mobi": "MangaToon",
+  "manta.net": "Manta",
+  "tapas.io": "Tapas",
+  "tappytoon.com": "Tappytoon",
+  "toomics.com": "Toomics",
+  "webcomicsapp.com": "WebComics",
+  "webnovel.com": "WebNovel",
+  "webtoons.com": "WEBTOON",
+};
+
+function readingPlatformName(href: string) {
+  try {
+    const hostname = new URL(href).hostname.toLowerCase().replace(/^www\./, "");
+    return READING_PLATFORM_NAMES[hostname] ?? hostname;
+  } catch {
+    return "Official English";
   }
 }
 
@@ -1974,6 +2006,7 @@ function TitleCollection({
   rankById,
   loading = false,
   catalogReady = true,
+  pageSizeOverride,
 }: {
   items: SeriesCatalog[];
   feed: Feed;
@@ -1982,8 +2015,9 @@ function TitleCollection({
   rankById?: ReadonlyMap<number, number>;
   loading?: boolean;
   catalogReady?: boolean;
+  pageSizeOverride?: number;
 }) {
-  const pageSize = feed.view.gridColumns >= 5 ? 60 : feed.view.gridColumns === 4 ? 72 : 120;
+  const pageSize = pageSizeOverride ?? (feed.view.gridColumns >= 5 ? 60 : feed.view.gridColumns === 4 ? 72 : 120);
   const countKey = `manhwa-visible-count:${feed.id}:${feed.view.gridColumns}:${feed.view.gridDensity}`;
   const legacyCountKey = `manhwa-visible-count:${feed.id}:${feed.view.gridColumns}`;
   const [visibleCount, setVisibleCount] = useState(() => readPersistedVisibleCount(countKey, legacyCountKey, pageSize));
@@ -3022,6 +3056,7 @@ function FeedPresetControls({
   const status = selectedStatusPresetId(filters);
   const sorting = selectedSortPresetId(sort);
   const customSorting = customSortActive || (!sorting && sort.length > 0);
+  const sortDirection = sort[0]?.direction ?? "desc";
   const period = selectedPeriodPresetId(filters);
   const periodPurpose = PERIOD_PURPOSES.find((option) => option.dateField === filters.dateField)?.id ?? "growth";
   const renderOptions = (
@@ -3063,6 +3098,7 @@ function FeedPresetControls({
         <span className="small-label">Chapters</span>
         {renderOptions(CHAPTER_PRESETS, chapters, (id) => onChange(selectSingleFeedPreset(filters, "chapters", id), sort))}
       </div>
+      <ReleaseYearPresetControl filters={filters} onChange={(nextFilters) => onChange(nextFilters, sort)} />
       <div className="field">
         <span className="small-label">Status</span>
         {renderOptions(STATUS_PRESETS, new Set(status ? [status] : []), (id) => onChange(selectStatusPreset(filters, id), sort))}
@@ -3091,6 +3127,23 @@ function FeedPresetControls({
           onChange(nextFilters, selectSortPreset(sort, id));
         }, "wide-labels")}
       </div>
+      {!customSorting && sorting && (
+        <div className="field">
+          <span className="small-label">Order</span>
+          {renderOptions(
+            [
+              { id: "desc", label: "High first" },
+              { id: "asc", label: "Low first" },
+            ],
+            new Set([sortDirection]),
+            (direction) => onChange(filters, sort.map((rule) => ({
+              ...rule,
+              direction: direction as "asc" | "desc",
+            }))),
+            "two-column",
+          )}
+        </div>
+      )}
       <div className="field">
         <span className="small-label">Time period</span>
         {renderOptions(PERIOD_PRESETS, new Set(period ? [period] : []), (id) => onChange(selectPeriodPreset(filters, id), sort), "two-column")}
@@ -3159,6 +3212,32 @@ function FeedParameterEditor({ filters, onChange }: { filters: Feed["filters"]; 
       ranges={manualParameterRanges(filters)}
       onChange={(ranges) => onChange(applyManualParameterRanges(filters, ranges))}
     />
+  );
+}
+
+function ReleaseYearPresetControl({ filters, onChange }: { filters: Feed["filters"]; onChange: (filters: Feed["filters"]) => void }) {
+  const selected = new Set(selectedReleaseYearPresets(filters));
+  return (
+    <details className="feed-preset-disclosure">
+      <summary className="feed-preset-disclosure-summary">
+        <span className="small-label">Release year</span>
+        <span className="feed-preset-disclosure-state">{selected.size ? `${selected.size} selected` : "Any year"}</span>
+        <ChevronDown size={17} aria-hidden="true" />
+      </summary>
+      <div className="feed-preset-grid feed-preset-disclosure-grid">
+        {releaseYearPresets().map((year) => (
+          <button
+            className={`feed-preset-option ${selected.has(year) ? "active" : ""}`}
+            type="button"
+            key={year}
+            aria-pressed={selected.has(year)}
+            onClick={() => onChange(toggleReleaseYearPreset(filters, year))}
+          >
+            <span>{year}</span>
+          </button>
+        ))}
+      </div>
+    </details>
   );
 }
 
@@ -4000,13 +4079,7 @@ function SearchPage() {
         .slice(0, 120);
     }
     const words = searchWords(term);
-    const directMatches = visibleSearchCatalog
-      .filter((item) => matchesSearchTextWords(searchTextById.get(item.id) ?? "", words))
-      .sort(
-        (left, right) =>
-          searchTextWordPosition(searchTextById.get(left.id) ?? "", words) -
-          searchTextWordPosition(searchTextById.get(right.id) ?? "", words),
-      );
+    const directMatches = rankedDirectSearchMatches(visibleSearchCatalog, searchTextById, words, 120);
     if (directMatches.length > 0) return directMatches.slice(0, 120);
     const fuzzyMatches = searchIndex
       .search(term, { limit: 180 })
@@ -4071,6 +4144,7 @@ function SearchPage() {
             feed={searchFeed}
             history={store.history}
             latestDate={store.syncMeta?.historyLastDate}
+            pageSizeOverride={36}
           />
         </section>
       ) : (
@@ -4740,7 +4814,9 @@ function TitleDetailPage() {
       setLoading(false);
       return;
     }
-    void fetchSeriesDetail(store.settings.dataSourceUrl, id)
+    void fetchSeriesDetail(store.settings.dataSourceUrl, id, (freshDetail) => {
+      if (!cancelled && freshDetail.id === id) setDetail(freshDetail);
+    })
       .then((value) => {
         if (!cancelled) {
           setDetail(value);
@@ -4913,7 +4989,7 @@ function TitleDetailPage() {
             </section>
           )}
           {visible.allTags && (
-            <section className="detail-block">
+            <section className="detail-block detail-all-tags">
               <h2 className="section-title">Tags</h2>
               <div className="chips">
                 {series.tag_ids
@@ -5149,18 +5225,26 @@ function DetailStats({
 }
 
 function DetailLinks({ series }: { series: SeriesCatalog }) {
-  const links = [
+  const sourceLinks = [
     ["MangaBaka", series.links?.mangabaka],
     ["AniList", series.source?.anilist?.url],
     ["MangaUpdates", series.source?.mangaupdates?.url],
     ["Anime-Planet", series.source?.animeplanet?.url],
-    ["Read EN", series.links?.read_en],
   ].filter(([, href]) => Boolean(href)) as [string, string][];
+  const officialEnglishUrls = [...new Set([
+    ...(series.links?.read_en_all ?? []),
+    series.links?.read_en,
+    series.links?.official_en,
+  ].filter((href): href is string => Boolean(href?.trim())))];
+  const links = [
+    ...sourceLinks,
+    ...officialEnglishUrls.map((href) => [`Read on ${readingPlatformName(href)}`, href] as [string, string]),
+  ];
   if (links.length === 0) return null;
   return (
     <div className="chips link-chips">
       {links.map(([label, href]) => (
-        <a className="chip link-chip" href={href} target="_blank" rel="noreferrer" key={label}>
+        <a className="chip link-chip" href={href} target="_blank" rel="noreferrer" key={`${label}-${href}`}>
           <img className="link-favicon" src={faviconForUrl(href)} alt="" aria-hidden="true" loading="lazy" decoding="async" />
           <span>{label}</span>
         </a>

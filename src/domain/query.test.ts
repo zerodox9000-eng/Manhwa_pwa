@@ -83,17 +83,18 @@ describe("runFeedQuery", () => {
   it("filters both logic and custom feeds to titles with an official English link", () => {
     const series = [
       { ...baseSeries[0], links: { read_en: "https://example.com/read" } },
-      { ...baseSeries[1], links: { read_en: null } },
+      { ...baseSeries[1], links: { read_en: null, read_en_all: ["https://example.com/second"] } },
+      { ...baseSeries[2], links: { read_en: null } },
     ];
     const logic = createFeed("Official English");
     logic.filters.requireOfficialEnglishLink = true;
-    expect(runFeedQuery({ feed: logic, series, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id)).toEqual([1]);
+    expect(runFeedQuery({ feed: logic, series, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id)).toEqual([2, 1]);
 
     const custom = createCustomFeed("Official English");
-    custom.titleIds = [2, 1];
+    custom.titleIds = [3, 2, 1];
     custom.filters.requireOfficialEnglishLink = true;
-    expect(runFeedQuery({ feed: custom, series, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id)).toEqual([1]);
-    expect(custom.titleIds).toEqual([2, 1]);
+    expect(runFeedQuery({ feed: custom, series, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id)).toEqual([2, 1]);
+    expect(custom.titleIds).toEqual([3, 2, 1]);
   });
 
   it("automatically sorts AniList members while pinning non-AniList titles", () => {

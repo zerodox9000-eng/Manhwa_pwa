@@ -171,7 +171,16 @@ function mergeRecord(left: SeriesCatalog, right: SeriesCatalog) {
     tag_ids: unique([...(left.tag_ids ?? []), ...(right.tag_ids ?? [])]),
     authors: unique([...(left.authors ?? []), ...(right.authors ?? [])]),
     artists: unique([...(left.artists ?? []), ...(right.artists ?? [])]),
-    links: { ...(left.links ?? {}), ...(right.links ?? {}) },
+    links: {
+      ...(left.links ?? {}),
+      ...(right.links ?? {}),
+      read_en_all: unique([
+        ...(left.links?.read_en_all ?? []),
+        left.links?.read_en,
+        ...(right.links?.read_en_all ?? []),
+        right.links?.read_en,
+      ]),
+    },
     source: {
       ...(left.source ?? {}),
       ...(right.source ?? {}),

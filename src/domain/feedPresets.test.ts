@@ -5,6 +5,7 @@ import {
   FAN_RANK_PRESETS,
   PERIOD_PRESETS,
   POPULARITY_PRESETS,
+  releaseYearPresets,
   selectPeriodPreset,
   selectPeriodPurpose,
   selectSingleFeedPreset,
@@ -12,9 +13,11 @@ import {
   selectStatusPreset,
   selectedFeedPresetIds,
   selectedPeriodPresetId,
+  selectedReleaseYearPresets,
   selectedSortPresetId,
   selectedStatusPresetId,
   togglePopularityPreset,
+  toggleReleaseYearPreset,
 } from "./feedPresets";
 
 describe("feed presets", () => {
@@ -89,6 +92,11 @@ describe("feed presets", () => {
     feed.sort = selectSortPreset(feed.sort, "popularity-growth");
     expect(selectedSortPresetId(feed.sort)).toBe("popularity-growth");
     expect(feed.sort).toMatchObject([{ metric: "popularityGrowthPercent", direction: "desc" }]);
+
+    feed.sort = [{ ...feed.sort[0], direction: "asc" }];
+    feed.sort = selectSortPreset(feed.sort, "popularity");
+    expect(selectedSortPresetId(feed.sort)).toBe("popularity");
+    expect(feed.sort).toMatchObject([{ metric: "popularity", direction: "asc" }]);
   });
 
   it("starts new logic and custom feeds with Fan Rank sorting", () => {
@@ -106,5 +114,21 @@ describe("feed presets", () => {
     expect(feed.filters.rolling).toMatchObject({ mode: "last", amount: 3, unit: "months" });
     expect(feed.filters.dateField).toBe("release");
     expect(PERIOD_PRESETS.map((option) => option.label)).toEqual(["1 Week", "1 Month", "3 Months", "1 Year"]);
+  });
+
+  it("selects multiple exact release years without retaining a manual year range", () => {
+    const feed = createFeed();
+    feed.filters.minYear = 2020;
+    feed.filters.maxYear = 2024;
+    feed.filters = toggleReleaseYearPreset(feed.filters, 2026);
+    feed.filters = toggleReleaseYearPreset(feed.filters, 2024);
+
+    expect(releaseYearPresets(2026)).toEqual([2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015, 2014]);
+    expect(selectedReleaseYearPresets(feed.filters)).toEqual([2026, 2024]);
+    expect(feed.filters).toMatchObject({ minYear: null, maxYear: null });
+    expect(feed.filters.metricRanges).toMatchObject([
+      { metric: "year", min: 2026, max: 2026 },
+      { metric: "year", min: 2024, max: 2024 },
+    ]);
   });
 });

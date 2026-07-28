@@ -39,6 +39,13 @@ export interface SeriesTitle {
   note?: string | null;
 }
 
+export interface SeriesLinks {
+  mangabaka?: string | null;
+  read_en?: string | null;
+  read_en_all?: string[];
+  official_en?: string | null;
+}
+
 export interface SeriesCatalog {
   id: number;
   merged_ids?: number[];
@@ -68,7 +75,7 @@ export interface SeriesCatalog {
   mangabaka_latest_snapshot_at?: string | null;
   authors?: string[];
   artists?: string[];
-  links?: Record<string, string | null>;
+  links?: SeriesLinks;
   source?: {
     anilist?: { id: number; rating?: number | null; url?: string | null } | null;
     animeplanet?: { id: string; rating?: number | null; url?: string | null } | null;
