@@ -493,9 +493,20 @@ function AppFrame() {
   const showingHome = location.pathname === "/";
   const showingTitle = location.pathname.startsWith("/title/");
   const showingUpdates = location.pathname === "/updates";
+  const sharedFeedName = useMemo(() => {
+    if (location.pathname !== "/import") return null;
+    const encoded = new URLSearchParams(location.search).get("p");
+    if (!encoded) return null;
+    try {
+      const payload = decodeSharePayload(encoded);
+      return payload.kind === "feed" ? payload.feed.name : null;
+    } catch {
+      return null;
+    }
+  }, [location.pathname, location.search]);
   const libraryLoaderOwnsScreen = libraryLoaderVisible
     && !showingTitle
-    && location.pathname !== "/import";
+    && (location.pathname !== "/import" || sharedFeedName !== null);
   const keepHomeMounted = showingHome
     || (showingTitle && sessionStorage.getItem(HOME_RETURNING_FROM_TITLE_KEY) === "1");
   const keepUpdatesMounted = showingUpdates
@@ -711,7 +722,9 @@ function AppFrame() {
             error={store.syncError}
             onRetry={() => void store.refreshData({ force: true })}
             onVisualComplete={() => setLibraryLoaderVisualComplete(true)}
+            progressLabel={sharedFeedName ? "Shared feed library download in progress" : undefined}
             status={store.syncStatus || "Opening offline library"}
+            title={sharedFeedName ? "Opening shared feed" : undefined}
           />
         </div>,
         document.body,
