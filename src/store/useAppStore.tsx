@@ -82,6 +82,7 @@ interface StoreState {
   syncStatus: string;
   syncProgress: number | null;
   syncInFlight: boolean;
+  syncError: boolean;
   homePreviewSegmentId: string | null;
   homeResetRequested: boolean;
   homeOpenFeedRequestId: string | null;
@@ -109,7 +110,7 @@ interface StoreState {
   deleteFolder: (id: string) => void;
   upsertLabel: (label: UserLabel) => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
-  refreshData: (options?: { force?: boolean }) => Promise<void>;
+  refreshData: (options?: { force?: boolean }) => Promise<boolean>;
   resetLocalState: () => Promise<void>;
   importSnapshot: (snapshot: Partial<AppStateSnapshot>, mode: "merge" | "replace") => void;
 }
@@ -518,7 +519,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [syncStatus, setSyncStatus] = useState("");
   const [syncProgress, setSyncProgress] = useState<number | null>(null);
   const [syncInFlight, setSyncInFlight] = useState(false);
-  const syncInFlightRef = useRef<Promise<void> | null>(null);
+  const [syncError, setSyncError] = useState(false);
+  const syncInFlightRef = useRef<Promise<boolean> | null>(null);
 
   useEffect(() => {
     setSettings((current) => (current.appName.trim() === LEGACY_APP_NAME ? { ...current, appName: DEFAULT_APP_NAME } : current));
@@ -588,8 +590,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       }
 
       if (!hasUsableCache || (remote?.versionHash && remote.versionHash !== meta?.versionHash)) {
-        await refreshData({ force: true });
-        setReady(true);
+        const refreshed = await refreshData({ force: true });
+        if (!refreshed && hasUsableCache) {
+          setCatalog(cachedCatalog);
+          setTags(cachedTags);
+          setHistory(cachedHistory);
+          setRecommendationFeatures([]);
+          setSyncMeta(meta);
+          setReady(true);
+        }
       } else if (online && remote?.versionHash && cacheMatchesRemote) {
         setSyncStatus("Library already current");
       }
@@ -620,6 +629,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
     const task = (async () => {
       setSyncInFlight(true);
+      setSyncError(false);
       setSyncProgress(null);
       setSyncStatus("Checking library version");
       try {
@@ -634,7 +644,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           if (remote.versionHash && currentVersion === remote.versionHash && hasCachedCatalog && !needsCatalogRepair) {
             if (latestMeta && latestMeta.versionHash !== syncMeta?.versionHash) setSyncMeta(latestMeta);
             setSyncStatus("Library already current");
-            return;
+            setReady(true);
+            return true;
           }
           setSyncStatus(`Updating ${shortDataVersion(currentVersion)} -> ${shortDataVersion(remote.versionHash)}`);
         }
@@ -642,16 +653,22 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         const synced = await syncFrontendData(settings.dataSourceUrl, setSyncStatus, setSyncProgress);
         setSyncMeta(synced.meta);
         setSettings((current) => ({ ...current, dataSourceUrl: synced.meta.source }));
-        startTransition(() => {
+        const applySyncedData = () => {
           setCatalog(synced.catalog);
           setTags(synced.tags);
           setHistory(synced.history);
           setRecommendationFeatures([]);
-        });
+        };
+        if (ready) startTransition(applySyncedData);
+        else applySyncedData();
         setSyncProgress(1);
         setSyncStatus("Sync complete");
+        setReady(true);
+        return true;
       } catch (error) {
         setSyncStatus(error instanceof Error ? error.message : "Sync failed");
+        setSyncError(true);
+        return false;
       }
     })();
 
@@ -660,7 +677,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setSyncInFlight(false);
     });
     return syncInFlightRef.current;
-  }, [catalog.length, settings.dataSourceUrl, syncMeta?.versionHash]);
+  }, [catalog.length, ready, settings.dataSourceUrl, syncMeta?.versionHash]);
 
   const upsertFeed = useCallback((feed: Feed) => {
     const updated = normalizeFeed({ ...feed, updatedAt: new Date().toISOString() });
@@ -958,6 +975,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       syncStatus,
       syncProgress,
       syncInFlight,
+      syncError,
       homePreviewSegmentId,
       homeResetRequested,
       homeOpenFeedRequestId,
@@ -1006,6 +1024,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       syncStatus,
       syncProgress,
       syncInFlight,
+      syncError,
       homePreviewSegmentId,
       homeResetRequested,
       homeOpenFeedRequestId,

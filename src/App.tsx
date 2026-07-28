@@ -32,6 +32,7 @@ import {
   X,
 } from "lucide-react";
 import { memo, startTransition, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import Fuse from "fuse.js";
 import { appDebugLog } from "./lib/debug";
 import { useRegisterSW } from "virtual:pwa-register/react";
@@ -481,6 +482,9 @@ function AppFrame() {
   const store = useAppStore();
   const location = useLocation();
   const navigate = useNavigate();
+  const [libraryLoaderVisible, setLibraryLoaderVisible] = useState(() => !store.ready);
+  const [libraryLoaderVisualComplete, setLibraryLoaderVisualComplete] = useState(false);
+  const libraryDownloadObservedRef = useRef(false);
   const lastHomeNavTapRef = useRef(0);
   const homeTapTimerRef = useRef<number | null>(null);
   const titleSelectionHistoryEntryRef = useRef(false);
@@ -489,6 +493,9 @@ function AppFrame() {
   const showingHome = location.pathname === "/";
   const showingTitle = location.pathname.startsWith("/title/");
   const showingUpdates = location.pathname === "/updates";
+  const libraryLoaderOwnsScreen = libraryLoaderVisible
+    && !showingTitle
+    && location.pathname !== "/import";
   const keepHomeMounted = showingHome
     || (showingTitle && sessionStorage.getItem(HOME_RETURNING_FROM_TITLE_KEY) === "1");
   const keepUpdatesMounted = showingUpdates
@@ -539,6 +546,30 @@ function AppFrame() {
   useEffect(() => {
     if (needRefresh) void updateServiceWorker(true);
   }, [needRefresh, updateServiceWorker]);
+
+  useEffect(() => {
+    if (/starting sync|download|merging|saving/i.test(store.syncStatus)) {
+      libraryDownloadObservedRef.current = true;
+    }
+  }, [store.syncStatus]);
+
+  useEffect(() => {
+    if (!libraryLoaderVisible || !store.ready) return;
+    if (libraryDownloadObservedRef.current && !libraryLoaderVisualComplete) return;
+    const delay = libraryDownloadObservedRef.current ? 220 : 120;
+    const timer = window.setTimeout(() => setLibraryLoaderVisible(false), delay);
+    return () => window.clearTimeout(timer);
+  }, [libraryLoaderVisible, libraryLoaderVisualComplete, store.ready]);
+
+  useEffect(() => {
+    if (!libraryLoaderOwnsScreen) return;
+    document.documentElement.classList.add("library-loading-locked");
+    document.body.classList.add("library-loading-locked");
+    return () => {
+      document.documentElement.classList.remove("library-loading-locked");
+      document.body.classList.remove("library-loading-locked");
+    };
+  }, [libraryLoaderOwnsScreen]);
 
   const clearTitleSelection = useCallback(() => {
     titleSelectionStore.clear();
@@ -600,12 +631,15 @@ function AppFrame() {
 
   return (
     <TitleSelectionContext.Provider value={selectionValue}>
-    <div className="app-shell">
+    <div
+      className={`app-shell${libraryLoaderOwnsScreen ? " library-loading" : ""}`}
+      inert={libraryLoaderOwnsScreen ? true : undefined}
+    >
       <SessionRestorer />
       <main>
         {keepHomeMounted && (
           <div className={!showingHome ? "route-cache-hidden" : undefined} aria-hidden={!showingHome || undefined}>
-            <HomePage />
+            <HomePage libraryLoaderVisible={libraryLoaderVisible} />
           </div>
         )}
         {keepUpdatesMounted && (
@@ -669,6 +703,19 @@ function AppFrame() {
         })}
       </nav>
       <TitleSelectionDock />
+      {libraryLoaderOwnsScreen ? createPortal(
+        <div className="app-library-loading-overlay">
+          <LibraryLoadingState
+            complete={store.ready}
+            downloadProgress={store.syncProgress}
+            error={store.syncError}
+            onRetry={() => void store.refreshData({ force: true })}
+            onVisualComplete={() => setLibraryLoaderVisualComplete(true)}
+            status={store.syncStatus || "Opening offline library"}
+          />
+        </div>,
+        document.body,
+      ) : null}
     </div>
     </TitleSelectionContext.Provider>
   );
@@ -958,6 +1005,8 @@ function TitleSelectionDock() {
 function LibraryLoadingState({
   complete,
   downloadProgress,
+  error = false,
+  onRetry,
   onVisualComplete,
   progressLabel = "Library download in progress",
   status,
@@ -965,6 +1014,8 @@ function LibraryLoadingState({
 }: {
   complete: boolean;
   downloadProgress: number | null;
+  error?: boolean;
+  onRetry?: () => void;
   onVisualComplete?: () => void;
   progressLabel?: string;
   status: string;
@@ -1043,6 +1094,9 @@ function LibraryLoadingState({
         >
           <span ref={fillRef} />
         </div>
+        {error && onRetry ? (
+          <button className="button primary" type="button" onClick={onRetry}>Retry</button>
+        ) : null}
       </div>
     </div>
   );
@@ -1061,11 +1115,8 @@ function CatalogLoadingPage() {
   );
 }
 
-function HomePage() {
+function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
   const store = useAppStore();
-  const [libraryLoaderVisible, setLibraryLoaderVisible] = useState(() => !store.ready);
-  const [libraryLoaderVisualComplete, setLibraryLoaderVisualComplete] = useState(false);
-  const libraryDownloadObservedRef = useRef(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorFeed, setEditorFeed] = useState<Feed | null>(null);
   const [preloadReady, setPreloadReady] = useState(false);
@@ -1078,21 +1129,6 @@ function HomePage() {
   const warmFeedIdsRef = useRef(new Set<string>());
   const didInitialPagerAlignRef = useRef(false);
   const homeRestoreReadyRef = useRef(false);
-  const completeLibraryLoaderVisual = useCallback(() => setLibraryLoaderVisualComplete(true), []);
-
-  useEffect(() => {
-    if (/starting sync|download|merging|saving/i.test(store.syncStatus)) {
-      libraryDownloadObservedRef.current = true;
-    }
-  }, [store.syncStatus]);
-
-  useEffect(() => {
-    if (!libraryLoaderVisible || !store.ready) return;
-    if (libraryDownloadObservedRef.current && !libraryLoaderVisualComplete) return;
-    const delay = libraryDownloadObservedRef.current ? 220 : 120;
-    const timer = window.setTimeout(() => setLibraryLoaderVisible(false), delay);
-    return () => window.clearTimeout(timer);
-  }, [libraryLoaderVisible, libraryLoaderVisualComplete, store.ready]);
   const previewSegment = useMemo(() => {
     const segment = store.feedSegments.find((item) => item.id === store.homePreviewSegmentId) ?? null;
     if (!segment || !isBuiltInSensitiveSegmentVisible(segment, store.settings)) return null;
@@ -1300,16 +1336,6 @@ function HomePage() {
 
   return (
     <div className="page home-page">
-      {libraryLoaderVisible ? (
-        <div className="home-library-loading-overlay">
-          <LibraryLoadingState
-            complete={store.ready}
-            downloadProgress={store.syncProgress}
-            onVisualComplete={completeLibraryLoaderVisual}
-            status={store.syncStatus || "Opening offline library"}
-          />
-        </div>
-      ) : null}
       {store.feeds.length === 0 ? (
         <div className="empty-state">
           <Library size={34} />
