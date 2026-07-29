@@ -30,6 +30,7 @@ Aeon organizes a large manhwa catalogue into feeds that can be browsed and custo
 - Organize feeds into reorderable segments and choose which segments appear on Home.
 - Search primary titles, aliases, word fragments in any order, and creator names.
 - Search within a feed while preserving each title's original feed rank.
+- Follow recent popularity milestones, status changes, and chapter updates.
 - View synopses, creators, publication details, chapters, tags, audience statistics, and source links.
 - Share individual feeds by link or JSON, merge imported feeds and segments, and export full backups.
 
@@ -41,6 +42,22 @@ Aeon organizes a large manhwa catalogue into feeds that can be browsed and custo
 
 Both libraries use segments for ordering and Home visibility.
 
+## Updates
+
+Updates records recent catalogue changes in three views:
+
+- **Popularity Milestones** shows titles that have reached Deep Cut, Underground, Upcoming, Mainstream, or Top 1%.
+- **Status Changes** shows moves between Releasing, Hiatus, and Completed.
+- **Chapter Updates** shows recent chapter-count increases.
+
+Tap a card to open its title details. Hold a card to select the title for MY LIST. Double-tap the Updates header to search the page by title.
+
+<p align="center"><img src="./docs/assets/aeon-updates-popularity.jpg" width="320" alt="Aeon popularity milestones"><br>Popularity Milestones</p>
+
+<p align="center"><img src="./docs/assets/aeon-updates-status.jpg" width="320" alt="Aeon status changes"><br>Status Changes</p>
+
+<p align="center"><img src="./docs/assets/aeon-updates-chapters.jpg" width="320" alt="Aeon chapter updates"><br>Chapter Updates</p>
+
 ## Screenshots
 
 <p align="center"><img src="./docs/assets/aeon-library.jpg" width="360" alt="Aeon feed library"><br>Feeds</p>
@@ -48,6 +65,8 @@ Both libraries use segments for ordering and Home visibility.
 <p align="center"><img src="./docs/assets/aeon-search.jpg" width="360" alt="Aeon catalogue search"><br>Search</p>
 
 <p align="center"><img src="./docs/assets/aeon-details.jpg" width="300" alt="Aeon title details"><br>Title details</p>
+
+<p align="center"><img src="./docs/assets/aeon-settings.jpg" width="360" alt="Aeon settings"><br>Settings</p>
 
 ## Fan Rank
 
