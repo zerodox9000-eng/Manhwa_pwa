@@ -1,6 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import { gzipSync } from "node:zlib";
 
+const LONG_DETAIL_TITLE = "The Hero Who Returned From Another World With an Extremely Long Title That Must Stay Completely Visible";
+const LONG_DETAIL_AUTHORS = ["Alexandria Verylongcreatorname", "Bartholomew Anotherlongcreatorname"];
+const LONG_DETAIL_ARTISTS = ["Chrysanthemum Thirdcreatorname"];
+const MANY_DETAIL_CREATORS = ["Alexandria Verylongcreatorname", "Bartholomew Anotherlongcreatorname", "Chrysanthemum Thirdcreatorname", "Demetrius Fourthcreatorname", "Evangeline Fifthcreatorname"];
+
 async function mockBackendData(page: Page) {
   const gzipJson = (value: unknown) => gzipSync(Buffer.from(JSON.stringify(value)));
   const detailAttempts = new Map<number, number>();
@@ -46,6 +51,42 @@ async function mockBackendData(page: Page) {
       artists: ["Bakji"],
       links: { mangabaka: "https://mangabaka.org/4" },
       source: { anilist: { id: 179451, rating: 69, url: "https://anilist.co/manga/179451" } },
+    },
+    {
+      id: 999,
+      display_title: LONG_DETAIL_TITLE,
+      cover: null,
+      year: 2026,
+      status: "releasing",
+      content_rating: "safe",
+      total_chapters: "123",
+      tag_ids: [1, 2],
+      stats: { popularity: 123456789, favourites: 987654, meanScore: 88 },
+      analytics: { fanFavouriteRaw: 3.9, fanFavouriteDiscoveryScore: 97 },
+      published: { start_date: "2026-01-01", end_date: null },
+      last_updated_at: "2026-07-30T00:00:00.000Z",
+      authors: LONG_DETAIL_AUTHORS,
+      artists: LONG_DETAIL_ARTISTS,
+      links: {},
+      source: { anilist: { id: 999, rating: 88, url: "https://anilist.co/manga/999" } },
+    },
+    {
+      id: 998,
+      display_title: "Short Title",
+      cover: null,
+      year: 2026,
+      status: "releasing",
+      content_rating: "safe",
+      total_chapters: "12",
+      tag_ids: [1, 2],
+      stats: { popularity: 998, favourites: 42, meanScore: 82 },
+      analytics: { fanFavouriteRaw: 3.7, fanFavouriteDiscoveryScore: 91 },
+      published: { start_date: "2026-01-01", end_date: null },
+      last_updated_at: "2026-07-30T00:00:00.000Z",
+      authors: MANY_DETAIL_CREATORS,
+      artists: [],
+      links: {},
+      source: { anilist: { id: 998, rating: 82, url: "https://anilist.co/manga/998" } },
     },
   ];
   await page.route("**/data/query-index.json.gz", async (route) => {
@@ -136,6 +177,83 @@ test.beforeEach(async ({ page }) => {
       request.onblocked = () => resolve();
     });
   });
+});
+
+test("detail identity keeps its spacing while fitting full long text", async ({ page }) => {
+  const creatorLine = [...LONG_DETAIL_AUTHORS, ...LONG_DETAIL_ARTISTS].join(" / ");
+  const noHorizontalOverflow = () => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
+
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto("/#/title/999?shared=1");
+  await expect(page.locator(".detail-title-copy")).toHaveText(LONG_DETAIL_TITLE);
+  await expect(page.locator(".detail-creators")).toHaveText(creatorLine);
+  await expect(page.locator(".detail-copy-fitted")).toHaveClass(/is-title-fitted/);
+
+  const compactLayout = await page.evaluate(() => {
+    const identity = document.querySelector<HTMLElement>(".detail-identity")!;
+    const cover = document.querySelector<HTMLElement>(".detail-cover")!;
+    const copy = document.querySelector<HTMLElement>(".detail-copy-fitted")!;
+    const content = document.querySelector<HTMLElement>(".detail-copy-inner")!;
+    const title = document.querySelector<HTMLElement>(".detail-title")!;
+    const creators = document.querySelector<HTMLElement>(".detail-creators")!;
+    const meta = document.querySelector<HTMLElement>(".detail-meta-strip")!;
+    const statusValue = document.querySelectorAll<HTMLElement>(".detail-meta-chip strong")[1];
+    const copyBox = copy.getBoundingClientRect();
+    const contentBox = content.getBoundingClientRect();
+    const metaBox = meta.getBoundingClientRect();
+    const titleStyle = getComputedStyle(title);
+    const copyStyle = getComputedStyle(copy);
+    const topInset = Number.parseFloat(copyStyle.paddingTop);
+    const bottomInset = Number.parseFloat(copyStyle.paddingBottom);
+    return {
+      fixedCoverWidth: Math.abs(cover.getBoundingClientRect().width - 116) <= 1,
+      originalGap: Math.abs(Number.parseFloat(getComputedStyle(identity).columnGap) - 14) <= 0.5,
+      copyMatchesCoverHeight: Math.abs(copyBox.height - cover.getBoundingClientRect().height) <= 1,
+      fullContentInsideCopy: contentBox.top >= copyBox.top + topInset - 1 && contentBox.bottom <= copyBox.bottom - bottomInset + 1,
+      metaInsideCopy: metaBox.left >= copyBox.left - 1 && metaBox.right <= copyBox.right + 1,
+      naturalTitleWrap: titleStyle.textWrap !== "balance" && titleStyle.webkitLineClamp === "none",
+      titleWasReduced: Number.parseFloat(titleStyle.fontSize) < 24,
+      creatorsVisible: creators.scrollHeight <= creators.clientHeight + 1 && creators.scrollWidth <= creators.clientWidth + 1,
+      statusVisible: statusValue.scrollWidth <= statusValue.clientWidth + 1 && getComputedStyle(statusValue).textOverflow !== "ellipsis",
+    };
+  });
+  expect(compactLayout).toEqual({
+    fixedCoverWidth: true,
+    originalGap: true,
+    copyMatchesCoverHeight: true,
+    fullContentInsideCopy: true,
+    metaInsideCopy: true,
+    naturalTitleWrap: true,
+    titleWasReduced: true,
+    creatorsVisible: true,
+    statusVisible: true,
+  });
+  expect(await noHorizontalOverflow()).toBe(true);
+
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await expect.poll(() => page.evaluate(() => {
+    const copy = document.querySelector<HTMLElement>(".detail-copy-fitted")!.getBoundingClientRect();
+    const content = document.querySelector<HTMLElement>(".detail-copy-inner")!.getBoundingClientRect();
+    return content.top >= copy.top - 1 && content.bottom <= copy.bottom + 1;
+  })).toBe(true);
+
+  await page.setViewportSize({ width: 412, height: 915 });
+  await page.goto("/#/title/998?shared=1");
+  await expect(page.locator(".detail-creators")).toHaveText(MANY_DETAIL_CREATORS.join(" / "));
+  await expect(page.locator(".detail-copy-fitted")).toHaveClass(/is-creators-fitted/);
+  await expect(page.locator(".detail-copy-fitted")).not.toHaveClass(/is-title-fitted/);
+  expect(await page.locator(".detail-title").evaluate((title) => Math.abs(Number.parseFloat(getComputedStyle(title).fontSize) - 24) <= 0.5)).toBe(true);
+
+  await page.goto("/#/title/1252?shared=1");
+  await expect(page.locator(".detail-title-copy")).toHaveText("Solo Leveling: Ragnarok");
+  await expect(page.locator(".detail-copy-fitted")).not.toHaveClass(/is-title-fitted|is-creators-fitted/);
+  expect(await page.evaluate(() => {
+    const identity = document.querySelector<HTMLElement>(".detail-identity")!;
+    const meta = document.querySelector<HTMLElement>(".detail-meta-strip")!;
+    const copy = document.querySelector<HTMLElement>(".detail-copy-fitted")!;
+    return Math.abs(Number.parseFloat(getComputedStyle(identity).columnGap) - 14) <= 0.5
+      && meta.getBoundingClientRect().width < copy.getBoundingClientRect().width;
+  })).toBe(true);
 });
 
 test("mobile feeds, search, detail, recommendations, and navigation state work", async ({ page }) => {

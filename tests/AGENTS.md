@@ -15,6 +15,7 @@ Owns frontend tests and browser QA fixtures.
 
 - Prefer focused tests for the changed behavior.
 - Avoid brittle timing assertions unless the bug is specifically timing-related.
+- Set `PLAYWRIGHT_PORT` when a task needs an isolated local E2E port; the default remains `5173`.
 
 ## Verification
 

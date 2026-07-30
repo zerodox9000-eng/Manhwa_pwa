@@ -5402,3 +5402,150 @@ textarea,
     font-size: 14px;
   }
 }
+
+/* Contain exceptional text without changing established component geometry. */
+:where(
+  .app-shell,
+  .page,
+  .panel,
+  .drawer-content,
+  .drawer-header,
+  .toolbar,
+  .row,
+  .setting-row,
+  .setting-stack,
+  .feed-summary-card,
+  .feed-segment,
+  .title-card-wrap,
+  .trend-card,
+  .detail-page,
+  .detail-identity,
+  .detail-block
+) {
+  min-width: 0;
+}
+
+:where(h1, h2, h3, h4, p, li, dt, dd, label, blockquote, figcaption, .muted, .section-title, .drawer-title, .settings-status, .share-title) {
+  max-width: 100%;
+  overflow-wrap: break-word;
+}
+
+:where(.input, .select, .textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* The copy keeps the cover's fixed height and original internal spacing. */
+.detail-copy-fitted {
+  position: relative;
+  align-self: center;
+  min-width: 0;
+  padding-block: clamp(10px, 2.5vw, 16px);
+}
+
+.detail-copy-inner {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  display: flow-root;
+  max-width: 100%;
+  transform: translateY(-50%);
+}
+
+.detail-copy-fitted.is-title-fitted .detail-title {
+  font-size: var(--detail-title-fit-size);
+}
+
+.detail-copy-fitted.is-creators-fitted .detail-creators {
+  font-size: var(--detail-creators-fit-size);
+}
+
+.detail-title,
+.detail-title-copy,
+.detail-creators,
+.detail-facts {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.detail-meta-strip,
+.detail-meta-chip,
+.detail-meta-chip span,
+.detail-meta-chip strong {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.detail-meta-chip span,
+.detail-meta-chip strong {
+  white-space: nowrap;
+}
+
+.detail-meta-chip {
+  overflow: hidden;
+}
+
+.detail-meta-chip strong {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* Long metric text stays inside its existing badge and tile dimensions. */
+.poster-metrics,
+.compact-metrics,
+.compact-metrics span,
+.detail-stat-grid,
+.detail-stat,
+.detail-stat strong,
+.detail-stat span {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.poster-metrics,
+.compact-metrics,
+.detail-stat {
+  overflow: hidden;
+}
+
+.title-grid.columns-3 .compact-metrics {
+  max-width: 83.3333%;
+}
+
+.detail-stat strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-metric-pill {
+  justify-content: center;
+}
+
+.compact-metric-content {
+  display: inline-block;
+  max-width: none;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.detail-stat span {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+@media (max-width: 360px) {
+  .detail-meta-strip {
+    grid-auto-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .detail-meta-chip {
+    padding-inline: 4px;
+  }
+}

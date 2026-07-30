@@ -2348,6 +2348,19 @@ function formatFeedMetricValue(
   return formatMetricValue(series, metric, history, latestDate);
 }
 
+function fitSingleLineText(element: HTMLElement, availableWidth = element.clientWidth) {
+  element.style.removeProperty("font-size");
+  if (availableWidth <= 0 || element.scrollWidth <= availableWidth + 1) return;
+  const baseSize = Number.parseFloat(getComputedStyle(element).fontSize);
+  let fittedSize = baseSize;
+  for (let pass = 0; pass < 2; pass += 1) {
+    const requiredWidth = element.scrollWidth;
+    if (requiredWidth <= availableWidth + 1) break;
+    fittedSize = Math.max(6, fittedSize * (availableWidth / requiredWidth));
+    element.style.fontSize = `${fittedSize}px`;
+  }
+}
+
 function TitleMetrics({
   series,
   view,
@@ -2373,12 +2386,45 @@ function TitleMetrics({
     },
     [history, latestDate, metricSlots, metricWindow, series],
   );
+  const metricsRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const container = metricsRef.current;
+    if (!compact || !container) return;
+    let frame = 0;
+    const fit = () => {
+      const contents = container.querySelectorAll<HTMLElement>(".compact-metric-content");
+      contents.forEach((content) => content.style.removeProperty("font-size"));
+      const availableWidth = container.clientWidth;
+      container.querySelectorAll<HTMLElement>(".compact-metric-pill").forEach((pill) => {
+        const content = pill.querySelector<HTMLElement>(".compact-metric-content");
+        if (!content) return;
+        const style = getComputedStyle(pill);
+        const innerWidth = availableWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
+        fitSingleLineText(content, innerWidth);
+      });
+    };
+    const scheduleFit = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(fit);
+    };
+    fit();
+    const resizeObserver = new ResizeObserver(scheduleFit);
+    resizeObserver.observe(container.closest(".poster-shell") ?? container);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+    };
+  }, [compact, values, view.gridColumns]);
   if (metricSlots.length === 0) return null;
   return (
-    <div className={`metrics ${compact ? "compact-metrics" : ""}`}>
+    <div className={`metrics ${compact ? "compact-metrics" : ""}`} ref={metricsRef}>
       {values.map(({ metric, value }) => (
-        <span key={metric}>
-          <b>{metricDefinition(metric).shortLabel}</b> {value}
+        <span className={compact ? "compact-metric-pill" : undefined} key={metric}>
+          {compact ? (
+            <i className="compact-metric-content"><b>{metricDefinition(metric).shortLabel}</b> {value}</i>
+          ) : (
+            <><b>{metricDefinition(metric).shortLabel}</b> {value}</>
+          )}
         </span>
       ))}
     </div>
@@ -4797,6 +4843,101 @@ function DetailAddToMyListDrawer({
   );
 }
 
+function useFitDetailIdentityText(fitKey: string) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const content = contentRef.current;
+    if (!container || !content) return;
+
+    let frame = 0;
+    let disposed = false;
+    const fit = () => {
+      if (disposed) return;
+      const cover = container.closest(".detail-identity")?.querySelector<HTMLElement>(".detail-cover");
+      const coverHeight = cover?.getBoundingClientRect().height ?? 0;
+      if (coverHeight > 0) container.style.height = `${coverHeight}px`;
+      const title = content.querySelector<HTMLElement>(".detail-title");
+      const creators = content.querySelector<HTMLElement>(".detail-creators");
+      content.querySelectorAll<HTMLElement>(".detail-meta-chip strong").forEach((value) => fitSingleLineText(value));
+      container.classList.remove("is-title-fitted", "is-creators-fitted");
+      container.style.removeProperty("--detail-title-fit-size");
+      container.style.removeProperty("--detail-creators-fit-size");
+
+      if (!title && !creators) return;
+      const titleSize = title ? Number.parseFloat(getComputedStyle(title).fontSize) : 0;
+      if (creators) {
+        const creatorStyle = getComputedStyle(creators);
+        const creatorSize = Number.parseFloat(creatorStyle.fontSize);
+        const creatorHeightLimit = Number.parseFloat(creatorStyle.lineHeight) * 2;
+        const applyCreatorScale = (scale: number) => {
+          container.style.setProperty("--detail-creators-fit-size", `${creatorSize * scale}px`);
+          container.classList.add("is-creators-fitted");
+        };
+        if (creators.scrollHeight > creatorHeightLimit + 1) {
+          let lower = 0.28;
+          let upper = 1;
+          applyCreatorScale(lower);
+          if (creators.scrollHeight <= creatorHeightLimit + 1) {
+            for (let index = 0; index < 8; index += 1) {
+              const candidate = (lower + upper) / 2;
+              applyCreatorScale(candidate);
+              if (creators.scrollHeight <= creatorHeightLimit + 1) lower = candidate;
+              else upper = candidate;
+            }
+            applyCreatorScale(lower);
+          }
+        }
+      }
+
+      const applyTitleScale = (scale: number) => {
+        if (!title) return;
+        container.style.setProperty("--detail-title-fit-size", `${titleSize * scale}px`);
+        container.classList.add("is-title-fitted");
+      };
+      const containerStyle = getComputedStyle(container);
+      const verticalPadding = Number.parseFloat(containerStyle.paddingTop) + Number.parseFloat(containerStyle.paddingBottom);
+      const availableHeight = container.clientHeight - verticalPadding;
+      const fits = () => content.scrollHeight <= availableHeight + 1 && content.scrollWidth <= container.clientWidth + 1;
+
+      if (fits() || !title) return;
+
+      let lower = 0.28;
+      let upper = 1;
+      applyTitleScale(lower);
+      if (!fits()) return;
+
+      for (let index = 0; index < 9; index += 1) {
+        const candidate = (lower + upper) / 2;
+        applyTitleScale(candidate);
+        if (fits()) lower = candidate;
+        else upper = candidate;
+      }
+      applyTitleScale(lower);
+    };
+    const scheduleFit = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(fit);
+    };
+
+    fit();
+    const resizeObserver = new ResizeObserver(scheduleFit);
+    resizeObserver.observe(container);
+    const cover = container.closest(".detail-identity")?.querySelector<HTMLElement>(".detail-cover");
+    if (cover) resizeObserver.observe(cover);
+    void document.fonts?.ready.then(scheduleFit);
+    return () => {
+      disposed = true;
+      window.cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+    };
+  }, [fitKey]);
+
+  return { containerRef, contentRef };
+}
+
 function TitleDetailPage() {
   const store = useAppStore();
   const location = useLocation();
@@ -4901,6 +5042,11 @@ function TitleDetailPage() {
         }
       : { ...detail, display_title: localTitle };
   }, [catalogItem, detail, id]);
+  const creatorLine = series ? uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable" : "";
+  const detailFitKey = series
+    ? [series.display_title, creatorLine, series.year, series.status, series.total_chapters, visible.title, visible.authorsArtists, visible.year, visible.status, visible.chapters].join("|")
+    : "loading";
+  const { containerRef: detailCopyRef, contentRef: detailCopyContentRef } = useFitDetailIdentityText(detailFitKey);
 
   useEffect(() => {
     if (!titleCopyStatus) return;
@@ -4965,43 +5111,45 @@ function TitleDetailPage() {
                 {series.cover ? <img className="detail-cover" src={series.cover} alt="" /> : <div className="detail-cover cover-fallback">No cover</div>}
               </div>
             )}
-            <div className="detail-copy">
-              {visible.title && (
-                <h1 className="detail-title">
-                  <button
-                    className="detail-title-copy"
-                    type="button"
-                    onClick={() => void copyDisplayedTitle()}
-                    aria-label={`Copy title: ${series.display_title}`}
-                    title="Copy title"
-                  >
-                    {series.display_title}
-                  </button>
-                </h1>
-              )}
-              {visible.authorsArtists && (
-                <p className="detail-creators">{uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable"}</p>
-              )}
-              <section className="detail-meta-strip" aria-label="Publication details">
-                {visible.year && series.year ? (
-                  <div className="detail-meta-chip">
-                    <span>Year</span>
-                    <strong>{series.year}</strong>
-                  </div>
-                ) : null}
-                {visible.status && series.status ? (
-                  <div className="detail-meta-chip">
-                    <span>Status</span>
-                    <strong>{formatStatusLabel(series.status)}</strong>
-                  </div>
-                ) : null}
-                {visible.chapters && series.total_chapters ? (
-                  <div className="detail-meta-chip">
-                    <span>Chapters</span>
-                    <strong>{series.total_chapters}</strong>
-                  </div>
-                ) : null}
-              </section>
+            <div className="detail-copy detail-copy-fitted" ref={detailCopyRef}>
+              <div className="detail-copy-inner" ref={detailCopyContentRef}>
+                {visible.title && (
+                  <h1 className="detail-title">
+                    <button
+                      className="detail-title-copy"
+                      type="button"
+                      onClick={() => void copyDisplayedTitle()}
+                      aria-label={`Copy title: ${series.display_title}`}
+                      title="Copy title"
+                    >
+                      {series.display_title}
+                    </button>
+                  </h1>
+                )}
+                {visible.authorsArtists && (
+                  <p className="detail-creators">{creatorLine}</p>
+                )}
+                <section className="detail-meta-strip" aria-label="Publication details">
+                  {visible.year && series.year ? (
+                    <div className="detail-meta-chip">
+                      <span>Year</span>
+                      <strong>{series.year}</strong>
+                    </div>
+                  ) : null}
+                  {visible.status && series.status ? (
+                    <div className="detail-meta-chip">
+                      <span>Status</span>
+                      <strong>{formatStatusLabel(series.status)}</strong>
+                    </div>
+                  ) : null}
+                  {visible.chapters && series.total_chapters ? (
+                    <div className="detail-meta-chip">
+                      <span>Chapters</span>
+                      <strong>{series.total_chapters}</strong>
+                    </div>
+                  ) : null}
+                </section>
+              </div>
             </div>
           </section>
           <DetailStats series={series} visible={visible} history={store.history} latestDate={store.syncMeta?.historyLastDate} />
