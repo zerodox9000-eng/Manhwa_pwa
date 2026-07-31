@@ -1784,6 +1784,17 @@ select {
   align-items: start;
 }
 
+.detail-skeleton {
+  animation: detail-skeleton-pulse 1.3s ease-in-out infinite alternate;
+}
+
+.detail-skeleton .skeleton-box::after,
+.detail-skeleton .skeleton-line::after,
+.detail-skeleton .skeleton-chip::after,
+.detail-skeleton .skeleton-stat::after {
+  content: none;
+}
+
 .detail-skeleton-strip {
   margin-top: 0;
 }
@@ -1806,6 +1817,18 @@ select {
 @keyframes skeleton-shimmer {
   100% {
     transform: translateX(100%);
+  }
+}
+
+@keyframes detail-skeleton-pulse {
+  100% {
+    opacity: 0.68;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-skeleton {
+    animation: none;
   }
 }
 
@@ -1896,6 +1919,10 @@ textarea,
 
 .compact-segments {
   grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+}
+
+.source-segments {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .sort-segment {

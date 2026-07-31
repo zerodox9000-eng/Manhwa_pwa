@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, createCustomFeed, createFeed } from "./defaults";
-import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch } from "./query";
+import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, toggleFeedSourceModeForEditor } from "./query";
 import type { HistoryMap, SeriesCatalog, TagNode } from "./types";
 
 const tags: TagNode[] = [
@@ -70,6 +70,41 @@ const history: HistoryMap = {
 };
 
 describe("runFeedQuery", () => {
+  it("makes a newly selected OEL source immediately compatible", () => {
+    const feed = createFeed("OEL");
+    feed.filters.statuses = ["releasing"];
+    feed.filters.includeTagIds = [1];
+    feed.filters.minPopularity = 100;
+    feed.filters.metricRanges = [
+      { id: "pop", metric: "popularity", min: 10, max: null },
+      { id: "year", metric: "year", min: 2020, max: null },
+    ];
+
+    const compatible = toggleFeedSourceModeForEditor(feed, "oel");
+
+    expect(compatible.filters.sourceModes).toEqual(["anilist", "oel"]);
+    expect(compatible.filters.sourceMode).toBe("mixed");
+    expect(compatible.filters.statuses).toEqual(["releasing"]);
+    expect(compatible.filters.includeTagIds).toEqual([1]);
+    expect(compatible.filters.minPopularity).toBeNull();
+    expect(compatible.filters.metricRanges).toEqual([{ id: "year", metric: "year", min: 2020, max: null }]);
+    expect(compatible.sort).toEqual([{ id: feed.sort[0].id, metric: "mangabakaLatestRank", direction: "asc" }]);
+    expect(compatible.view.metricSlots).toEqual([]);
+    expect(feedUsesAniListOnlyParameters(compatible)).toBe(false);
+  });
+
+  it("preserves compatible sorting and cover stats when adding Non-AniList", () => {
+    const feed = createFeed("Non-AniList");
+    feed.sort = [{ id: "year-sort", metric: "year", direction: "desc" }];
+    feed.view.metricSlots = ["year", "chapters", "popularity"];
+
+    const compatible = toggleFeedSourceModeForEditor(feed, "non-anilist");
+
+    expect(compatible.filters.sourceModes).toEqual(["anilist", "non-anilist"]);
+    expect(compatible.sort).toEqual(feed.sort);
+    expect(compatible.view.metricSlots).toEqual(["year", "chapters"]);
+  });
+
   it("keeps fixed custom membership in manual order while applying status filters", () => {
     const feed = createCustomFeed("Manual");
     feed.orderMode = "manual";
@@ -391,7 +426,7 @@ describe("runFeedQuery", () => {
     expect(result.items.map((item) => item.id)).toEqual([80]);
   });
 
-  it("uses MangaBaka latest rank after projecting source mode locally", () => {
+  it("uses MangaBaka ID descending for Add outside AniList-only feeds", () => {
     const feed = createFeed("latest added");
     feed.filters.sourceMode = "mixed";
     feed.filters.sourceModes = ["anilist", "non-anilist"];
@@ -428,7 +463,7 @@ describe("runFeedQuery", () => {
       metaHistoryFirst: null,
       metaHistoryLast: null,
     });
-    expect(result.items.map((item) => item.id)).toEqual([90, 91, 92]);
+    expect(result.items.map((item) => item.id)).toEqual([92, 91, 90]);
   });
 
   it("keeps Non-AniList Add results to MangaUpdates-backed entries with real covers", () => {
@@ -481,6 +516,55 @@ describe("runFeedQuery", () => {
       metaHistoryLast: null,
     });
     expect(result.items.map((item) => item.id)).toEqual([130]);
+  });
+
+  it("separates OEL from Non-AniList and allows both in one Add feed", () => {
+    const feed = createFeed("OEL and non-AniList Add");
+    feed.filters.sourceMode = "mixed";
+    feed.filters.sourceModes = ["non-anilist", "oel"];
+    feed.sort = [{ id: "mb", metric: "mangabakaLatestRank", direction: "asc" }];
+    feed.view.metricSlots = ["year"];
+    const validCover = "https://cdn.mangabaka.dev/covers/valid.webp";
+    const result = runFeedQuery({
+      feed,
+      series: [
+        {
+          ...baseSeries[2],
+          id: 140,
+          type: "oel",
+          display_title: "OEL with MangaUpdates",
+          cover: validCover,
+          source: { mangaupdates: { id: "oel", url: "https://www.mangaupdates.com/series/oel" } },
+        },
+        {
+          ...baseSeries[2],
+          id: 141,
+          type: "oel",
+          display_title: "OEL with AnimePlanet only",
+          cover: validCover,
+          source: { animeplanet: { id: "oel-ap", url: "https://www.anime-planet.com/manga/oel-ap" } },
+        },
+        {
+          ...baseSeries[2],
+          id: 142,
+          type: "manhwa",
+          display_title: "Non-AniList with MangaUpdates",
+          cover: validCover,
+          source: { mangaupdates: { id: "non-ani", url: "https://www.mangaupdates.com/series/non-ani" } },
+        },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: { ...DEFAULT_SETTINGS, nonAniListPlacement: "mixed" },
+      metaHistoryFirst: null,
+      metaHistoryLast: null,
+    });
+    expect(result.items.map((item) => item.id)).toEqual([142, 140]);
+
+    feed.filters.sourceMode = "oel";
+    feed.filters.sourceModes = ["oel"];
+    expect(runFeedQuery({ feed, series: result.items, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id)).toEqual([140]);
   });
 
   it("uses AniList first-seen ordering for Add in AniList-only feeds", () => {
@@ -542,7 +626,7 @@ describe("runFeedQuery", () => {
       metaHistoryFirst: null,
       metaHistoryLast: null,
     });
-    expect(result.items.map((item) => item.id)).toEqual([100, 103]);
+    expect(result.items.map((item) => item.id)).toEqual([103, 100]);
   });
 
   it("keeps future release dates inactive for sorting and rolling filters", () => {

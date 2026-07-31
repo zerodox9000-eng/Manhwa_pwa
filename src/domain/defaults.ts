@@ -9,8 +9,10 @@ import type {
   VisibleTitleFields,
 } from "./types";
 
-export const RAW_EXPORT_BASE =
+const DEFAULT_RAW_EXPORT_BASE =
   "https://raw.githubusercontent.com/zerodox9000-eng/manhwa_db/main/db/exports/frontend";
+
+export const RAW_EXPORT_BASE = import.meta.env.VITE_DATA_SOURCE_URL?.trim() || DEFAULT_RAW_EXPORT_BASE;
 
 export const PAGES_EXPORT_BASE =
   "https://zerodox9000-eng.github.io/manhwa_db/db/exports/frontend";
@@ -202,7 +204,7 @@ export function createCustomFeed(name = "New List"): Feed {
     filters: {
       ...feed.filters,
       sourceMode: "mixed",
-      sourceModes: ["anilist", "non-anilist"],
+      sourceModes: ["anilist", "non-anilist", "oel"],
       query: "",
       includeTagIds: [],
       excludeTagIds: [],

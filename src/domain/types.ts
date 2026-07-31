@@ -3,7 +3,7 @@ export type ViewMode = "grid" | "list";
 export type GridDensity = "comfortable" | "standard" | "compact";
 export type ListDensity = "compact" | "standard" | "detailed";
 export type ListCoverSize = "small" | "medium" | "large";
-export type SourceMode = "anilist" | "non-anilist" | "mixed";
+export type SourceMode = "anilist" | "non-anilist" | "oel" | "mixed";
 export type NonAniListPlacement = "top" | "bottom" | "mixed";
 export type ControlPlacement = "drawer" | "toolbar" | "fab";
 export type ThemeMode = "system" | "dark" | "light";
@@ -61,6 +61,7 @@ export interface SeriesCatalog {
   year: number | null;
   status: string | null;
   content_rating: ContentRating | string | null;
+  type?: string | null;
   total_chapters: string | number | null;
   tag_ids: number[];
   stats: AniListStats;
@@ -85,7 +86,6 @@ export interface SeriesCatalog {
 
 export interface SeriesDetail extends SeriesCatalog {
   state?: string;
-  type?: string;
   description?: string | null;
   is_licensed?: boolean;
 }

@@ -6,6 +6,7 @@ import type {
   MetricRange,
   QueryResult,
   SeriesCatalog,
+  SourceMode,
   TagNode,
   UserLabel,
 } from "./types";
@@ -160,8 +161,13 @@ function hasUsableMangaBakaCover(series: SeriesCatalog) {
   return !isAnimePlanetProxyCover(cover);
 }
 
-function isNonAniListAddCandidate(series: SeriesCatalog) {
+function isMangaBakaAddCandidate(series: SeriesCatalog) {
   return hasUsableMangaBakaCover(series) && hasMangaUpdates(series);
+}
+
+function sourceModeForSeries(series: SeriesCatalog): "anilist" | "non-anilist" | "oel" {
+  if (series.type?.toLocaleLowerCase() === "oel") return "oel";
+  return hasAniList(series) ? "anilist" : "non-anilist";
 }
 
 function sourceModesFromFilters(feed: Feed) {
@@ -173,7 +179,9 @@ function sourceModesFromFilters(feed: Feed) {
         ? ["anilist"]
         : filters.sourceMode === "non-anilist"
           ? ["non-anilist"]
-          : ["anilist", "non-anilist"]
+          : filters.sourceMode === "oel"
+            ? ["oel"]
+            : ["anilist", "non-anilist", "oel"]
   ).filter((mode) => mode !== "mixed");
 }
 
@@ -196,6 +204,44 @@ export function feedUsesAniListOnlyParameters(feed: Feed) {
     ...(feed.view?.metricSlots ?? []),
   ];
   return metrics.some((metric) => metricDefinition(metric).anilistOnly);
+}
+
+export function toggleFeedSourceModeForEditor(feed: Feed, mode: Exclude<SourceMode, "mixed">): Feed {
+  const currentModes = sourceModesFromFilters(feed) as Array<Exclude<SourceMode, "mixed">>;
+  const addingMangaBakaSource = mode !== "anilist" && !currentModes.includes(mode);
+  const toggledModes = currentModes.includes(mode)
+    ? currentModes.filter((item) => item !== mode)
+    : [...currentModes, mode];
+  const sourceModes = toggledModes.length > 0 ? toggledModes : [mode];
+  const filters = {
+    ...feed.filters,
+    sourceMode: sourceModes.length > 1 ? "mixed" as const : sourceModes[0],
+    sourceModes,
+  };
+  if (!addingMangaBakaSource) return { ...feed, filters };
+
+  const compatibleSort = feed.sort.filter((rule) => !metricDefinition(rule.metric).anilistOnly);
+  const compatibleMetricSlots = feed.view.metricSlots.filter((metric) => !metricDefinition(metric).anilistOnly);
+  return {
+    ...feed,
+    filters: {
+      ...filters,
+      minPopularity: null,
+      maxPopularity: null,
+      minFavourites: null,
+      maxFavourites: null,
+      minMeanScore: null,
+      maxMeanScore: null,
+      metricRanges: filters.metricRanges.filter((range) => !metricDefinition(range.metric).anilistOnly),
+    },
+    sort: compatibleSort.length > 0
+      ? compatibleSort
+      : [{ id: feed.sort[0]?.id ?? "mangabaka-add", metric: "mangabakaLatestRank", direction: "asc" }],
+    view: {
+      ...feed.view,
+      metricSlots: compatibleMetricSlots,
+    },
+  };
 }
 
 export function effectiveSourceModesForFeed(feed: Feed) {
@@ -315,11 +361,11 @@ export function runFeedQuery(args: {
     const rating = item.content_rating as AppSettings["contentRatings"][number] | null;
     if (feed.kind === "logic" && rating && !filters.contentRatings.includes(rating)) return false;
 
-    const ani = hasAniList(item);
+    const sourceMode = sourceModeForSeries(item);
     if (feed.kind === "logic") {
       const sourceModes = effectiveSourceModesForFeed(feed);
-      if (!sourceModes.includes(ani ? "anilist" : "non-anilist")) return false;
-      if (!ani && usesLatestAddedSort && !isNonAniListAddCandidate(item)) return false;
+      if (!sourceModes.includes(sourceMode)) return false;
+      if (sourceMode !== "anilist" && usesLatestAddedSort && !isMangaBakaAddCandidate(item)) return false;
     }
 
     if (filters.statuses.length > 0 && (!item.status || !filters.statuses.includes(item.status))) return false;

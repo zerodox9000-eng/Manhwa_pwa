@@ -98,6 +98,7 @@ const seriesCatalogSchema = z
     year: numberNull.default(null),
     status: stringNull.default(null),
     content_rating: z.union([z.string(), z.null(), z.undefined()]).transform((value) => (value == null ? null : value)).default(null),
+    type: stringNull.optional(),
     total_chapters: z.union([z.string(), z.number(), z.null(), z.undefined()]).transform((value) => (value == null ? null : value)).default(null),
     tag_ids: z.array(z.number()).default([]),
     stats: statsSchema.default({ popularity: null, favourites: null, meanScore: null }),
@@ -180,8 +181,8 @@ const historyEntrySchema = z
 
 const feedFiltersSchema = z
   .object({
-    sourceMode: z.enum(["anilist", "non-anilist", "mixed"]).optional(),
-    sourceModes: z.array(z.enum(["anilist", "non-anilist", "mixed"])).optional(),
+    sourceMode: z.enum(["anilist", "non-anilist", "oel", "mixed"]).optional(),
+    sourceModes: z.array(z.enum(["anilist", "non-anilist", "oel", "mixed"])).optional(),
     query: z.string().optional(),
     includeTagIds: z.array(z.number()).optional(),
     excludeTagIds: z.array(z.number()).optional(),
@@ -350,7 +351,7 @@ const appSettingsSchema = z
           name: z.string().optional(),
           statusMode: z.enum(["any", "completed", "ongoing"]).optional(),
           dateMode: z.enum(["any", "latest"]).optional(),
-          sourceModes: z.array(z.enum(["anilist", "non-anilist", "mixed"])).optional(),
+          sourceModes: z.array(z.enum(["anilist", "non-anilist", "oel", "mixed"])).optional(),
           sort: z.array(sortRuleSchema).optional(),
           metricRanges: z.array(
             z

@@ -1,5 +1,5 @@
 import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS, makeId } from "../domain/defaults";
+import { DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS, RAW_EXPORT_BASE, makeId } from "../domain/defaults";
 import defaultFeedSegmentsJson from "../domain/defaultFeedSegments.generated.json";
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import defaultSettingsJson from "../domain/defaultSettings.generated.json";
@@ -35,9 +35,16 @@ const CREATOR_FAVOURITES_VERSION_KEY = "manhwa-creator-favourites-version";
 const CREATOR_FAVOURITES_VERSION = "v1";
 const DEFAULT_FEED_DESCRIPTION_FIX_VERSION_KEY = "manhwa-default-feed-description-fix";
 const DEFAULT_FEED_DESCRIPTION_FIX_VERSION = "v2";
-const LATEST_LISTINGS_DEFAULT_FEED_ID = "089d6f0f-cd06-4e94-9d43-d80071d427fb";
+const RETIRED_LATEST_LISTINGS_DEFAULT_FEED_ID = "089d6f0f-cd06-4e94-9d43-d80071d427fb";
 const LATEST_LISTINGS_REMOVAL_VERSION_KEY = "manhwa-latest-listings-removal";
 const LATEST_LISTINGS_REMOVAL_VERSION = "v1";
+const LATEST_LISTINGS_DEFAULT_FEED_ID = "b68dcc8b-3ca0-44a4-a474-dd91af2debe7";
+const LATEST_LISTINGS_INSTALL_VERSION_KEY = "manhwa-latest-listings-install";
+const LATEST_LISTINGS_INSTALL_VERSION = "v1";
+const UPDATES_DEFAULT_SEGMENT_ID = "2f19120b-0507-428d-9207-762d8726439e";
+const RECENTLY_COMPLETED_DEFAULT_FEED_ID = "5be53571-49c2-404f-8379-c7516fa6e979";
+const OEL_SOURCE_SPLIT_VERSION_KEY = "manhwa-oel-source-split";
+const OEL_SOURCE_SPLIT_VERSION = "v1";
 const LEGACY_APP_NAME = "Manhwa Lib";
 const DEFAULT_APP_NAME = "Aeon";
 export const UNSEGMENTED_FEED_SEGMENT_ID = "unsegmented";
@@ -154,6 +161,26 @@ function normalizeRecommendationShelves(settings?: Partial<AppSettings>) {
   });
 }
 
+export function migrateLegacyOelSourceMode(feed: Feed): Feed {
+  const sourceModes = feed.filters.sourceModes?.length
+    ? feed.filters.sourceModes.filter((mode) => mode !== "mixed")
+    : feed.filters.sourceMode === "anilist"
+      ? ["anilist" as const]
+      : feed.filters.sourceMode === "non-anilist"
+        ? ["non-anilist" as const]
+        : ["anilist" as const, "non-anilist" as const];
+  if (!sourceModes.includes("non-anilist") || sourceModes.includes("oel")) return feed;
+  const migratedSourceModes = [...sourceModes, "oel" as const];
+  return {
+    ...feed,
+    filters: {
+      ...feed.filters,
+      sourceMode: migratedSourceModes.length > 1 ? "mixed" : migratedSourceModes[0],
+      sourceModes: migratedSourceModes,
+    },
+  };
+}
+
 function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
   const recommendationShelves = normalizeRecommendationShelves(settings);
   const savedBottomNavItems = (settings?.bottomNavItems ?? DEFAULT_SETTINGS.bottomNavItems).filter((item) => item !== "recommendations");
@@ -218,7 +245,9 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
             ? ["anilist"]
             : feed.filters.sourceMode === "non-anilist"
               ? ["non-anilist"]
-              : ["anilist", "non-anilist"],
+              : feed.filters.sourceMode === "oel"
+                ? ["oel"]
+                : ["anilist", "non-anilist", "oel"],
       contentRatings: feed.filters.contentRatings ?? DEFAULT_SETTINGS.contentRatings,
       metricRanges: feed.filters.metricRanges ?? [],
       includeEstimatedDates: feed.filters.includeEstimatedDates ?? true,
@@ -250,7 +279,7 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
       filters: {
         ...normalized.filters,
         sourceMode: "mixed",
-        sourceModes: ["anilist", "non-anilist"],
+        sourceModes: ["anilist", "non-anilist", "oel"],
         query: "",
         includeTagIds: [],
         excludeTagIds: [],
@@ -404,7 +433,41 @@ export function correctDefaultFeedDescriptions(feeds: Feed[]) {
 }
 
 export function removeRetiredDefaultFeeds(feeds: Feed[]) {
-  return feeds.filter((feed) => feed.id !== LATEST_LISTINGS_DEFAULT_FEED_ID);
+  return feeds.filter((feed) => feed.id !== RETIRED_LATEST_LISTINGS_DEFAULT_FEED_ID);
+}
+
+export function mergeLatestListingsDefault(feeds: Feed[], segments: FeedSegment[]) {
+  const template = (defaultFeedsJson as unknown as Feed[]).find((feed) => feed.id === LATEST_LISTINGS_DEFAULT_FEED_ID);
+  if (!template) return { feeds, segments };
+
+  const nextFeeds = feeds.some((feed) => feed.id === template.id)
+    ? feeds
+    : [...feeds, normalizeFeed(template, { preserveMetricSlots: true, preserveFeedSettings: true })];
+  const nextSegments = segments.map((segment) => ({
+    ...segment,
+    feedIds: segment.feedIds.filter((feedId) => feedId !== template.id),
+  }));
+  const updatesIndex = nextSegments.findIndex((segment) => segment.id === UPDATES_DEFAULT_SEGMENT_ID);
+  const anchorSegmentIndex = nextSegments.findIndex((segment) => segment.feedIds.includes(RECENTLY_COMPLETED_DEFAULT_FEED_ID));
+  const targetIndex = updatesIndex >= 0 ? updatesIndex : anchorSegmentIndex;
+
+  if (targetIndex >= 0) {
+    const target = nextSegments[targetIndex];
+    const feedIds = [...target.feedIds];
+    const anchorIndex = feedIds.indexOf(RECENTLY_COMPLETED_DEFAULT_FEED_ID);
+    feedIds.splice(anchorIndex >= 0 ? anchorIndex + 1 : feedIds.length, 0, template.id);
+    nextSegments[targetIndex] = { ...target, feedIds };
+  } else {
+    const segmentTemplate = (defaultFeedSegmentsJson as unknown as FeedSegment[])
+      .find((segment) => segment.id === UPDATES_DEFAULT_SEGMENT_ID);
+    if (segmentTemplate) {
+      const unsegmentedIndex = nextSegments.findIndex((segment) => segment.id === UNSEGMENTED_FEED_SEGMENT_ID);
+      const insertAt = unsegmentedIndex >= 0 ? unsegmentedIndex : nextSegments.length;
+      nextSegments.splice(insertAt, 0, { ...segmentTemplate, library: "logic", feedIds: [template.id] });
+    }
+  }
+
+  return { feeds: nextFeeds, segments: nextSegments };
 }
 
 const BUILT_IN_DEFAULT_FEED_IDS = new Set([
@@ -426,7 +489,7 @@ function defaultFeedSegments(feeds: Feed[]) {
 }
 
 function defaultSettings() {
-  return mergeSettings(defaultSettingsJson as Partial<AppSettings>);
+  return mergeSettings({ ...(defaultSettingsJson as Partial<AppSettings>), dataSourceUrl: RAW_EXPORT_BASE });
 }
 
 function shouldReplaceSavedFeeds(hasSavedState: boolean) {
@@ -459,10 +522,18 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     () => hasSavedState && localStorage.getItem(LATEST_LISTINGS_REMOVAL_VERSION_KEY) !== LATEST_LISTINGS_REMOVAL_VERSION,
     [hasSavedState],
   );
+  const shouldInstallLatestListings = useMemo(
+    () => hasSavedState && !replaceDefaultLikeSavedFeeds && localStorage.getItem(LATEST_LISTINGS_INSTALL_VERSION_KEY) !== LATEST_LISTINGS_INSTALL_VERSION,
+    [hasSavedState, replaceDefaultLikeSavedFeeds],
+  );
+  const shouldMigrateOelSourceModes = useMemo(
+    () => hasSavedState && localStorage.getItem(OEL_SOURCE_SPLIT_VERSION_KEY) !== OEL_SOURCE_SPLIT_VERSION,
+    [hasSavedState],
+  );
   const initialFeeds = useMemo(
     () => {
       if (replaceDefaultLikeSavedFeeds || !hasSavedState) return defaultFeeds();
-      const savedFeeds = (local.feeds ?? []).map((feed) => normalizeFeed(feed));
+      const savedFeeds = (local.feeds ?? []).map((feed) => normalizeFeed(shouldMigrateOelSourceModes ? migrateLegacyOelSourceMode(feed) : feed));
       const retiredFeedsRemoved = shouldRemoveLatestListings ? removeRetiredDefaultFeeds(savedFeeds) : savedFeeds;
       const correctedFeeds = shouldCorrectDefaultFeedDescriptions ? correctDefaultFeedDescriptions(retiredFeedsRemoved) : retiredFeedsRemoved;
       const creatorCanonicalFeeds = normalizeBuiltInCreatorFavouriteMetadata(correctedFeeds);
@@ -473,9 +544,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const creatorMerged = shouldInstallCreatorFavourites
         ? mergeBuiltInCreatorFavourites(sensitiveMerged, local.feedSegments ?? []).feeds
         : sensitiveMerged;
-      return creatorMerged.map((feed) => normalizeFeed(feed, { preserveMetricSlots: true, preserveFeedSettings: true }));
+      const latestListingsMerged = shouldInstallLatestListings
+        ? mergeLatestListingsDefault(creatorMerged, local.feedSegments ?? []).feeds
+        : creatorMerged;
+      return latestListingsMerged.map((feed) => normalizeFeed(feed, { preserveMetricSlots: true, preserveFeedSettings: true }));
     },
-    [hasSavedState, local.feedSegments, local.feeds, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallCreatorFavourites, shouldInstallSensitiveFeedSegments, shouldRemoveLatestListings],
+    [hasSavedState, local.feedSegments, local.feeds, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallCreatorFavourites, shouldInstallLatestListings, shouldInstallSensitiveFeedSegments, shouldMigrateOelSourceModes, shouldRemoveLatestListings],
   );
   const shouldMigrateFeedsToThreeColumns = useMemo(
     () => localStorage.getItem(THREE_COLUMN_FEEDS_MIGRATION_KEY) !== "1",
@@ -500,7 +574,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     const sourceSegments = shouldInstallCreatorFavourites
       ? mergeBuiltInCreatorFavourites(initialFeeds, sensitiveSegments ?? []).segments
       : sensitiveSegments;
-    return normalizeFeedSegments(initialFeeds, normalizeBuiltInSensitiveNames(initialFeeds, sourceSegments ?? []).segments);
+    const latestListingsSegments = shouldInstallLatestListings
+      ? mergeLatestListingsDefault(initialFeeds, sourceSegments ?? []).segments
+      : sourceSegments;
+    return normalizeFeedSegments(initialFeeds, normalizeBuiltInSensitiveNames(initialFeeds, latestListingsSegments ?? []).segments);
   });
   const [feedLibraryOrder, setFeedLibraryOrder] = useState<FeedLibraryKind[]>(() => normalizeFeedLibraryOrder(local.feedLibraryOrder));
   const [folders, setFolders] = useState<Folder[]>(local.folders ?? []);
@@ -545,7 +622,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (shouldRemoveLatestListings || !hasSavedState) {
       localStorage.setItem(LATEST_LISTINGS_REMOVAL_VERSION_KEY, LATEST_LISTINGS_REMOVAL_VERSION);
     }
-  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallCreatorFavourites, shouldInstallSensitiveFeedSegments, shouldMigrateFeedsToThreeColumns, shouldRemoveLatestListings]);
+    if (shouldInstallLatestListings || !hasSavedState) {
+      localStorage.setItem(LATEST_LISTINGS_INSTALL_VERSION_KEY, LATEST_LISTINGS_INSTALL_VERSION);
+    }
+    if (shouldMigrateOelSourceModes || !hasSavedState) {
+      localStorage.setItem(OEL_SOURCE_SPLIT_VERSION_KEY, OEL_SOURCE_SPLIT_VERSION);
+    }
+  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallCreatorFavourites, shouldInstallLatestListings, shouldInstallSensitiveFeedSegments, shouldMigrateFeedsToThreeColumns, shouldMigrateOelSourceModes, shouldRemoveLatestListings]);
 
   useEffect(() => {
     void (async () => {
@@ -917,6 +1000,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(DEFAULT_FEED_LIBRARY_VERSION_KEY, DEFAULT_FEED_LIBRARY_VERSION);
     localStorage.setItem(SENSITIVE_FEED_SEGMENTS_VERSION_KEY, SENSITIVE_FEED_SEGMENTS_VERSION);
     localStorage.setItem(CREATOR_FAVOURITES_VERSION_KEY, CREATOR_FAVOURITES_VERSION);
+    localStorage.setItem(LATEST_LISTINGS_INSTALL_VERSION_KEY, LATEST_LISTINGS_INSTALL_VERSION);
   }, []);
 
   const importSnapshot = useCallback((snapshot: Partial<AppStateSnapshot>, mode: "merge" | "replace") => {

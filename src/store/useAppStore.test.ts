@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createFeed } from "../domain/defaults";
 import type { FeedSegment } from "../domain/types";
-import { addNewFeedToUnsegmentedSegment, correctDefaultFeedDescriptions, MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID, normalizeFeed, normalizeFeedSegments, removeRetiredDefaultFeeds, UNSEGMENTED_FEED_SEGMENT_ID } from "./useAppStore";
+import { addNewFeedToUnsegmentedSegment, correctDefaultFeedDescriptions, mergeLatestListingsDefault, migrateLegacyOelSourceMode, MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID, normalizeFeed, normalizeFeedSegments, removeRetiredDefaultFeeds, UNSEGMENTED_FEED_SEGMENT_ID } from "./useAppStore";
 
 const now = "2026-07-10T00:00:00.000Z";
 
@@ -63,6 +63,18 @@ describe("normalizeFeed", () => {
 
     expect(normalizeFeed(feed).filters.excludeTagIds).toEqual(savedExclusions);
   });
+
+  it("keeps legacy Non-AniList feed membership by adding the new OEL source once", () => {
+    const feed = createFeed("Legacy non-AniList");
+    feed.filters.sourceMode = "non-anilist";
+    feed.filters.sourceModes = ["non-anilist"];
+
+    const migrated = migrateLegacyOelSourceMode(feed);
+
+    expect(migrated.filters.sourceMode).toBe("mixed");
+    expect(migrated.filters.sourceModes).toEqual(["non-anilist", "oel"]);
+    expect(migrateLegacyOelSourceMode(migrated)).toEqual(migrated);
+  });
 });
 
 describe("new feed segment placement", () => {
@@ -123,5 +135,53 @@ describe("retired default feed migration", () => {
     expect(feeds.map((feed) => feed.id)).toEqual([retainedDefault.id, customFeed.id]);
     expect(segments.find((item) => item.id === "updates")?.feedIds).toEqual([retainedDefault.id]);
     expect(segments.find((item) => item.id === MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID)?.feedIds).toEqual([customFeed.id]);
+  });
+});
+
+describe("Latest Listings default feed installation", () => {
+  it("adds the supplied feed after Recently Completed without replacing saved state", () => {
+    const newReleases = createFeed("NEW RELEASES");
+    newReleases.id = "3511ae36-01bd-432b-9287-b1afdf85869a";
+    const recentlyCompleted = createFeed("RECENTLY COMPLETED");
+    recentlyCompleted.id = "5be53571-49c2-404f-8379-c7516fa6e979";
+    const userFeed = createFeed("My saved feed");
+    userFeed.id = "user-feed";
+    const updates = {
+      ...segment("2f19120b-0507-428d-9207-762d8726439e", [newReleases.id, recentlyCompleted.id]),
+      collapsed: false,
+      hiddenFromHome: true,
+    };
+    const userSegment = segment("user-segment", [userFeed.id]);
+
+    const merged = mergeLatestListingsDefault(
+      [newReleases, recentlyCompleted, userFeed],
+      [updates, userSegment],
+    );
+    const latestListings = merged.feeds.find((feed) => feed.id === "b68dcc8b-3ca0-44a4-a474-dd91af2debe7");
+
+    expect(latestListings?.name).toBe("LATEST LISTINGS");
+    expect(latestListings?.filters.sourceModes).toEqual(["non-anilist"]);
+    expect(latestListings?.sort[0]).toMatchObject({ metric: "mangabakaLatestRank", direction: "asc" });
+    expect(merged.segments[0]).toMatchObject({ collapsed: false, hiddenFromHome: true });
+    expect(merged.segments[0]?.feedIds).toEqual([
+      newReleases.id,
+      recentlyCompleted.id,
+      "b68dcc8b-3ca0-44a4-a474-dd91af2debe7",
+    ]);
+    expect(merged.segments[1]).toEqual(userSegment);
+    expect(merged.feeds).toContain(userFeed);
+  });
+
+  it("is idempotent and does not duplicate the feed or its segment membership", () => {
+    const recentlyCompleted = createFeed("RECENTLY COMPLETED");
+    recentlyCompleted.id = "5be53571-49c2-404f-8379-c7516fa6e979";
+    const updates = segment("2f19120b-0507-428d-9207-762d8726439e", [recentlyCompleted.id]);
+
+    const installed = mergeLatestListingsDefault([recentlyCompleted], [updates]);
+    const installedAgain = mergeLatestListingsDefault(installed.feeds, installed.segments);
+
+    expect(installedAgain.feeds.filter((feed) => feed.id === "b68dcc8b-3ca0-44a4-a474-dd91af2debe7")).toHaveLength(1);
+    expect(installedAgain.segments[0]?.feedIds.filter((id) => id === "b68dcc8b-3ca0-44a4-a474-dd91af2debe7")).toHaveLength(1);
+    expect(installedAgain).toEqual(installed);
   });
 });

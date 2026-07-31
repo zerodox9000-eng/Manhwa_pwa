@@ -77,7 +77,7 @@ import {
 } from "./domain/feedPresets";
 import { isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments";
 import { resolveRollingWindow } from "./domain/dates";
-import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot } from "./domain/query";
+import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot, toggleFeedSourceModeForEditor } from "./domain/query";
 import { matchesSearchTextWords, rankedDirectSearchMatches, searchTextWordPosition, searchWords, seriesSearchText } from "./domain/search";
 import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
@@ -3503,15 +3503,16 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
     updateView({ metricSlots: visible ? [...savedMetricSlotsRef.current] : [] });
   };
   const toggleArrayValue = <T,>(values: T[], value: T) => (values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
-  const toggleSourceMode = (mode: "anilist" | "non-anilist") => {
-    if (anilistLocked && mode === "non-anilist") return;
-    const current: SourceMode[] = draft.filters.sourceModes?.length ? draft.filters.sourceModes : ["anilist", "non-anilist"];
-    const next = current.includes(mode) ? current.filter((item) => item !== mode) : [...current, mode];
-    const normalized: SourceMode[] = next.length > 0 ? next : [mode];
-    updateFilters({
-      sourceModes: normalized,
-      sourceMode: normalized.length === 2 ? "mixed" : normalized[0],
-    });
+  const toggleSourceMode = (mode: Exclude<SourceMode, "mixed">) => {
+    const currentModes = draft.filters.sourceModes?.length ? draft.filters.sourceModes : [draft.filters.sourceMode];
+    const addingMangaBakaSource = mode !== "anilist" && !currentModes.includes(mode);
+    const nextDraft = toggleFeedSourceModeForEditor(draft, mode);
+    if (addingMangaBakaSource) {
+      const compatibleSlots = nextDraft.view.metricSlots;
+      savedMetricSlotsRef.current = compatibleSlots.length > 0 ? [...compatibleSlots] : ["year"];
+      setCoverStatsEnabled(compatibleSlots.length > 0);
+    }
+    setDraft(nextDraft);
   };
 
   useEffect(() => {
@@ -3600,21 +3601,20 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
       <h2 className="section-title">Advanced Filters</h2>
       <div className="field">
         <span className="small-label">Source</span>
-        <div className="segmented">
-          {(["anilist", "non-anilist"] as const).map((mode) => (
+        <div className="segmented source-segments">
+          {(["anilist", "non-anilist", "oel"] as const).map((mode) => (
             <button
               className={`segment ${draft.filters.sourceModes?.includes(mode) ? "active" : ""}`}
               type="button"
               key={mode}
-              disabled={anilistLocked && mode === "non-anilist"}
               onClick={() => toggleSourceMode(mode)}
             >
-              {mode === "anilist" ? "AniList" : "Non-AniList"}
+              {mode === "anilist" ? "AniList" : mode === "non-anilist" ? "Non-AniList" : "OEL"}
             </button>
           ))}
         </div>
         {anilistLocked && (
-          <p className="muted tiny">AniList-only is locked because this feed uses AniList stats in sorting, ranges, or cover stats.</p>
+          <p className="muted tiny">Choosing Non-AniList or OEL will switch this feed to compatible Add sorting and remove AniList-only ranges or cover stats.</p>
         )}
       </div>
 
@@ -4105,7 +4105,7 @@ function SearchPage() {
   const searchFeed = useMemo(() => {
     const feed = createFeed("Search results");
     feed.filters.sourceMode = "mixed";
-    feed.filters.sourceModes = ["anilist", "non-anilist"];
+    feed.filters.sourceModes = ["anilist", "non-anilist", "oel"];
     feed.filters.contentRatings = [...store.settings.contentRatings];
     feed.view = { ...feed.view, gridColumns: 3 };
     return feed;
@@ -4113,7 +4113,7 @@ function SearchPage() {
   const recentFeed = useMemo(() => {
     const feed = createFeed("Recently opened");
     feed.filters.sourceMode = "mixed";
-    feed.filters.sourceModes = ["anilist", "non-anilist"];
+    feed.filters.sourceModes = ["anilist", "non-anilist", "oel"];
     feed.filters.contentRatings = [...store.settings.contentRatings];
     feed.view = { ...feed.view, gridColumns: 3 };
     return feed;
@@ -4435,7 +4435,7 @@ function recommendationItems(base: SeriesCatalog, shelf: RecommendationShelf, st
   const buildPool = (metricRanges: RecommendationShelf["metricRanges"]) => {
     const filterFeed = createFeed(shelf.name);
     filterFeed.filters.sourceModes = shelf.sourceModes;
-    filterFeed.filters.sourceMode = shelf.sourceModes.length === 2 ? "mixed" : shelf.sourceModes[0];
+    filterFeed.filters.sourceMode = shelf.sourceModes.length > 1 ? "mixed" : shelf.sourceModes[0];
     filterFeed.filters.contentRatings = ["safe", "suggestive"];
     filterFeed.filters.metricRanges = metricRanges;
     return runFeedQuery({
@@ -5281,8 +5281,8 @@ function DetailSkeleton({ series }: { series: SeriesCatalog | null }) {
       ]
     : [];
   return (
-    <>
-      <section className="detail-identity detail-skeleton-identity" aria-hidden="true">
+    <div className="detail-skeleton" aria-hidden="true">
+      <section className="detail-identity detail-skeleton-identity">
         <div className="detail-cover-shell">
           <div className="detail-cover skeleton-box" />
         </div>
@@ -5296,13 +5296,13 @@ function DetailSkeleton({ series }: { series: SeriesCatalog | null }) {
           </section>
         </div>
       </section>
-      <section className="detail-stat-grid detail-skeleton-grid detail-skeleton-stats" aria-hidden="true">
+      <section className="detail-stat-grid detail-skeleton-grid detail-skeleton-stats">
         <div className="detail-stat skeleton-stat skeleton-stat-compact" />
         <div className="detail-stat skeleton-stat skeleton-stat-compact" />
         <div className="detail-stat skeleton-stat skeleton-stat-compact" />
         {hiddenStats.length > 0 && <span className="visually-hidden">{hiddenStats.join(" ")}</span>}
       </section>
-      <section className="detail-block" aria-hidden="true">
+      <section className="detail-block">
         <h2 className="section-title">Description</h2>
         <div className="skeleton-paragraph">
           <span className="skeleton-line skeleton-line-body" />
@@ -5310,21 +5310,7 @@ function DetailSkeleton({ series }: { series: SeriesCatalog | null }) {
           <span className="skeleton-line skeleton-line-body short" />
         </div>
       </section>
-      <section className="detail-block" aria-hidden="true">
-        <div className="chips">
-          <span className="chip skeleton-chip" />
-          <span className="chip skeleton-chip" />
-          <span className="chip skeleton-chip" />
-        </div>
-      </section>
-      <section className="detail-block" aria-hidden="true">
-        <div className="chips link-chips">
-          <span className="chip link-chip skeleton-chip" />
-          <span className="chip link-chip skeleton-chip" />
-          <span className="chip link-chip skeleton-chip" />
-        </div>
-      </section>
-    </>
+    </div>
   );
 }
 
