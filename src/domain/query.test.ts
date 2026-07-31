@@ -466,7 +466,7 @@ describe("runFeedQuery", () => {
     expect(result.items.map((item) => item.id)).toEqual([92, 91, 90]);
   });
 
-  it("keeps Non-AniList Add results to MangaUpdates-backed entries with real covers", () => {
+  it("requires MangaUpdates and a real cover without restricting the cover source", () => {
     const feed = createFeed("non anilist add hygiene");
     feed.filters.sourceMode = "non-anilist";
     feed.filters.sourceModes = ["non-anilist"];
@@ -493,11 +493,14 @@ describe("runFeedQuery", () => {
         },
         {
           ...baseSeries[2],
-          id: 132,
-          display_title: "Anime Planet Proxy Cover",
+          id: 588985,
+          display_title: "Teto X Egen",
           cover: "https://cdn.mangabaka.dev/imgproxy/plain/x350@1/aHR0cHM6Ly9hcC1wcm94eS5tYW5nYWJha2EuZGV2L3Byb3h5LnBocA",
           mangabaka_latest_rank: 3,
-          source: { mangaupdates: { id: "proxy", url: "https://www.mangaupdates.com/series/proxy" } },
+          source: {
+            animeplanet: { id: "teto-x-egen", url: "https://www.anime-planet.com/manga/teto-x-egen" },
+            mangaupdates: { id: "ygsxi0l", url: "https://www.mangaupdates.com/series/ygsxi0l" },
+          },
         },
         {
           ...baseSeries[2],
@@ -515,7 +518,7 @@ describe("runFeedQuery", () => {
       metaHistoryFirst: null,
       metaHistoryLast: null,
     });
-    expect(result.items.map((item) => item.id)).toEqual([130]);
+    expect(result.items.map((item) => item.id)).toEqual([588985, 130]);
   });
 
   it("separates OEL from Non-AniList and allows both in one Add feed", () => {

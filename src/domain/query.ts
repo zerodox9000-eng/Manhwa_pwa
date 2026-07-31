@@ -138,31 +138,8 @@ function hasMangaUpdates(series: SeriesCatalog) {
   return Boolean(series.source?.mangaupdates?.id || series.source?.mangaupdates?.url);
 }
 
-function decodeProxyCoverUrl(value: string) {
-  try {
-    const encoded = value.split("/").at(-1);
-    if (!encoded) return "";
-    return globalThis.atob(encoded.replace(/-/g, "+").replace(/_/g, "/")).toLocaleLowerCase();
-  } catch {
-    return "";
-  }
-}
-
-function isAnimePlanetProxyCover(cover: string) {
-  const normalized = cover.toLocaleLowerCase();
-  if (normalized.includes("anime-planet.com") || normalized.includes("ap-proxy.mangabaka.dev/proxy")) return true;
-  const decoded = decodeProxyCoverUrl(cover);
-  return decoded.includes("anime-planet.com") || decoded.includes("ap-proxy.mangabaka.dev/proxy");
-}
-
-function hasUsableMangaBakaCover(series: SeriesCatalog) {
-  const cover = series.cover?.trim();
-  if (!cover) return false;
-  return !isAnimePlanetProxyCover(cover);
-}
-
-function isMangaBakaAddCandidate(series: SeriesCatalog) {
-  return hasUsableMangaBakaCover(series) && hasMangaUpdates(series);
+function hasCover(series: SeriesCatalog) {
+  return Boolean(series.cover?.trim());
 }
 
 function sourceModeForSeries(series: SeriesCatalog): "anilist" | "non-anilist" | "oel" {
@@ -365,7 +342,7 @@ export function runFeedQuery(args: {
     if (feed.kind === "logic") {
       const sourceModes = effectiveSourceModesForFeed(feed);
       if (!sourceModes.includes(sourceMode)) return false;
-      if (sourceMode !== "anilist" && usesLatestAddedSort && !isMangaBakaAddCandidate(item)) return false;
+      if (sourceMode !== "anilist" && usesLatestAddedSort && (!hasMangaUpdates(item) || !hasCover(item))) return false;
     }
 
     if (filters.statuses.length > 0 && (!item.status || !filters.statuses.includes(item.status))) return false;
