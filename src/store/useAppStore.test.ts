@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import { createFeed } from "../domain/defaults";
-import type { FeedSegment } from "../domain/types";
-import { addNewFeedToUnsegmentedSegment, correctDefaultFeedDescriptions, mergeLatestListingsDefault, migrateLegacyOelSourceMode, MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID, normalizeFeed, normalizeFeedSegments, removeRetiredDefaultFeeds, UNSEGMENTED_FEED_SEGMENT_ID } from "./useAppStore";
+import type { Feed, FeedSegment } from "../domain/types";
+import { addNewFeedToUnsegmentedSegment, correctDefaultFeedDescriptions, correctDiscoverDeepCutExclusions, mergeLatestListingsDefault, migrateLegacyOelSourceMode, MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID, normalizeFeed, normalizeFeedSegments, removeRetiredDefaultFeeds, UNSEGMENTED_FEED_SEGMENT_ID } from "./useAppStore";
 
 const now = "2026-07-10T00:00:00.000Z";
 
@@ -116,6 +117,30 @@ describe("default feed description fixes", () => {
     expect(corrected[1].description).toContain("50% < Popularity");
     expect(corrected[2]).toBe(custom);
     expect(corrected[3].description).toContain("Ranked by Engagement");
+  });
+});
+
+describe("Discover Deep Cut default filter fix", () => {
+  it("ships with the same exclusions as Discover Underground", () => {
+    const defaultFeeds = defaultFeedsJson as unknown as Feed[];
+    const deepCut = defaultFeeds.find((feed) => feed.id === "default-feed-12");
+    const underground = defaultFeeds.find((feed) => feed.id === "98baa3ee-b1ff-404a-9878-b834aa7ea95b");
+
+    expect(deepCut?.filters.excludeTagIds).toEqual([4, 180, 41, 10]);
+    expect(deepCut?.filters.excludeTagIds).toEqual(underground?.filters.excludeTagIds);
+  });
+
+  it("aligns only the built-in Deep Cut exclusions with the other Discovery feeds", () => {
+    const deepCut = createFeed("DISCOVER DEEP CUT");
+    deepCut.id = "default-feed-12";
+    deepCut.filters.excludeTagIds = [4, 180, 41, 10, 33, 16];
+    const userFeed = createFeed("My Deep Cut");
+    userFeed.filters.excludeTagIds = [33, 16];
+
+    const corrected = correctDiscoverDeepCutExclusions([deepCut, userFeed]);
+
+    expect(corrected[0].filters.excludeTagIds).toEqual([4, 180, 41, 10]);
+    expect(corrected[1]).toBe(userFeed);
   });
 });
 

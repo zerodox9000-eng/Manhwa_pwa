@@ -35,6 +35,9 @@ const CREATOR_FAVOURITES_VERSION_KEY = "manhwa-creator-favourites-version";
 const CREATOR_FAVOURITES_VERSION = "v1";
 const DEFAULT_FEED_DESCRIPTION_FIX_VERSION_KEY = "manhwa-default-feed-description-fix";
 const DEFAULT_FEED_DESCRIPTION_FIX_VERSION = "v2";
+const DISCOVER_DEEP_CUT_FILTER_FIX_VERSION_KEY = "manhwa-discover-deep-cut-filter-fix";
+const DISCOVER_DEEP_CUT_FILTER_FIX_VERSION = "v1";
+const DISCOVER_DEEP_CUT_DEFAULT_FEED_ID = "default-feed-12";
 const RETIRED_LATEST_LISTINGS_DEFAULT_FEED_ID = "089d6f0f-cd06-4e94-9d43-d80071d427fb";
 const LATEST_LISTINGS_REMOVAL_VERSION_KEY = "manhwa-latest-listings-removal";
 const LATEST_LISTINGS_REMOVAL_VERSION = "v1";
@@ -432,6 +435,12 @@ export function correctDefaultFeedDescriptions(feeds: Feed[]) {
   });
 }
 
+export function correctDiscoverDeepCutExclusions(feeds: Feed[]) {
+  return feeds.map((feed) => feed.id === DISCOVER_DEEP_CUT_DEFAULT_FEED_ID
+    ? { ...feed, filters: { ...feed.filters, excludeTagIds: [...DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS] } }
+    : feed);
+}
+
 export function removeRetiredDefaultFeeds(feeds: Feed[]) {
   return feeds.filter((feed) => feed.id !== RETIRED_LATEST_LISTINGS_DEFAULT_FEED_ID);
 }
@@ -518,6 +527,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     () => hasSavedState && localStorage.getItem(DEFAULT_FEED_DESCRIPTION_FIX_VERSION_KEY) !== DEFAULT_FEED_DESCRIPTION_FIX_VERSION,
     [hasSavedState],
   );
+  const shouldCorrectDiscoverDeepCutExclusions = useMemo(
+    () => hasSavedState && localStorage.getItem(DISCOVER_DEEP_CUT_FILTER_FIX_VERSION_KEY) !== DISCOVER_DEEP_CUT_FILTER_FIX_VERSION,
+    [hasSavedState],
+  );
   const shouldRemoveLatestListings = useMemo(
     () => hasSavedState && localStorage.getItem(LATEST_LISTINGS_REMOVAL_VERSION_KEY) !== LATEST_LISTINGS_REMOVAL_VERSION,
     [hasSavedState],
@@ -536,7 +549,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const savedFeeds = (local.feeds ?? []).map((feed) => normalizeFeed(shouldMigrateOelSourceModes ? migrateLegacyOelSourceMode(feed) : feed));
       const retiredFeedsRemoved = shouldRemoveLatestListings ? removeRetiredDefaultFeeds(savedFeeds) : savedFeeds;
       const correctedFeeds = shouldCorrectDefaultFeedDescriptions ? correctDefaultFeedDescriptions(retiredFeedsRemoved) : retiredFeedsRemoved;
-      const creatorCanonicalFeeds = normalizeBuiltInCreatorFavouriteMetadata(correctedFeeds);
+      const deepCutCorrectedFeeds = shouldCorrectDiscoverDeepCutExclusions ? correctDiscoverDeepCutExclusions(correctedFeeds) : correctedFeeds;
+      const creatorCanonicalFeeds = normalizeBuiltInCreatorFavouriteMetadata(deepCutCorrectedFeeds);
       const canonicalFeeds = normalizeBuiltInSensitiveNames(creatorCanonicalFeeds, local.feedSegments ?? []).feeds;
       const sensitiveMerged = shouldInstallSensitiveFeedSegments
         ? mergeBuiltInSensitiveDefaults(canonicalFeeds, local.feedSegments ?? []).feeds
@@ -549,7 +563,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         : creatorMerged;
       return latestListingsMerged.map((feed) => normalizeFeed(feed, { preserveMetricSlots: true, preserveFeedSettings: true }));
     },
-    [hasSavedState, local.feedSegments, local.feeds, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallCreatorFavourites, shouldInstallLatestListings, shouldInstallSensitiveFeedSegments, shouldMigrateOelSourceModes, shouldRemoveLatestListings],
+    [hasSavedState, local.feedSegments, local.feeds, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldCorrectDiscoverDeepCutExclusions, shouldInstallCreatorFavourites, shouldInstallLatestListings, shouldInstallSensitiveFeedSegments, shouldMigrateOelSourceModes, shouldRemoveLatestListings],
   );
   const shouldMigrateFeedsToThreeColumns = useMemo(
     () => localStorage.getItem(THREE_COLUMN_FEEDS_MIGRATION_KEY) !== "1",
@@ -619,6 +633,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (shouldCorrectDefaultFeedDescriptions || !hasSavedState) {
       localStorage.setItem(DEFAULT_FEED_DESCRIPTION_FIX_VERSION_KEY, DEFAULT_FEED_DESCRIPTION_FIX_VERSION);
     }
+    if (shouldCorrectDiscoverDeepCutExclusions || !hasSavedState) {
+      localStorage.setItem(DISCOVER_DEEP_CUT_FILTER_FIX_VERSION_KEY, DISCOVER_DEEP_CUT_FILTER_FIX_VERSION);
+    }
     if (shouldRemoveLatestListings || !hasSavedState) {
       localStorage.setItem(LATEST_LISTINGS_REMOVAL_VERSION_KEY, LATEST_LISTINGS_REMOVAL_VERSION);
     }
@@ -628,7 +645,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (shouldMigrateOelSourceModes || !hasSavedState) {
       localStorage.setItem(OEL_SOURCE_SPLIT_VERSION_KEY, OEL_SOURCE_SPLIT_VERSION);
     }
-  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldInstallCreatorFavourites, shouldInstallLatestListings, shouldInstallSensitiveFeedSegments, shouldMigrateFeedsToThreeColumns, shouldMigrateOelSourceModes, shouldRemoveLatestListings]);
+  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldCorrectDiscoverDeepCutExclusions, shouldInstallCreatorFavourites, shouldInstallLatestListings, shouldInstallSensitiveFeedSegments, shouldMigrateFeedsToThreeColumns, shouldMigrateOelSourceModes, shouldRemoveLatestListings]);
 
   useEffect(() => {
     void (async () => {
@@ -1000,6 +1017,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(DEFAULT_FEED_LIBRARY_VERSION_KEY, DEFAULT_FEED_LIBRARY_VERSION);
     localStorage.setItem(SENSITIVE_FEED_SEGMENTS_VERSION_KEY, SENSITIVE_FEED_SEGMENTS_VERSION);
     localStorage.setItem(CREATOR_FAVOURITES_VERSION_KEY, CREATOR_FAVOURITES_VERSION);
+    localStorage.setItem(DISCOVER_DEEP_CUT_FILTER_FIX_VERSION_KEY, DISCOVER_DEEP_CUT_FILTER_FIX_VERSION);
     localStorage.setItem(LATEST_LISTINGS_INSTALL_VERSION_KEY, LATEST_LISTINGS_INSTALL_VERSION);
   }, []);
 
