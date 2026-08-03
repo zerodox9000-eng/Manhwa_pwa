@@ -121,6 +121,25 @@ describe("chunked frontend data", () => {
     expect(data.recommendationFeatures).toEqual([]);
   });
 
+  it("accepts a compact manifest with weekly history and no full history", async () => {
+    const { files, manifest } = await fixture();
+    delete manifest.datasets.history;
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const href = String(url);
+      if (href.endsWith("/meta/data-manifest.json")) {
+        return new Response(JSON.stringify(manifest), { status: 200 });
+      }
+      const body = files.get(href);
+      return body
+        ? new Response(new Uint8Array(body).buffer, { status: 200 })
+        : new Response("missing", { status: 404 });
+    }));
+
+    const data = await fetchChunkedFrontendData(base, undefined, { includeRecommendations: false });
+    expect(data.history["1"]?.[0]?.p).toBe(11);
+    expect(data.recommendationFeatures).toEqual([]);
+  });
+
   it("skips recommendation chunks when the feature is suspended", async () => {
     const { files, manifest } = await fixture();
     const fetchMock = vi.fn(async (url: string | URL) => {

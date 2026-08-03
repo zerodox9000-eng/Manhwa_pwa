@@ -9,8 +9,8 @@ const DOWNLOAD_CONCURRENCY = 4;
 
 type DatasetKind = "array" | "object";
 type DatasetName = "catalog" | "tags" | "history" | "weeklyHistory" | "recommendations";
-type RequiredDatasetName = "catalog" | "tags" | "history";
-type OptionalDatasetName = "weeklyHistory" | "recommendations";
+type RequiredDatasetName = "catalog" | "tags";
+type OptionalDatasetName = "history" | "weeklyHistory" | "recommendations";
 
 interface ChunkDescriptor {
   path: string;
@@ -111,9 +111,15 @@ export function parseFrontendDataManifest(value: unknown): FrontendDataManifest 
   if (!isRecord(value.datasets)) throw new Error("Frontend data manifest has no datasets.");
 
   const buildId = value.buildId;
+  const history = value.datasets.history == null
+    ? undefined
+    : parseDataset(value.datasets.history, "history", buildId);
   const weeklyHistory = value.datasets.weeklyHistory == null
     ? undefined
     : parseDataset(value.datasets.weeklyHistory, "weeklyHistory", buildId);
+  if (!history && !weeklyHistory) {
+    throw new Error("Manifest has no history dataset.");
+  }
   const recommendations = value.datasets.recommendations == null
     ? undefined
     : parseDataset(value.datasets.recommendations, "recommendations", buildId);
@@ -125,7 +131,7 @@ export function parseFrontendDataManifest(value: unknown): FrontendDataManifest 
     datasets: {
       catalog: parseDataset(value.datasets.catalog, "catalog", buildId),
       tags: parseDataset(value.datasets.tags, "tags", buildId),
-      history: parseDataset(value.datasets.history, "history", buildId),
+      ...(history ? { history } : {}),
       ...(weeklyHistory ? { weeklyHistory } : {}),
       ...(recommendations ? { recommendations } : {}),
     },
