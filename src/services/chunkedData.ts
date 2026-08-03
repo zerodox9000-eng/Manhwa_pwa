@@ -8,7 +8,9 @@ const MAX_CHUNK_BYTES = 20 * 1024 * 1024;
 const DOWNLOAD_CONCURRENCY = 4;
 
 type DatasetKind = "array" | "object";
-type DatasetName = "catalog" | "tags" | "history" | "recommendations";
+type DatasetName = "catalog" | "tags" | "history" | "weeklyHistory" | "recommendations";
+type RequiredDatasetName = "catalog" | "tags" | "history";
+type OptionalDatasetName = "weeklyHistory" | "recommendations";
 
 interface ChunkDescriptor {
   path: string;
@@ -28,7 +30,7 @@ export interface FrontendDataManifest {
   schemaVersion: typeof SUPPORTED_SCHEMA_VERSION;
   buildId: string;
   generatedAt: string;
-  datasets: Record<DatasetName, DatasetDescriptor>;
+  datasets: Record<RequiredDatasetName, DatasetDescriptor> & Partial<Record<OptionalDatasetName, DatasetDescriptor>>;
 }
 
 export interface ChunkedFrontendData {
@@ -109,6 +111,12 @@ export function parseFrontendDataManifest(value: unknown): FrontendDataManifest 
   if (!isRecord(value.datasets)) throw new Error("Frontend data manifest has no datasets.");
 
   const buildId = value.buildId;
+  const weeklyHistory = value.datasets.weeklyHistory == null
+    ? undefined
+    : parseDataset(value.datasets.weeklyHistory, "weeklyHistory", buildId);
+  const recommendations = value.datasets.recommendations == null
+    ? undefined
+    : parseDataset(value.datasets.recommendations, "recommendations", buildId);
   return {
     contract: DATA_CONTRACT,
     schemaVersion: SUPPORTED_SCHEMA_VERSION,
@@ -118,7 +126,8 @@ export function parseFrontendDataManifest(value: unknown): FrontendDataManifest 
       catalog: parseDataset(value.datasets.catalog, "catalog", buildId),
       tags: parseDataset(value.datasets.tags, "tags", buildId),
       history: parseDataset(value.datasets.history, "history", buildId),
-      recommendations: parseDataset(value.datasets.recommendations, "recommendations", buildId),
+      ...(weeklyHistory ? { weeklyHistory } : {}),
+      ...(recommendations ? { recommendations } : {}),
     },
   };
 }
@@ -237,11 +246,15 @@ export async function fetchChunkedFrontendData(
     throw new Error(`Manifest: ${manifestResponse.status} ${manifestResponse.statusText}`);
   }
   const manifest = parseFrontendDataManifest(await manifestResponse.json());
-  const requestedDatasets: DatasetName[] = options.includeRecommendations === false
-    ? ["catalog", "tags", "history"]
-    : ["catalog", "tags", "history", "recommendations"];
+  const historyDatasetName: "weeklyHistory" | "history" = manifest.datasets.weeklyHistory
+    ? "weeklyHistory"
+    : "history";
+  const requestedDatasets: DatasetName[] = ["catalog", "tags", historyDatasetName];
+  if (options.includeRecommendations !== false && manifest.datasets.recommendations) {
+    requestedDatasets.push("recommendations");
+  }
   const totalBytes = requestedDatasets.reduce(
-    (sum, name) => sum + manifest.datasets[name].chunks.reduce((chunkSum, chunk) => chunkSum + chunk.bytes, 0),
+    (sum, name) => sum + manifest.datasets[name]!.chunks.reduce((chunkSum, chunk) => chunkSum + chunk.bytes, 0),
     0,
   );
   let completedBytes = 0;
@@ -265,19 +278,21 @@ export async function fetchChunkedFrontendData(
     throw new Error("Tag validation dropped one or more records.");
   }
 
-  onProgress?.("Downloading chunked history");
-  const history = parseHistory(await loadDataset(base, "history", manifest.datasets.history, reportChunk));
-  if (Object.keys(history).length !== manifest.datasets.history.count) {
+  const historyDescriptor = manifest.datasets[historyDatasetName]!;
+  onProgress?.(historyDatasetName === "weeklyHistory" ? "Downloading weekly history" : "Downloading chunked history");
+  const history = parseHistory(await loadDataset(base, historyDatasetName, historyDescriptor, reportChunk));
+  if (Object.keys(history).length !== historyDescriptor.count) {
     throw new Error("History validation dropped one or more tracks.");
   }
 
   let recommendationFeatures: RecommendationFeature[] = [];
-  if (options.includeRecommendations !== false) {
+  const recommendationDescriptor = manifest.datasets.recommendations;
+  if (options.includeRecommendations !== false && recommendationDescriptor) {
     onProgress?.("Downloading chunked recommendation features");
     recommendationFeatures = parseRecommendationFeatures(
-      await loadDataset(base, "recommendations", manifest.datasets.recommendations, reportChunk),
+      await loadDataset(base, "recommendations", recommendationDescriptor, reportChunk),
     );
-    if (recommendationFeatures.length !== manifest.datasets.recommendations.count) {
+    if (recommendationFeatures.length !== recommendationDescriptor.count) {
       throw new Error("Recommendation validation dropped one or more records.");
     }
   }

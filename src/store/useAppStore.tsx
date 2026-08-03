@@ -4,6 +4,7 @@ import defaultFeedSegmentsJson from "../domain/defaultFeedSegments.generated.jso
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import defaultSettingsJson from "../domain/defaultSettings.generated.json";
 import { feedUsesAniListOnlyParameters } from "../domain/query";
+import { normalizeWeeklyGrowthFeed } from "../domain/feedPresets";
 import { CUSTOM_FEED_MAX_TITLES, insertCustomTitleIds, mergeReorderedVisibleIds, moveCustomTitleIds, normalizeCustomTitleIds } from "../domain/customFeeds";
 import { builtInCreatorFavouriteFeeds, builtInCreatorFavouriteSegments, mergeBuiltInCreatorFavourites, normalizeBuiltInCreatorFavouriteMetadata } from "../domain/creatorFavouritesDefaults";
 import { builtInSensitiveFeeds, builtInSensitiveSegments, mergeBuiltInSensitiveDefaults, normalizeBuiltInSensitiveNames } from "../domain/sensitiveFeedSegments";
@@ -233,7 +234,7 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
     ? rawMetricSlots
     : rawMetricSlots.filter((metric) => metric !== "mangabakaLatestRank")
   ).slice(0, 3);
-  const normalized: Feed = {
+  const normalized: Feed = normalizeWeeklyGrowthFeed({
     ...feed,
     kind: feed.kind === "custom" ? "custom" : "logic",
     description: feed.description ?? "",
@@ -275,7 +276,7 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
     orderMode: feed.kind === "custom" && feed.orderMode === "automatic" ? "automatic" : feed.kind === "custom" ? "manual" : "automatic",
     newTitlePlacement: feed.newTitlePlacement === "bottom" ? "bottom" : "top",
     nonAniListPlacement: feed.nonAniListPlacement === "bottom" ? "bottom" : "top",
-  };
+  });
   if (normalized.kind === "custom") {
     return {
       ...normalized,

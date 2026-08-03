@@ -10,8 +10,8 @@ import type {
   TagNode,
   UserLabel,
 } from "./types";
-import { isDateWithin, isFutureDate, resolveRollingWindow } from "./dates";
-import { chapterNumber, displayComparableMetricValue, displayReleaseDate, effectiveEndDate, effectiveReleaseDate, historyDeltaForWindow, metricDefinition, metricValue } from "./metrics";
+import { isDateWithin, isFutureDate, resolveRollingWindow, WEEKLY_GROWTH_WINDOW } from "./dates";
+import { chapterNumber, displayComparableMetricValue, displayReleaseDate, effectiveEndDate, effectiveReleaseDate, historyDeltaForWindow, isGrowthMetric, metricDefinition, metricValue } from "./metrics";
 
 const RELATIONSHIP_SENSITIVE_NAMES = new Set(["boys love", "girls love"]);
 const ADULT_SENSITIVE_NAMES = new Set(["smut", "hentai"]);
@@ -317,14 +317,16 @@ export function runFeedQuery(args: {
   }
 
   const window = resolveRollingWindow(filters.rolling, metaHistoryLast);
-  const growthWindow = window ?? resolveRollingWindow({ mode: "last", amount: 1, unit: "days" }, metaHistoryLast);
-  const usesHistorySort = feed.sort.some((rule) => rule.metric.includes("Growth") || rule.metric.includes("Delta"));
+  const growthWindow = resolveRollingWindow(WEEKLY_GROWTH_WINDOW, metaHistoryLast)!;
+  const usesHistorySort = feed.sort.some((rule) => isGrowthMetric(rule.metric));
+  const usesHistoryRange = (filters.metricRanges ?? []).some((range) => isGrowthMetric(range.metric));
+  const usesHistoryQuery = usesHistorySort || usesHistoryRange;
   const usesReleaseDateSort = feed.sort.some((rule) => rule.metric === "releaseDate");
-  if (window && usesHistorySort) {
-    activeNotes.push(`Growth window: ${window.from} to ${window.to}.`);
+  if (usesHistoryQuery) {
+    activeNotes.push(`Growth window: ${growthWindow.from} to ${growthWindow.to}.`);
     if (Object.keys(history).length === 0) activeNotes.push("Growth sorting will update after history sync finishes.");
   }
-  if (window && metaHistoryFirst && window.from < metaHistoryFirst) {
+  if (usesHistoryQuery && metaHistoryFirst && growthWindow.from < metaHistoryFirst) {
     limitedHistory = true;
     activeNotes.push(`History is currently available from ${metaHistoryFirst} to ${metaHistoryLast}.`);
   }
@@ -369,7 +371,7 @@ export function runFeedQuery(args: {
     if (filters.minMeanScore != null && (item.stats.meanScore == null || item.stats.meanScore < filters.minMeanScore)) return false;
     if (filters.maxMeanScore != null && (item.stats.meanScore == null || item.stats.meanScore > filters.maxMeanScore)) return false;
     for (const [metric, ranges] of rangeGroups) {
-      const value = (growthWindow && (metric.includes("Growth") || metric.includes("Delta")))
+      const value = isGrowthMetric(metric)
         ? historyDeltaForWindow(item.id, metric, history, growthWindow.from, growthWindow.to)
         : displayComparableMetricValue(item, metric, history, metaHistoryLast);
       if (typeof value !== "number" || !Number.isFinite(value)) return false;
@@ -431,7 +433,7 @@ export function runFeedQuery(args: {
       if (usesAniListAddedSort && rule.metric === "mangabakaLatestRank") continue;
       let av = metricValue(a, rule.metric, history, metaHistoryLast);
       let bv = metricValue(b, rule.metric, history, metaHistoryLast);
-      if (growthWindow && (rule.metric.includes("Growth") || rule.metric.includes("Delta"))) {
+      if (isGrowthMetric(rule.metric)) {
         av = historyDeltaForWindow(a.id, rule.metric, history, growthWindow.from, growthWindow.to) ?? av;
         bv = historyDeltaForWindow(b.id, rule.metric, history, growthWindow.from, growthWindow.to) ?? bv;
       }

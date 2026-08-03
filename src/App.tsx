@@ -56,6 +56,7 @@ import {
   CHAPTER_PRESETS,
   FAN_RANK_PRESETS,
   isFeedPresetRange,
+  WEEKLY_GROWTH_PERIOD,
   PERIOD_PRESETS,
   PERIOD_PURPOSES,
   POPULARITY_PRESETS,
@@ -76,10 +77,10 @@ import {
   toggleReleaseYearPreset,
 } from "./domain/feedPresets";
 import { isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments";
-import { resolveRollingWindow } from "./domain/dates";
+import { resolveRollingWindow, WEEKLY_GROWTH_WINDOW } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot, toggleFeedSourceModeForEditor } from "./domain/query";
 import { matchesSearchTextWords, rankedDirectSearchMatches, searchTextWordPosition, searchWords, seriesSearchText } from "./domain/search";
-import { formatMetricValue, historyDeltaForWindow, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
+import { formatMetricValue, historyDeltaForWindow, isGrowthMetric, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
 import { decodeSharePayload, makeShareUrl, makeTitleShareUrl, type SharePayload } from "./domain/share";
@@ -2076,7 +2077,7 @@ function TitleCollection({
     }
   }, [catalogReady, countKey, visibleCount]);
   const visibleItems = items.slice(0, visibleCount);
-  const metricWindow = useMemo(() => resolveRollingWindow(feed.filters.rolling, latestDate), [feed.filters.rolling, latestDate]);
+  const metricWindow = useMemo(() => defaultGrowthWindow(latestDate), [latestDate]);
 
   if (loading) {
     return <TitleCollectionSkeleton columns={feed.view.gridColumns} />;
@@ -2315,10 +2316,6 @@ function TitleCollectionSkeleton({ columns }: { columns: 1 | 2 | 3 | 4 | 5 }) {
   );
 }
 
-function isGrowthMetric(metric: MetricId) {
-  return metric.includes("Growth") || metric.includes("Delta");
-}
-
 function formatRawMetricValue(metric: MetricId, value: number) {
   if (!Number.isFinite(value)) return "n/a";
   if (metric === "fanFavouriteRaw" || metric === "fanFavouriteDelta") return `${value.toFixed(1)}%`;
@@ -2330,7 +2327,7 @@ function formatRawMetricValue(metric: MetricId, value: number) {
 }
 
 function defaultGrowthWindow(latestDate?: string | null) {
-  return resolveRollingWindow({ mode: "last", amount: 1, unit: "days" }, latestDate);
+  return resolveRollingWindow(WEEKLY_GROWTH_WINDOW, latestDate);
 }
 
 function formatFeedMetricValue(
@@ -3144,6 +3141,7 @@ function FeedPresetControls({
   const sortDirection = sort[0]?.direction ?? "desc";
   const period = selectedPeriodPresetId(filters);
   const periodPurpose = PERIOD_PURPOSES.find((option) => option.dateField === filters.dateField)?.id ?? "growth";
+  const periodOptions = periodPurpose === "growth" ? [WEEKLY_GROWTH_PERIOD] : PERIOD_PRESETS;
   const renderOptions = (
     options: ReadonlyArray<{ id: string; label: string }>,
     selected: Set<string>,
@@ -3231,7 +3229,7 @@ function FeedPresetControls({
       )}
       <div className="field">
         <span className="small-label">Time period</span>
-        {renderOptions(PERIOD_PRESETS, new Set(period ? [period] : []), (id) => onChange(selectPeriodPreset(filters, id), sort), "two-column")}
+        {renderOptions(periodOptions, new Set(period ? [period] : []), (id) => onChange(selectPeriodPreset(filters, id), sort), "two-column")}
       </div>
       <div className="field">
         <span className="small-label">Use time period for</span>
@@ -3331,7 +3329,6 @@ function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSa
   const [advanced, setAdvanced] = useState(false);
   const [coverStatsEnabled, setCoverStatsEnabled] = useState(feed.view.metricSlots.length > 0);
   const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : ["fanFavouriteDiscoveryPercentile"]);
-  const updateFilters = (patch: Partial<Feed["filters"]>) => setDraft((current) => ({ ...current, filters: { ...current.filters, ...patch } }));
   const updateView = (patch: Partial<FeedViewSettings>) => setDraft((current) => ({ ...current, view: { ...current.view, ...patch } }));
   const setCoverStatsVisible = (visible: boolean) => {
     setCoverStatsEnabled(visible);
@@ -3393,56 +3390,7 @@ function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSa
             }} />
           ) : null}
           <FeedParameterEditor filters={draft.filters} onChange={(filters) => setDraft((current) => ({ ...current, filters }))} />
-          <h2 className="section-title">Rolling Dates</h2>
-          <div className="field-grid">
-            <div className="field">
-              <label>Date field</label>
-              <div className="segmented">
-                {([
-                  ["none", "None"],
-                  ["release", "Release"],
-                  ["end", "End"],
-                ] as const).map(([value, label]) => (
-                  <button className={`segment ${draft.filters.dateField === value ? "active" : ""}`} type="button" key={value} onClick={() => updateFilters({ dateField: value })}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="field">
-              <label>Window mode</label>
-              <div className="segmented">
-                {([
-                  ["none", "None"],
-                  ["last", "Last X"],
-                  ["fixed", "Fixed"],
-                ] as const).map(([value, label]) => (
-                  <button className={`segment ${draft.filters.rolling.mode === value ? "active" : ""}`} type="button" key={value} onClick={() => updateFilters({ rolling: { ...draft.filters.rolling, mode: value } })}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <RollingAmountField label="Amount" value={draft.filters.rolling.amount} onChange={(amount) => updateFilters({ rolling: { ...draft.filters.rolling, amount } })} />
-            <div className="field">
-              <label>Unit</label>
-              <div className="segmented compact-segments">
-                {(["days", "weeks", "months", "years"] as const).map((unit) => (
-                  <button className={`segment ${draft.filters.rolling.unit === unit ? "active" : ""}`} type="button" key={unit} onClick={() => updateFilters({ rolling: { ...draft.filters.rolling, unit } })}>
-                    {unit}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="field">
-              <label>From</label>
-              <input className="input" type="date" value={draft.filters.rolling.from ?? ""} onChange={(event) => updateFilters({ rolling: { ...draft.filters.rolling, from: event.target.value } })} />
-            </div>
-            <div className="field">
-              <label>To</label>
-              <input className="input" type="date" value={draft.filters.rolling.to ?? ""} onChange={(event) => updateFilters({ rolling: { ...draft.filters.rolling, to: event.target.value } })} />
-            </div>
-          </div>
+          <RollingDateControls filters={draft.filters} onChange={(filters) => setDraft((current) => ({ ...current, filters }))} />
           <h2 className="section-title">Sort</h2>
           <div className="settings-list">
             {draft.sort.map((rule, index) => <div className="setting-row" key={rule.id}>
@@ -3659,75 +3607,7 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
       ) : null}
       <FeedParameterEditor filters={draft.filters} onChange={(filters) => setDraft((current) => ({ ...current, filters }))} />
 
-      <h2 className="section-title">Rolling Dates</h2>
-      <div className="field-grid">
-        <div className="field">
-          <label>Date field</label>
-          <div className="segmented">
-            {[
-              ["none", "None"],
-              ["release", "Release"],
-              ["end", "End"],
-            ].map(([value, label]) => (
-              <button
-                className={`segment ${draft.filters.dateField === value ? "active" : ""}`}
-                type="button"
-                key={value}
-                onClick={() => updateFilters({ dateField: value as Feed["filters"]["dateField"] })}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="field">
-          <label>Window mode</label>
-          <div className="segmented">
-            {[
-              ["none", "None"],
-              ["last", "Last X"],
-              ["fixed", "Fixed"],
-            ].map(([value, label]) => (
-              <button
-                className={`segment ${draft.filters.rolling.mode === value ? "active" : ""}`}
-                type="button"
-                key={value}
-                onClick={() => updateFilters({ rolling: { ...draft.filters.rolling, mode: value as Feed["filters"]["rolling"]["mode"] } })}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <RollingAmountField
-          label="Amount"
-          value={draft.filters.rolling.amount}
-          onChange={(amount) => updateFilters({ rolling: { ...draft.filters.rolling, amount } })}
-        />
-        <div className="field">
-          <label>Unit</label>
-          <div className="segmented compact-segments">
-            {(["days", "weeks", "months", "years"] as const).map((unit) => (
-              <button
-                className={`segment ${draft.filters.rolling.unit === unit ? "active" : ""}`}
-                type="button"
-                key={unit}
-                onClick={() => updateFilters({ rolling: { ...draft.filters.rolling, unit } })}
-              >
-                {unit}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="field">
-          <label>From</label>
-          <input className="input" type="date" value={draft.filters.rolling.from ?? ""} onChange={(event) => updateFilters({ rolling: { ...draft.filters.rolling, from: event.target.value } })} />
-        </div>
-        <div className="field">
-          <label>To</label>
-          <input className="input" type="date" value={draft.filters.rolling.to ?? ""} onChange={(event) => updateFilters({ rolling: { ...draft.filters.rolling, to: event.target.value } })} />
-        </div>
-      </div>
+      <RollingDateControls filters={draft.filters} onChange={(filters) => setDraft((current) => ({ ...current, filters }))} />
 
       <h2 className="section-title">Sort</h2>
       <div className="settings-list">
@@ -3833,6 +3713,68 @@ function NumberField({ label, value, onChange }: { label: string; value: number 
         onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}
       />
     </div>
+  );
+}
+
+function RollingDateControls({ filters, onChange }: { filters: Feed["filters"]; onChange: (filters: Feed["filters"]) => void }) {
+  const updateRolling = (patch: Partial<Feed["filters"]["rolling"]>) => onChange({
+    ...filters,
+    rolling: { ...filters.rolling, ...patch },
+  });
+  return (
+    <>
+      <h2 className="section-title">Time Period</h2>
+      <div className="field">
+        <label>Use time period for</label>
+        <div className="segmented">
+          {PERIOD_PURPOSES.map((purpose) => (
+            <button
+              className={`segment ${filters.dateField === purpose.dateField ? "active" : ""}`}
+              type="button"
+              key={purpose.id}
+              onClick={() => onChange(selectPeriodPurpose(filters, purpose.id))}
+            >
+              {purpose.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {filters.dateField === "none" ? (
+        <p className="muted tiny">Growth always compares the latest stats with the one-week boundary.</p>
+      ) : (
+        <div className="field-grid">
+          <div className="field">
+            <label>Window mode</label>
+            <div className="segmented">
+              {([["none", "None"], ["last", "Last X"], ["fixed", "Fixed"]] as const).map(([value, label]) => (
+                <button className={`segment ${filters.rolling.mode === value ? "active" : ""}`} type="button" key={value} onClick={() => updateRolling({ mode: value })}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <RollingAmountField label="Amount" value={filters.rolling.amount} onChange={(amount) => updateRolling({ amount })} />
+          <div className="field">
+            <label>Unit</label>
+            <div className="segmented compact-segments">
+              {(["days", "weeks", "months", "years"] as const).map((unit) => (
+                <button className={`segment ${filters.rolling.unit === unit ? "active" : ""}`} type="button" key={unit} onClick={() => updateRolling({ unit })}>
+                  {unit}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="field">
+            <label>From</label>
+            <input className="input" type="date" value={filters.rolling.from ?? ""} onChange={(event) => updateRolling({ from: event.target.value })} />
+          </div>
+          <div className="field">
+            <label>To</label>
+            <input className="input" type="date" value={filters.rolling.to ?? ""} onChange={(event) => updateRolling({ to: event.target.value })} />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

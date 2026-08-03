@@ -41,6 +41,10 @@ export const METRIC_DEFINITIONS: MetricDefinition[] = [
 export const metricDefinition = (metric: MetricId) =>
   METRIC_DEFINITIONS.find((definition) => definition.id === metric) ?? METRIC_DEFINITIONS[0];
 
+export function isGrowthMetric(metric: MetricId) {
+  return metric.includes("Growth") || metric.includes("Delta");
+}
+
 export function chapterNumber(value: SeriesCatalog["total_chapters"]) {
   if (value == null) return null;
   const number = Number.parseFloat(String(value));

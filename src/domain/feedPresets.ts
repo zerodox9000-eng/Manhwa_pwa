@@ -1,4 +1,5 @@
-import type { FeedFilters, MetricId, MetricRange, SortRule } from "./types";
+import type { Feed, FeedFilters, MetricId, MetricRange, SortRule } from "./types";
+import { isGrowthMetric } from "./metrics";
 import { POPULARITY_BANDS } from "./popularityBands";
 
 export type FeedPresetOption = {
@@ -69,6 +70,8 @@ export const PERIOD_PRESETS = [
   { id: "three-months", label: "3 Months", amount: 3, unit: "months" },
   { id: "year", label: "1 Year", amount: 1, unit: "years" },
 ] as const;
+
+export const WEEKLY_GROWTH_PERIOD = PERIOD_PRESETS[0];
 
 export const PERIOD_PURPOSES = [
   { id: "growth", label: "Growth", dateField: "none" },
@@ -189,14 +192,43 @@ export function selectedPeriodPresetId(filters: FeedFilters) {
 }
 
 export function selectPeriodPreset(filters: FeedFilters, id: string) {
+  if (filters.dateField === "none" && id !== WEEKLY_GROWTH_PERIOD.id) return filters;
   const selected = selectedPeriodPresetId(filters);
-  if (selected === id) return { ...filters, rolling: { ...filters.rolling, mode: "none" as const } };
+  if (selected === id) {
+    return filters.dateField === "none"
+      ? filters
+      : { ...filters, rolling: { ...filters.rolling, mode: "none" as const } };
+  }
   const option = PERIOD_PRESETS.find((item) => item.id === id);
   if (!option) return filters;
   return { ...filters, rolling: { ...filters.rolling, mode: "last" as const, amount: option.amount, unit: option.unit } };
 }
 
-export function selectPeriodPurpose(filters: FeedFilters, id: string) {
+export function selectPeriodPurpose(filters: FeedFilters, id: string): FeedFilters {
   const option = PERIOD_PURPOSES.find((item) => item.id === id);
-  return option ? { ...filters, dateField: option.dateField } : filters;
+  if (!option) return filters;
+  if (option.id !== "growth") return { ...filters, dateField: option.dateField };
+  return {
+    ...filters,
+    dateField: "none",
+    rolling: { ...filters.rolling, mode: "last", amount: 1, unit: "weeks" },
+  };
+}
+
+export function normalizeWeeklyGrowthFeed(feed: Feed): Feed {
+  const usesGrowth = [
+    ...feed.sort.map((rule) => rule.metric),
+    ...(feed.filters.metricRanges ?? []).map((range) => range.metric),
+    ...(feed.view.metricSlots ?? []),
+  ].some(isGrowthMetric);
+  if (!usesGrowth || feed.filters.dateField !== "none") return feed;
+  const rolling = feed.filters.rolling;
+  if (rolling.mode === "last" && rolling.amount === 1 && rolling.unit === "weeks") return feed;
+  return {
+    ...feed,
+    filters: {
+      ...feed.filters,
+      rolling: { ...rolling, mode: "last", amount: 1, unit: "weeks" },
+    },
+  };
 }

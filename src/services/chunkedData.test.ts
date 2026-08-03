@@ -40,6 +40,9 @@ async function fixture() {
     history: {
       "1": [{ d: "2026-06-28", p: 10, f: 1, s: 70, r: 10, rp: 50, pp: 50, ds: 50, dp: 50 }],
     },
+    weeklyHistory: {
+      "1": [{ d: "2026-06-28", p: 11, f: 1, s: 70, r: 10, rp: 50, pp: 50, ds: 50, dp: 50 }],
+    },
     recommendations: [{ id: 1, context: {} }],
   };
   const files = new Map<string, Uint8Array>();
@@ -94,7 +97,28 @@ describe("chunked frontend data", () => {
     expect(data.catalog.map((item) => item.id)).toEqual([1]);
     expect(data.tags.map((tag) => tag.id)).toEqual([10]);
     expect(Object.keys(data.history)).toEqual(["1"]);
+    expect(data.history["1"]?.[0]?.p).toBe(11);
     expect(data.recommendationFeatures.map((item) => item.id)).toEqual([1]);
+  });
+
+  it("falls back to full history and accepts a manifest without recommendations", async () => {
+    const { files, manifest } = await fixture();
+    delete manifest.datasets.weeklyHistory;
+    delete manifest.datasets.recommendations;
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const href = String(url);
+      if (href.endsWith("/meta/data-manifest.json")) {
+        return new Response(JSON.stringify(manifest), { status: 200 });
+      }
+      const body = files.get(href);
+      return body
+        ? new Response(new Uint8Array(body).buffer, { status: 200 })
+        : new Response("missing", { status: 404 });
+    }));
+
+    const data = await fetchChunkedFrontendData(base);
+    expect(data.history["1"]?.[0]?.p).toBe(10);
+    expect(data.recommendationFeatures).toEqual([]);
   });
 
   it("skips recommendation chunks when the feature is suspended", async () => {
