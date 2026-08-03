@@ -61,10 +61,12 @@ const baseSeries: SeriesCatalog[] = [
 const history: HistoryMap = {
   "1": [
     { d: "2024-05-01", p: 10, f: 1, s: 80, r: 10, rp: 1, pp: 1, ds: 20, dp: 1 },
+    { d: "2024-05-03", p: 20, f: 2, s: 80, r: 10, rp: 1, pp: 1, ds: 30, dp: 1 },
     { d: "2024-05-10", p: 100, f: 10, s: 80, r: 10, rp: 1, pp: 1, ds: 90, dp: 1 },
   ],
   "2": [
     { d: "2024-05-01", p: 190, f: 19, s: 70, r: 10, rp: 1, pp: 1, ds: 70, dp: 1 },
+    { d: "2024-05-03", p: 195, f: 19, s: 70, r: 10, rp: 1, pp: 1, ds: 75, dp: 1 },
     { d: "2024-05-10", p: 200, f: 20, s: 70, r: 10, rp: 1, pp: 1, ds: 80, dp: 1 },
   ],
 };
@@ -315,7 +317,7 @@ describe("runFeedQuery", () => {
       metaHistoryLast: "2024-05-10",
     });
     expect(result.items[0].id).toBe(1);
-    expect(result.activeNotes).toContain("Growth window: 2024-05-01 to 2024-05-10.");
+    expect(result.activeNotes).toContain("Growth window: 2024-05-03 to 2024-05-10.");
   });
 
   it("falls back to popularity when growth data is unavailable", () => {

@@ -108,12 +108,27 @@ describe("feed presets", () => {
 
   it("selects rolling periods and their purpose without replacing advanced dates", () => {
     const feed = createFeed();
-    feed.filters = selectPeriodPreset(feed.filters, "three-months");
     feed.filters = selectPeriodPurpose(feed.filters, "release");
+    feed.filters = selectPeriodPreset(feed.filters, "three-months");
     expect(selectedPeriodPresetId(feed.filters)).toBe("three-months");
     expect(feed.filters.rolling).toMatchObject({ mode: "last", amount: 3, unit: "months" });
     expect(feed.filters.dateField).toBe("release");
     expect(PERIOD_PRESETS.map((option) => option.label)).toEqual(["1 Week", "1 Month", "3 Months", "1 Year"]);
+  });
+
+  it("keeps growth fixed to one week while leaving release periods flexible", () => {
+    const feed = createFeed();
+    feed.filters = selectPeriodPurpose(feed.filters, "growth");
+    feed.filters = selectPeriodPreset(feed.filters, "year");
+    expect(selectedPeriodPresetId(feed.filters)).toBe("week");
+
+    feed.filters = selectPeriodPurpose(feed.filters, "release");
+    feed.filters = selectPeriodPreset(feed.filters, "year");
+    expect(selectedPeriodPresetId(feed.filters)).toBe("year");
+
+    feed.filters = selectPeriodPurpose(feed.filters, "growth");
+    expect(selectedPeriodPresetId(feed.filters)).toBe("week");
+    expect(feed.filters.dateField).toBe("none");
   });
 
   it("selects multiple exact release years without retaining a manual year range", () => {

@@ -2,6 +2,12 @@ import type { RollingWindow } from "./types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+export const WEEKLY_GROWTH_WINDOW: RollingWindow = {
+  mode: "last",
+  amount: 1,
+  unit: "weeks",
+};
+
 export function parseDate(value?: string | null): Date | null {
   if (!value) return null;
   const date = new Date(`${value}T00:00:00Z`);

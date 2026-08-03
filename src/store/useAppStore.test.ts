@@ -11,6 +11,22 @@ function segment(id: string, feedIds: string[]): FeedSegment {
 }
 
 describe("normalizeFeed", () => {
+  it("keeps every shipped growth feed on the one-week runtime contract", () => {
+    const feeds = defaultFeedsJson as unknown as Feed[];
+    const growthFeeds = feeds.filter((feed) => [
+      ...feed.sort.map((rule) => rule.metric),
+      ...(feed.filters.metricRanges ?? []).map((range) => range.metric),
+      ...(feed.view.metricSlots ?? []),
+    ].some((metric) => metric.includes("Growth") || metric.includes("Delta")));
+
+    expect(growthFeeds).toHaveLength(17);
+    expect(growthFeeds.every((feed) => (
+      feed.filters.rolling.mode === "last" &&
+      feed.filters.rolling.amount === 1 &&
+      feed.filters.rolling.unit === "weeks"
+    ))).toBe(true);
+  });
+
   it("migrates legacy feeds to logic without changing their id", () => {
     const legacy = createFeed("Legacy");
     delete (legacy as Partial<typeof legacy>).kind;
@@ -63,6 +79,28 @@ describe("normalizeFeed", () => {
     const savedExclusions = [...feed.filters.excludeTagIds];
 
     expect(normalizeFeed(feed).filters.excludeTagIds).toEqual(savedExclusions);
+  });
+
+  it("migrates saved non-weekly growth feeds to one week without changing other settings", () => {
+    const feed = createFeed("Old monthly growth");
+    feed.sort = [{ id: "growth", metric: "popularityGrowthPercent", direction: "asc" }];
+    feed.filters.rolling = { mode: "last", amount: 1, unit: "months" };
+    feed.filters.statuses = ["releasing"];
+
+    const normalized = normalizeFeed(feed);
+
+    expect(normalized.filters.rolling).toMatchObject({ mode: "last", amount: 1, unit: "weeks" });
+    expect(normalized.sort).toEqual(feed.sort);
+    expect(normalized.filters.statuses).toEqual(["releasing"]);
+  });
+
+  it("keeps release windows independent when a feed also sorts by weekly growth", () => {
+    const feed = createFeed("Recent releases by growth");
+    feed.sort = [{ id: "growth", metric: "popularityGrowthPercent", direction: "desc" }];
+    feed.filters.dateField = "release";
+    feed.filters.rolling = { mode: "last", amount: 3, unit: "months" };
+
+    expect(normalizeFeed(feed).filters.rolling).toEqual(feed.filters.rolling);
   });
 
   it("keeps legacy Non-AniList feed membership by adding the new OEL source once", () => {
