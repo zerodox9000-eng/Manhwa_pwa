@@ -543,11 +543,11 @@ describe("runFeedQuery", () => {
         },
         {
           ...baseSeries[2],
-          id: 141,
+          id: 128,
           type: "oel",
-          display_title: "OEL with AnimePlanet only",
+          display_title: "Hand Jumper",
           cover: validCover,
-          source: { animeplanet: { id: "oel-ap", url: "https://www.anime-planet.com/manga/oel-ap" } },
+          source: { animeplanet: { id: "hand-jumper", url: "https://www.anime-planet.com/manga/hand-jumper" } },
         },
         {
           ...baseSeries[2],
@@ -565,11 +565,11 @@ describe("runFeedQuery", () => {
       metaHistoryFirst: null,
       metaHistoryLast: null,
     });
-    expect(result.items.map((item) => item.id)).toEqual([142, 140]);
+    expect(result.items.map((item) => item.id)).toEqual([142, 140, 128]);
 
     feed.filters.sourceMode = "oel";
     feed.filters.sourceModes = ["oel"];
-    expect(runFeedQuery({ feed, series: result.items, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id)).toEqual([140]);
+    expect(runFeedQuery({ feed, series: result.items, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id)).toEqual([140, 128]);
   });
 
   it("uses AniList first-seen ordering for Add in AniList-only feeds", () => {
