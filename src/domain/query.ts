@@ -344,7 +344,7 @@ export function runFeedQuery(args: {
     if (feed.kind === "logic") {
       const sourceModes = effectiveSourceModesForFeed(feed);
       if (!sourceModes.includes(sourceMode)) return false;
-      if (sourceMode !== "anilist" && usesLatestAddedSort && (!hasMangaUpdates(item) || !hasCover(item))) return false;
+      if (sourceMode === "non-anilist" && usesLatestAddedSort && (!hasMangaUpdates(item) || !hasCover(item))) return false;
     }
 
     if (filters.statuses.length > 0 && (!item.status || !filters.statuses.includes(item.status))) return false;
