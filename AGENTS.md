@@ -48,6 +48,7 @@ Update parent docs when parent-level structure, ownership, workflow, or child in
 ## Work Guidance
 
 - Use the minimum number of subagents only when work is genuinely parallelizable and materially useful, and close them as soon as that value ends. When used, select only `gpt-5.6-luna` with `max` reasoning and the priority/fast service tier unless the user explicitly requests another model. Never inherit or select a Sol model for subagents by default.
+- Use ports 6000 and above for local LAN previews; do not reuse the old 4xxx preview range.
 - Keep the app mobile-first and PWA-safe.
 - Preserve existing data contracts with `zerodox9000-eng/manhwa_db` unless the backend repo is updated in the same task.
 - Do not change shipped default feeds, profile state, or feed migration behavior casually; those changes affect installed PWAs.
