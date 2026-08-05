@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { Check, RotateCw, X } from "lucide-react";
 import { inflate } from "pako";
 import { useLocation } from "react-router-dom";
+import { ResilientCoverImage } from "./components/ResilientCoverImage";
 import { POPULARITY_BANDS } from "./domain/popularityBands";
 import { formatTrendDuration, type ChapterChangeEvent, type StatusChangeEvent, type TrendBuildResult, type TrendEvent, type TrendEventBandId, type UpdatesExport } from "./domain/trends";
 import { matchesSearchWords } from "./domain/search";
@@ -139,11 +140,11 @@ function TrendCard({
 
   return (
     <a className={`trend-card rising ${selected ? "selected" : ""}`} href={`#/title/${series.id}`} {...selectionHandlers}>
-      {series.cover ? <img className="trend-card-bg" src={series.cover} alt="" loading="lazy" /> : null}
+      {series.cover ? <ResilientCoverImage className="trend-card-bg" src={series.cover} alt="" loading="lazy" /> : null}
       <span className="trend-card-shade" aria-hidden="true" />
       <div className="trend-card-main">
         <div className="trend-cover-wrap">
-          {series.cover ? <img className="trend-cover" src={series.cover} alt="" loading="lazy" /> : <div className="trend-cover trend-cover-fallback" />}
+          {series.cover ? <ResilientCoverImage className="trend-cover" src={series.cover} alt="" loading="lazy" fallback={<div className="trend-cover trend-cover-fallback" />} /> : <div className="trend-cover trend-cover-fallback" />}
           {selected ? <span className="title-selection-mark"><Check size={19} /></span> : null}
         </div>
         <div className="trend-copy">
@@ -179,11 +180,11 @@ function StatusChangeCard({ event, series, latestDate, onOpen }: {
   const { selected, ...selectionHandlers } = useUpdateCardSelection(series.id, onOpen);
   return (
     <a className={`trend-card status-change-card ${selected ? "selected" : ""}`} href={`#/title/${series.id}`} {...selectionHandlers}>
-      {series.cover ? <img className="trend-card-bg" src={series.cover} alt="" loading="lazy" /> : null}
+      {series.cover ? <ResilientCoverImage className="trend-card-bg" src={series.cover} alt="" loading="lazy" /> : null}
       <span className="trend-card-shade" aria-hidden="true" />
       <div className="trend-card-main">
         <div className="trend-cover-wrap">
-          {series.cover ? <img className="trend-cover" src={series.cover} alt="" loading="lazy" /> : <div className="trend-cover trend-cover-fallback" />}
+          {series.cover ? <ResilientCoverImage className="trend-cover" src={series.cover} alt="" loading="lazy" fallback={<div className="trend-cover trend-cover-fallback" />} /> : <div className="trend-cover trend-cover-fallback" />}
           {selected ? <span className="title-selection-mark"><Check size={19} /></span> : null}
         </div>
         <div className="trend-copy">
@@ -214,11 +215,11 @@ function ChapterChangeCard({ event, series, latestDate, onOpen }: {
   const { selected, ...selectionHandlers } = useUpdateCardSelection(series.id, onOpen);
   return (
     <a className={`trend-card chapter-change-card ${selected ? "selected" : ""}`} href={`#/title/${series.id}`} {...selectionHandlers}>
-      {series.cover ? <img className="trend-card-bg" src={series.cover} alt="" loading="lazy" /> : null}
+      {series.cover ? <ResilientCoverImage className="trend-card-bg" src={series.cover} alt="" loading="lazy" /> : null}
       <span className="trend-card-shade" aria-hidden="true" />
       <div className="trend-card-main">
         <div className="trend-cover-wrap">
-          {series.cover ? <img className="trend-cover" src={series.cover} alt="" loading="lazy" /> : <div className="trend-cover trend-cover-fallback" />}
+          {series.cover ? <ResilientCoverImage className="trend-cover" src={series.cover} alt="" loading="lazy" fallback={<div className="trend-cover trend-cover-fallback" />} /> : <div className="trend-cover trend-cover-fallback" />}
           {selected ? <span className="title-selection-mark"><Check size={19} /></span> : null}
         </div>
         <div className="trend-copy">

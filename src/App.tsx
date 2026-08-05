@@ -51,6 +51,7 @@ import {
 } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
+import { ResilientCoverImage } from "./components/ResilientCoverImage";
 import { createCustomFeed, createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
 import {
   CHAPTER_PRESETS,
@@ -1913,7 +1914,7 @@ function CustomFeedReorderGrid({ feed, items, onDone }: { feed: Feed; items: Ser
         ref={ghostRef}
         style={{ transform: `translate3d(${dragStartPoint.x}px, ${dragStartPoint.y}px, 0)` }}
       >
-        <img src={dragItem.cover ?? ""} alt="" />
+        <ResilientCoverImage src={dragItem.cover ?? ""} alt="" />
       </div>
     ) : null}
     <div className="custom-reorder-dock">
@@ -2150,7 +2151,14 @@ function Cover({ series, priority = false }: { series: SeriesCatalog; priority?:
   return (
     <div className="cover-wrap">
       {series.cover ? (
-        <img src={series.cover} alt="" loading={priority ? "eager" : "lazy"} decoding="async" fetchPriority={priority ? "high" : "auto"} />
+        <ResilientCoverImage
+          src={series.cover}
+          alt=""
+          loading={priority ? "eager" : "lazy"}
+          decoding="async"
+          fetchPriority={priority ? "high" : "auto"}
+          fallback={<div className="cover-fallback cover-fallback-initials">{initials || "ML"}</div>}
+        />
       ) : (
         <div className="cover-fallback cover-fallback-initials">{initials || "ML"}</div>
       )}
@@ -2165,7 +2173,7 @@ function MosaicCover({ items, title }: { items: SeriesCatalog[]; title: string }
       {covers.length === 0 ? (
         <div className="mosaic-fallback">{title.slice(0, 2).toUpperCase()}</div>
       ) : (
-        covers.map((item, index) => <img src={item.cover ?? ""} alt="" key={`${item.id}-${index}`} loading="lazy" />)
+        covers.map((item, index) => <ResilientCoverImage src={item.cover ?? ""} alt="" key={`${item.id}-${index}`} loading="lazy" />)
       )}
     </div>
   );
@@ -4973,6 +4981,7 @@ function TitleDetailPage() {
       ? {
           ...detail,
           display_title: localTitle,
+          cover: catalogItem.cover ?? detail.cover,
           stats: catalogItem.stats,
           analytics: catalogItem.analytics,
           source: catalogItem.source ?? detail.source,
@@ -5013,7 +5022,7 @@ function TitleDetailPage() {
 
   return (
     <div className="detail-page">
-      {series?.cover && <img className="detail-bg" src={series.cover} alt="" />}
+      {series?.cover && <ResilientCoverImage className="detail-bg" src={series.cover} alt="" />}
       <div className="detail-top-actions">
         <button className="icon-button" type="button" onClick={() => sharedLaunch ? navigate("/", { replace: true }) : navigate(-1)} aria-label="Back">
           <ArrowLeft size={22} />
@@ -5050,7 +5059,7 @@ function TitleDetailPage() {
           <section className="detail-identity">
             {visible.cover && (
               <div className="detail-cover-shell">
-                {series.cover ? <img className="detail-cover" src={series.cover} alt="" /> : <div className="detail-cover cover-fallback">No cover</div>}
+                {series.cover ? <ResilientCoverImage className="detail-cover" src={series.cover} alt="" fallback={<div className="detail-cover cover-fallback">No cover</div>} /> : <div className="detail-cover cover-fallback">No cover</div>}
               </div>
             )}
             <div className="detail-copy detail-copy-fitted" ref={detailCopyRef}>
