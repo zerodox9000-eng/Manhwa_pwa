@@ -572,6 +572,34 @@ describe("runFeedQuery", () => {
     expect(runFeedQuery({ feed, series: result.items, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id)).toEqual([140, 128]);
   });
 
+  it("excludes untagged OEL titles only when using Add sort", () => {
+    const feed = createFeed("OEL Add");
+    feed.filters.sourceMode = "oel";
+    feed.filters.sourceModes = ["oel"];
+    feed.sort = [{ id: "mb", metric: "mangabakaLatestRank", direction: "asc" }];
+    feed.view.metricSlots = ["year"];
+    const series = [
+      {
+        ...baseSeries[2],
+        id: 128,
+        type: "oel",
+        display_title: "Tagged OEL",
+      },
+      {
+        ...baseSeries[2],
+        id: 127,
+        type: "oel",
+        display_title: "Untagged OEL",
+        tag_ids: [],
+      },
+    ];
+
+    expect(runFeedQuery({ feed, series, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id)).toEqual([128]);
+
+    feed.sort = [{ id: "year", metric: "year", direction: "desc" }];
+    expect(runFeedQuery({ feed, series, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id)).toEqual([128, 127]);
+  });
+
   it("uses AniList first-seen ordering for Add in AniList-only feeds", () => {
     const feed = createFeed("ani add");
     feed.filters.sourceMode = "anilist";
