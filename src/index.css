@@ -2854,13 +2854,13 @@ textarea,
   background: #111218;
 }
 
-@media (min-width: 760px) {
+@media (min-width: 1180px) and (min-height: 650px) {
   .feed-cover-grid {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
 
-@media (min-width: 820px) {
+@media (min-width: 1180px) and (min-height: 650px) {
   .drawer-content {
     left: auto;
     width: min(520px, 46vw);
@@ -4750,7 +4750,7 @@ textarea,
   to { transform: rotate(360deg); }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1180px) and (min-height: 650px) {
   .trends-page {
     width: min(1040px, 100%);
   }
@@ -5163,8 +5163,8 @@ textarea,
   }
 }
 
-/* Desktop-only shell: preserve the phone-first layout below 768px. */
-@media (min-width: 768px) {
+/* Desktop-only shell: preserve the phone-first layout below 1180px or 650px tall. */
+@media (min-width: 1180px) and (min-height: 650px) {
   .page:not(.home-page) {
     width: min(1360px, calc(100% - 48px));
     padding: 28px 24px 118px;
@@ -5306,18 +5306,29 @@ textarea,
   .title-grid.columns-1 .compact-metrics span,
   .title-grid.columns-2 .compact-metrics span,
   .title-grid.columns-3 .compact-metrics span {
-    min-height: 22px;
-    padding: 2px 7px;
-    font-size: 11px;
+    min-height: 26px;
+    padding: 3px 9px;
+    font-size: 13px;
     line-height: 1.15;
   }
 
   .title-grid.columns-4 .compact-metrics span,
   .title-grid.columns-5 .compact-metrics span {
-    min-height: 20px;
-    padding: 2px 6px;
-    font-size: 10px;
+    min-height: 26px;
+    padding: 3px 9px;
+    font-size: 13px;
     line-height: 1.15;
+  }
+
+  .feed-pager .title-grid.columns-1 .compact-metrics span,
+  .feed-pager .title-grid.columns-2 .compact-metrics span,
+  .feed-pager .title-grid.columns-3 .compact-metrics span,
+  .feed-pager .title-grid.columns-4 .compact-metrics span,
+  .feed-pager .title-grid.columns-5 .compact-metrics span {
+    min-height: 31px;
+    padding: 4px 11px;
+    font-size: 15.6px;
+    line-height: 1.08;
   }
 
   /* Large desktop compositor layers stall interaction on some browsers. */
@@ -5430,6 +5441,979 @@ textarea,
   }
 }
 
+/* Wide-screen layout: the phone shell remains the complete fallback below the two-axis desktop threshold. */
+.desktop-detail-heading {
+  display: none;
+}
+
+@media (min-width: 1180px) and (min-height: 650px) {
+  :root {
+    --desktop-nav-width: clamp(88px, 7.4vw, 104px);
+  }
+
+  .app-shell {
+    min-height: 100dvh;
+    padding-left: var(--desktop-nav-width);
+  }
+
+  .app-shell > main {
+    width: 100%;
+  }
+
+  .bottom-nav {
+    position: fixed;
+    isolation: isolate;
+    inset: 0 auto 0 0;
+    display: flex;
+    width: var(--desktop-nav-width) !important;
+    max-width: none;
+    height: 100dvh;
+    padding: 18px 10px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 10px;
+    overflow: hidden;
+    border: 0;
+    border-right: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 0;
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      inset -1px 0 rgba(255, 255, 255, 0.08),
+      0 10px 22px rgba(0, 0, 0, 0.14);
+    backdrop-filter: blur(16px) saturate(1.12);
+    -webkit-backdrop-filter: blur(16px) saturate(1.12);
+    clip-path: none;
+    transform: none;
+  }
+
+  .bottom-nav::before {
+    display: none;
+  }
+
+  .bottom-nav .nav-item {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    min-height: 72px;
+    padding: 9px 4px;
+    flex: 0 0 auto;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.065);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    backdrop-filter: blur(12px) saturate(1.12);
+    -webkit-backdrop-filter: blur(12px) saturate(1.12);
+    font-size: 11px;
+  }
+
+  .bottom-nav .nav-item svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .bottom-nav .nav-item.active {
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--accent) 19%, rgba(28, 31, 41, 0.92));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 32%, transparent);
+  }
+
+  .page:not(.home-page) {
+    width: 100%;
+    margin-left: 0;
+    margin-right: auto;
+    padding: 28px 24px 32px;
+  }
+
+  .home-page {
+    width: 100%;
+    margin-left: 0;
+    margin-right: auto;
+  }
+
+  .feed-pane-scroll {
+    padding: 24px 18px 32px;
+    scrollbar-gutter: stable;
+  }
+
+  .feed-summary-section,
+  .title-grid,
+  .feed-pane-scroll > .empty-state,
+  .feed-pane-scroll > .toolbar {
+    width: 100%;
+    margin-left: 0;
+    margin-right: auto;
+  }
+
+  .desktop-feed-pager-button {
+    top: 34px;
+    width: 42px;
+    height: 42px;
+    border-color: color-mix(in srgb, var(--accent) 42%, rgba(255, 255, 255, 0.16));
+    background: color-mix(in srgb, var(--accent) 17%, rgba(16, 19, 27, 0.94));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent), 0 8px 20px rgba(0, 0, 0, 0.28);
+    transform: none;
+  }
+
+  .desktop-feed-pager-button.previous {
+    right: 70px;
+    left: auto;
+  }
+
+  .desktop-feed-pager-button.next {
+    right: 18px;
+  }
+
+  .desktop-feed-pager-button:disabled {
+    opacity: 0.38;
+  }
+
+  .feed-bar-cover-wash {
+    height: clamp(116px, 10vw, 142px);
+  }
+
+  .feed-summary-content {
+    gap: 7px;
+    padding: 12px 116px 12px 18px;
+  }
+
+  .feed-title-button {
+    min-height: 44px;
+    padding: 3px 16px;
+  }
+
+  .feed-title-button,
+  .feed-description-button {
+    background: rgba(27, 30, 40, 0.84);
+    backdrop-filter: none;
+  }
+
+  .single-line-title {
+    font-size: clamp(26px, 2.15vw, 32px) !important;
+    transform: none;
+  }
+
+  .feed-description-button {
+    min-height: 27px;
+    padding: 2px 11px;
+  }
+
+  .feed-description-text {
+    font-size: 12px;
+  }
+
+  .detail-page {
+    width: 100%;
+    margin-left: 0;
+    margin-right: auto;
+    min-height: 100dvh;
+    padding: 24px 28px 30px;
+    overflow: visible;
+  }
+
+  .detail-page::before {
+    background:
+      linear-gradient(180deg, rgba(8, 9, 13, 0.18), rgba(8, 9, 13, 0.7) 390px),
+      linear-gradient(90deg, rgba(8, 9, 13, 0.7), rgba(8, 9, 13, 0.34) 52%, rgba(8, 9, 13, 0.76));
+  }
+
+  .detail-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-position: center 24%;
+    filter: blur(3px) saturate(0.96);
+    opacity: 0.24;
+    transform: scale(1.015);
+  }
+
+  .detail-top-actions {
+    margin-bottom: 22px;
+  }
+
+  .detail-top-actions .icon-button {
+    background: rgba(20, 23, 31, 0.86);
+    backdrop-filter: none;
+  }
+
+  .detail-title {
+    font-size: clamp(32px, 3.1vw, 48px);
+  }
+
+  .detail-content-grid .detail-block,
+  .detail-content-grid .detail-stat-grid {
+    width: 100%;
+    margin: 0;
+  }
+
+  .detail-content-grid .detail-block {
+    align-self: start;
+  }
+
+  .detail-content-grid .detail-description {
+    grid-area: description;
+  }
+
+  .detail-content-grid .detail-genres {
+    grid-area: genres;
+  }
+
+  .detail-content-grid .detail-links {
+    grid-area: links;
+  }
+
+  .detail-content-grid .detail-all-tags {
+    grid-area: tags;
+    max-height: 230px;
+    overflow-y: auto;
+  }
+
+  .detail-content-grid .detail-meta-strip {
+    display: flex;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .detail-content-grid .detail-meta-chip {
+    display: flex;
+    min-width: 0;
+    padding: 0 5px;
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+  }
+
+  .detail-content-grid .detail-meta-chip:nth-child(2) {
+    flex-grow: 1.24;
+  }
+
+  .detail-content-grid .detail-meta-chip span {
+    font-size: 8.5px;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .detail-content-grid .detail-meta-chip strong {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: clamp(11px, 1.1vw, 15px);
+    line-height: 1;
+  }
+
+  .detail-content-grid .detail-stat-grid {
+    grid-area: stats;
+  }
+
+  .detail-content-grid .detail-identity {
+    grid-area: identity;
+  }
+
+  .detail-content-grid .detail-cover-shell {
+    width: min(100%, 300px);
+    justify-self: center;
+  }
+
+  .detail-content-grid .detail-links .chips {
+    display: grid;
+    gap: 7px;
+  }
+
+  .detail-content-grid .link-chip {
+    min-height: 42px;
+    justify-content: flex-start;
+  }
+
+  .detail-content-grid .detail-stat {
+    min-height: 82px;
+    padding: 13px 12px;
+  }
+
+  .detail-content-grid .detail-stat strong {
+    font-size: 24px;
+  }
+
+  .detail-content-grid .detail-stat span {
+    font-size: 12px;
+  }
+
+  .feed-pager .cover-wrap img {
+    transform: none;
+    backface-visibility: visible;
+  }
+
+  .feed-pager .title-card-wrap,
+  .feed-pager .title-card {
+    isolation: isolate;
+    contain: layout paint;
+  }
+
+  .drawer-content .feed-editor-actions {
+    position: sticky;
+    z-index: 3;
+    bottom: calc(-18px - env(safe-area-inset-bottom));
+    margin: 2px -2px calc(-18px - env(safe-area-inset-bottom));
+    padding: 12px 2px calc(18px + env(safe-area-inset-bottom));
+    border-top: 1px solid rgba(255, 255, 255, 0.11);
+    background: #111218;
+  }
+}
+
+@media (min-width: 1180px) and (min-height: 650px) {
+  .drawer-content {
+    height: 100dvh;
+    max-height: 100dvh;
+  }
+}
+
+@media (min-width: 1180px) and (min-height: 650px) {
+  .detail-content-grid {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.55fr);
+    grid-template-areas:
+      "identity stats"
+      "identity description"
+      "identity genres"
+      "identity links"
+      "identity tags";
+    gap: 16px 22px;
+    align-items: start;
+  }
+
+  .detail-content-grid .detail-identity {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 20px;
+    align-content: start;
+  }
+
+  .detail-content-grid .detail-stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .detail-content-grid .detail-links .chips {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detail-content-grid .detail-meta-strip {
+    width: 100%;
+    margin-bottom: 0;
+  }
+
+  .detail-content-grid .detail-title {
+    font-size: clamp(30px, 3.2vw, 46px);
+  }
+}
+
+@media (min-width: 1180px) and (min-height: 650px) {
+  .feed-pager {
+    overflow-x: hidden;
+    overscroll-behavior: none;
+    scroll-snap-type: none;
+  }
+
+  .feed-pane-scroll {
+    isolation: auto;
+  }
+
+  .feed-pager .title-card-wrap,
+  .feed-pager .title-card {
+    isolation: auto;
+  }
+
+  .detail-page {
+    display: flex;
+    height: 100dvh;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .detail-content-grid {
+    height: auto;
+    min-height: 0;
+    max-height: 800px;
+    flex: 1 1 auto;
+    grid-template-columns: minmax(190px, 0.86fr) minmax(230px, 1.42fr) minmax(150px, 0.9fr);
+    grid-template-areas: "identity middle side";
+    grid-template-rows: minmax(0, 1fr);
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .detail-content-grid .detail-identity {
+    height: 100%;
+    padding: 12px;
+    grid-template-rows: minmax(0, 0.64fr) minmax(0, 0.36fr);
+    align-content: start;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    background: rgba(29, 32, 42, 0.9);
+  }
+
+  .detail-content-grid .detail-cover-shell {
+    width: auto;
+    max-width: 100%;
+    height: 100%;
+    min-height: 0;
+    max-height: 100%;
+    aspect-ratio: 0.72;
+    align-self: stretch;
+    justify-self: center;
+  }
+
+  .detail-content-grid .detail-cover {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: auto;
+  }
+
+  .detail-content-grid .detail-copy {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .detail-content-grid .detail-copy-inner {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .detail-content-grid .detail-copy-primary {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .detail-content-grid .detail-title,
+  .detail-content-grid .detail-creators,
+  .detail-content-grid .detail-meta-strip {
+    flex-shrink: 0;
+  }
+
+  .detail-content-grid .detail-copy-primary .detail-title,
+  .detail-content-grid .detail-copy-primary .detail-creators {
+    margin: 0;
+  }
+
+  .detail-content-grid .detail-meta-strip {
+    margin-top: 0;
+  }
+
+  .detail-middle-column,
+  .detail-side-column {
+    display: flex;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    gap: 12px;
+    flex-direction: column;
+    align-items: stretch;
+    overflow: hidden;
+  }
+
+  .detail-middle-column {
+    grid-area: middle;
+  }
+
+  .detail-side-column {
+    grid-area: side;
+  }
+
+  .detail-content-grid .detail-block {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(29, 32, 42, 0.9);
+  }
+
+  .detail-content-grid .detail-description {
+    display: flex;
+    min-height: 0;
+    max-height: none;
+    flex: 0 0 auto;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .detail-content-grid .detail-description .rich-description {
+    min-height: 0;
+    gap: 6px;
+    flex: 0 1 auto;
+    align-content: start;
+  }
+
+  .detail-content-grid .detail-genres {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .detail-content-grid .detail-genres .chips {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .detail-content-grid .detail-all-tags {
+    min-height: 0;
+    max-height: none;
+    flex: 0 1 auto;
+    overflow-y: auto;
+  }
+
+  .detail-content-grid .detail-all-tags .chips {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .detail-content-grid .detail-genres .chip,
+  .detail-content-grid .detail-all-tags .chip {
+    width: auto;
+    max-width: min(100%, clamp(132px, 13vw, 220px));
+    min-height: 28px;
+    height: auto;
+    padding: 0 10px;
+    flex: 1 1 max-content;
+    justify-content: center;
+    font-size: 12px;
+    line-height: 1.05;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .detail-content-grid .detail-all-tags .chip {
+    width: max-content;
+    max-width: 100%;
+    flex: 0 1 auto;
+    overflow: hidden;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    text-overflow: clip;
+  }
+
+  .detail-content-grid .detail-genres,
+  .detail-content-grid .detail-all-tags {
+    padding: 8px;
+  }
+
+  .detail-content-grid .detail-genres .section-title,
+  .detail-content-grid .detail-all-tags .section-title {
+    margin-bottom: 6px;
+    font-size: 11px;
+    line-height: 1.1;
+  }
+
+  .detail-content-grid .detail-stat-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    background: rgba(29, 32, 42, 0.9);
+    flex: 0 0 clamp(270px, 37dvh, 340px);
+  }
+
+  .detail-content-grid .detail-stats-panel {
+    display: flex;
+    min-height: 0;
+    padding: 14px 0 0;
+    flex: 0 0 auto;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .detail-content-grid .detail-stats-panel .desktop-detail-heading {
+    padding: 0 16px;
+  }
+
+  .detail-content-grid .detail-stats-panel .detail-stat-grid {
+    width: 100%;
+    flex-basis: clamp(226px, 32dvh, 296px);
+    border: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .detail-content-grid .detail-stat {
+    display: flex;
+    min-height: 0;
+    gap: 2px;
+    padding: 6px 8px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .detail-content-grid .detail-stat:last-child {
+    border-bottom: 0;
+  }
+
+  .detail-content-grid .detail-stat strong {
+    font-size: clamp(17px, 1.55vw, 23px);
+    line-height: 1.05;
+  }
+
+  .detail-content-grid .detail-stat span {
+    font-size: 10px;
+    line-height: 1.15;
+  }
+
+  .detail-content-grid .detail-stat-grid:has(.detail-stat:nth-child(4)) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detail-content-grid .detail-stat-grid:has(.detail-stat:nth-child(4)) .detail-stat {
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .detail-content-grid .detail-links .chips {
+    width: 100%;
+    height: auto;
+    flex: 0 0 auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: clamp(52px, 7.3dvh, 72px);
+    gap: 5px;
+  }
+
+  .detail-content-grid .detail-links {
+    display: flex;
+    min-height: 0;
+    max-height: 100%;
+    flex: 0 1 auto;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .detail-content-grid .desktop-detail-heading,
+  .detail-content-grid .detail-genres .desktop-detail-heading {
+    display: block;
+    margin-bottom: 12px;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: normal;
+    letter-spacing: 0.12em;
+  }
+
+  .detail-middle-column .detail-links {
+    flex: 0 0 auto;
+    overflow: hidden;
+  }
+
+  .detail-middle-column .detail-links .chips:has(.link-chip:nth-child(9)) {
+    grid-auto-rows: clamp(44px, 5.4dvh, 54px);
+  }
+
+  .detail-content-grid .detail-links .chips:has(.link-chip:nth-child(7)) {
+    grid-auto-rows: clamp(48px, 6.5dvh, 64px);
+  }
+
+  .detail-content-grid .detail-links .chips:has(.link-chip:nth-child(9)) {
+    grid-auto-rows: clamp(44px, 6.2dvh, 60px);
+  }
+
+  .detail-content-grid .detail-middle-column .detail-links .chips:has(.link-chip:nth-child(9)) {
+    grid-auto-rows: clamp(44px, 5.4dvh, 54px);
+  }
+
+  .detail-content-grid .link-chip {
+    min-height: 0;
+    height: auto;
+    gap: 9px;
+    padding: 7px 10px;
+    overflow: hidden;
+    border-color: rgba(145, 172, 255, 0.62);
+    background: rgba(37, 42, 57, 0.82);
+    font-size: clamp(13px, 1vw, 16px);
+    line-height: 1.1;
+    white-space: normal;
+  }
+
+  .detail-content-grid .link-chip span {
+    min-width: 0;
+    overflow: hidden;
+    overflow-wrap: normal;
+    white-space: nowrap;
+  }
+
+  .detail-content-grid .link-favicon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .detail-content-grid .detail-description {
+    padding: 14px 16px;
+  }
+
+  .detail-content-grid .detail-description p {
+    font-size: inherit;
+    line-height: inherit;
+  }
+
+  .detail-content-grid .detail-description .rich-description {
+    overflow: hidden;
+    font-size: clamp(13px, 0.98vw, 17px);
+    line-height: 1.4;
+  }
+
+  .detail-content-grid .rich-description ol:has(> li:nth-child(12)) {
+    column-width: 210px;
+    column-count: 2;
+    column-gap: 18px;
+  }
+
+  .detail-content-grid .rich-description ol:has(> li:nth-child(12)) > li {
+    break-inside: avoid;
+  }
+
+}
+
+@media (min-width: 1180px) and (max-width: 1299px) and (min-height: 650px) {
+  .detail-content-grid .link-chip {
+    gap: 6px;
+    padding-right: 7px;
+    padding-left: 7px;
+  }
+
+  .detail-content-grid .link-favicon {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+@media (min-width: 1200px) and (min-height: 650px) {
+  .detail-middle-column .detail-links .chips {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Keep the desktop detail geometry, but use the phone's lighter glass treatment. */
+@media (min-width: 1180px) and (min-height: 650px) {
+  /* Let the contextual detail artwork continue behind the desktop rail so the
+     navigation reads as the same glass surface as the detail panels. */
+  .detail-page {
+    overflow: visible;
+  }
+
+  .detail-page::before {
+    left: calc(-1 * var(--desktop-nav-width));
+    width: calc(100% + var(--desktop-nav-width));
+  }
+
+  .detail-page .detail-bg {
+    left: calc(-1 * var(--desktop-nav-width) - 28px);
+    right: auto;
+    width: calc(100% + var(--desktop-nav-width) + 56px);
+  }
+
+  .bottom-nav {
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      inset -1px 0 rgba(255, 255, 255, 0.08),
+      0 10px 22px rgba(0, 0, 0, 0.14);
+    backdrop-filter: blur(16px) saturate(1.12);
+    -webkit-backdrop-filter: blur(16px) saturate(1.12);
+  }
+
+  /* Keep off-screen Home cards out of the paint tree. Their fixed cover/title
+     geometry makes an intrinsic placeholder safe while the feed is moving. */
+  .feed-pager .title-grid .title-card-wrap {
+    content-visibility: auto !important;
+    contain-intrinsic-size: 176px 286px;
+  }
+
+  /* A live blur over a fixed full-height rail is needlessly recomposited on
+     every trackpad frame. The already blurred page artwork supplies the glass
+     context; Home uses the static fill while detail keeps its contextual layer. */
+  body:has(.home-page:not(.route-cache-hidden)) .bottom-nav {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .app-shell:has(.detail-page) .bottom-nav {
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      inset -1px 0 rgba(255, 255, 255, 0.08),
+      0 10px 22px rgba(0, 0, 0, 0.14);
+    backdrop-filter: blur(16px) saturate(1.12);
+    -webkit-backdrop-filter: blur(16px) saturate(1.12);
+  }
+
+  /* Detail artwork can be bright behind the rail. Keep its labels as legible
+     as the desktop stats labels without changing the mobile navigation. */
+  .app-shell:has(.detail-page) .bottom-nav .nav-item {
+    color: rgba(245, 247, 255, 0.92);
+    background: rgba(17, 20, 29, 0.48);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 4px 10px rgba(0, 0, 0, 0.12);
+  }
+
+  .app-shell:has(.detail-page) .bottom-nav .nav-item span {
+    color: inherit;
+    font-size: clamp(12px, 0.9vw, 14px);
+    font-weight: 850;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.58);
+  }
+
+  .app-shell:has(.detail-page) .bottom-nav .nav-item svg {
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+  }
+
+  .detail-page::before {
+    background:
+      linear-gradient(180deg, rgba(8, 9, 13, 0.08), rgba(8, 9, 13, 0.56) 350px, rgba(8, 9, 13, 0.64)),
+      linear-gradient(90deg, rgba(8, 9, 13, 0.42), rgba(8, 9, 13, 0.18) 52%, rgba(8, 9, 13, 0.76));
+  }
+
+  .detail-bg {
+    filter: blur(24px) saturate(0.92);
+    opacity: 0.52;
+  }
+
+  .detail-content-grid .detail-identity,
+  .detail-content-grid .detail-block,
+  .detail-content-grid .detail-stat-grid {
+    border-color: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 10px 22px rgba(0, 0, 0, 0.14);
+    backdrop-filter: blur(16px) saturate(1.12);
+  }
+
+  .detail-content-grid .detail-stat {
+    background: transparent;
+  }
+
+  .detail-content-grid .detail-genres .chip,
+  .detail-content-grid .detail-all-tags .chip,
+  .detail-content-grid .link-chip {
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 6px 14px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(14px) saturate(1.12);
+  }
+
+  .detail-content-grid .link-chip {
+    justify-content: center;
+    text-align: center;
+  }
+
+  /* Keep the desktop link columns wide, but remove the excess vertical air. */
+  .detail-content-grid .detail-links .chips {
+    grid-auto-rows: clamp(40px, 4.6dvh, 46px);
+  }
+
+  .detail-content-grid .detail-links .chips:has(.link-chip:nth-child(7)) {
+    grid-auto-rows: clamp(38px, 4.4dvh, 44px);
+  }
+
+  .detail-content-grid .detail-links .chips:has(.link-chip:nth-child(9)) {
+    grid-auto-rows: clamp(36px, 4.2dvh, 42px);
+  }
+
+  .detail-content-grid .link-chip {
+    padding-block: 5px;
+  }
+
+  .detail-content-grid .link-favicon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .detail-content-grid .link-chip span {
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.2;
+  }
+
+  .detail-content-grid .detail-meta-chip strong {
+    width: max-content;
+    max-width: none;
+    padding-inline: 2px;
+    line-height: 1.15;
+  }
+
+  .feed-pager .title-grid .title-name {
+    min-height: 2.7em;
+    line-height: 1.35;
+  }
+
+  .detail-content-grid .detail-stats-panel {
+    padding-top: 10px;
+  }
+
+  .detail-content-grid .detail-stats-panel .detail-stat-grid {
+    flex-basis: clamp(168px, 23dvh, 214px);
+  }
+
+  .detail-content-grid .detail-stats-panel .detail-stat {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(64px, 6vw, 86px) clamp(74px, 7vw, 100px) minmax(0, 1fr);
+    align-items: center;
+    justify-content: center;
+    gap: clamp(4px, 0.65vw, 8px);
+    padding: 5px clamp(6px, 1vw, 14px);
+  }
+
+  .detail-content-grid .detail-stats-panel .detail-stat strong {
+    grid-column: 3;
+    justify-self: start;
+    width: auto;
+    max-width: 100%;
+    flex: 0 0 auto;
+    overflow: visible;
+    text-overflow: clip;
+    font-size: clamp(15px, 1.45vw, 23px);
+    white-space: nowrap;
+  }
+
+  .detail-content-grid .detail-stats-panel .detail-stat span {
+    display: inline-block;
+    width: auto;
+    min-width: max-content;
+    max-width: 100%;
+    flex: 0 1 auto;
+    overflow: visible;
+    -webkit-line-clamp: unset;
+    order: -1;
+    grid-column: 2;
+    justify-self: end;
+    color: rgba(236, 240, 249, 0.86);
+    font-size: clamp(12px, 1vw, 15px);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+}
+
 /* Contain exceptional text without changing established component geometry. */
 :where(
   .app-shell,
@@ -5481,6 +6465,17 @@ textarea,
 
 .detail-copy-fitted.is-title-fitted .detail-title {
   font-size: var(--detail-title-fit-size);
+}
+
+.detail-copy-fitted.is-title-single-line .detail-title,
+.detail-copy-fitted.is-title-single-line .detail-title-copy {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.detail-copy-fitted.is-title-single-line .detail-title {
+  box-sizing: border-box;
+  padding-right: 8px;
 }
 
 .detail-copy-fitted.is-creators-fitted .detail-creators {
@@ -5574,5 +6569,59 @@ textarea,
 
   .detail-meta-chip {
     padding-inline: 4px;
+  }
+}
+
+@media (min-width: 1180px) and (min-height: 650px) {
+  .detail-copy-fitted {
+    position: static;
+    align-self: start;
+    height: 100% !important;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .detail-copy-inner {
+    position: static;
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+    transform: none;
+  }
+
+}
+
+/* The first desktop tier keeps Home badges proportional to its compact covers. */
+@media (min-width: 1180px) and (max-width: 1299px) and (min-height: 650px) {
+  .feed-pager .title-grid .poster-shell .rank {
+    top: 5px;
+    left: 5px;
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    min-height: 24px;
+  }
+
+  .feed-pager .title-grid .compact-metrics span {
+    min-height: 22px;
+    padding: 2px 7px;
+  }
+}
+
+/* The fallback is the phone layout, not a third tablet/desktop hybrid. */
+@media (max-width: 1179px), (max-height: 649px) {
+  .detail-page {
+    width: 100%;
+  }
+
+  .detail-page .detail-links {
+    width: 100%;
+  }
+
+  .detail-page .detail-links .chips {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

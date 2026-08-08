@@ -160,20 +160,22 @@ const FEEDS_DRAG_MAX_SCROLL_SPEED = 18;
 const FEEDS_PAGE_LIBRARY_SESSION_KEY = "aeon-feeds-page-library";
 const PWA_CHROME_THEME_COLOR = "#11131a";
 const DESKTOP_GRID_OPTIONS = [6, 7, 8] as const;
+const DESKTOP_LAYOUT_QUERY = "(min-width: 1180px) and (min-height: 650px)";
 
 function resolvedDesktopGridColumns(view: FeedViewSettings) {
-  return view.desktopGridColumns ?? (view.gridColumns >= 5 ? 8 : view.gridColumns === 4 ? 7 : 6);
+  return view.desktopGridColumns ?? (view.gridColumns >= 4 ? 8 : view.gridColumns === 3 ? 7 : 6);
 }
 
 function useDesktopLayout() {
-  const [desktop, setDesktop] = useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches);
+  const query = DESKTOP_LAYOUT_QUERY;
+  const [desktop, setDesktop] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
   useEffect(() => {
-    const media = window.matchMedia("(min-width: 768px)");
+    const media = window.matchMedia(query);
     const update = () => setDesktop(media.matches);
     update();
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
-  }, []);
+  }, [query]);
   return desktop;
 }
 const ACCENT_COLORS = [
@@ -328,12 +330,12 @@ function getHomeScrollContainer(feed: Feed | null) {
   return document.querySelector<HTMLElement>(`[data-home-scroll-key="${homeScrollKey(feed)}"]`);
 }
 
-function saveHomeScroll(feed: Feed | null, measuredScrollTop?: number) {
-  if (!feed) return;
+let pendingDesktopHomeScroll: { key: string; scrollTop: number } | null = null;
+let desktopHomeScrollTimer: number | null = null;
+let desktopHomeScrollLastEventAt = 0;
+
+function persistHomeScroll(key: string, scrollTop: number) {
   try {
-    const key = homeScrollKey(feed);
-    const scrollTop = measuredScrollTop ?? getHomeScrollContainer(feed)?.scrollTop;
-    if (!Number.isFinite(scrollTop)) return;
     localStorage.setItem(key, String(scrollTop));
     const saved = JSON.parse(localStorage.getItem(SESSION_RESTORE_KEY) ?? "{}") as {
       path?: string;
@@ -346,6 +348,42 @@ function saveHomeScroll(feed: Feed | null, measuredScrollTop?: number) {
   } catch {
     // Best effort only.
   }
+}
+
+function flushPendingDesktopHomeScroll() {
+  if (desktopHomeScrollTimer !== null) {
+    window.clearTimeout(desktopHomeScrollTimer);
+    desktopHomeScrollTimer = null;
+  }
+  if (!pendingDesktopHomeScroll) return;
+  const pending = pendingDesktopHomeScroll;
+  pendingDesktopHomeScroll = null;
+  persistHomeScroll(pending.key, pending.scrollTop);
+}
+
+function saveHomeScroll(feed: Feed | null, measuredScrollTop?: number) {
+  if (!feed) return;
+  const key = homeScrollKey(feed);
+  const scrollTop = measuredScrollTop ?? getHomeScrollContainer(feed)?.scrollTop;
+  if (typeof scrollTop !== "number" || !Number.isFinite(scrollTop)) return;
+  if (measuredScrollTop !== undefined && window.matchMedia(DESKTOP_LAYOUT_QUERY).matches) {
+    pendingDesktopHomeScroll = { key, scrollTop };
+    desktopHomeScrollLastEventAt = performance.now();
+    if (desktopHomeScrollTimer === null) {
+      const flushWhenSettled = () => {
+        const remaining = 220 - (performance.now() - desktopHomeScrollLastEventAt);
+        if (remaining > 0) {
+          desktopHomeScrollTimer = window.setTimeout(flushWhenSettled, remaining);
+          return;
+        }
+        flushPendingDesktopHomeScroll();
+      };
+      desktopHomeScrollTimer = window.setTimeout(flushWhenSettled, 220);
+    }
+    return;
+  }
+  flushPendingDesktopHomeScroll();
+  persistHomeScroll(key, scrollTop);
 }
 
 function prepareHomeTitleNavigation(feed: Feed | null) {
@@ -1132,6 +1170,7 @@ function CatalogLoadingPage() {
 
 function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
   const store = useAppStore();
+  const isDesktop = useDesktopLayout();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorFeed, setEditorFeed] = useState<Feed | null>(null);
   const [preloadReady, setPreloadReady] = useState(false);
@@ -1234,6 +1273,10 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
     if (!requestedFeedId) return;
     const requestedIndex = feeds.findIndex((feed) => feed.id === requestedFeedId);
     if (requestedIndex < 0) return;
+    if (isDesktop && activeFeedId !== requestedFeedId) {
+      setActiveFeedId(requestedFeedId);
+      return;
+    }
     renderCenterIndexRef.current = requestedIndex;
     setRenderCenterIndex(requestedIndex);
     warmFeedAt(requestedIndex);
@@ -1244,7 +1287,7 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
       store.completeHomeFeedOpen();
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [feeds, store, warmFeedAt]);
+  }, [activeFeedId, feeds, isDesktop, setActiveFeedId, store, warmFeedAt]);
 
   useLayoutEffect(() => {
     if (!store.ready || !activeFeed) return;
@@ -1261,8 +1304,10 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
       }
       window.setTimeout(() => {
         setPreloadReady(true);
-        for (let offset = -HOME_FEED_RENDER_RADIUS; offset <= HOME_FEED_RENDER_RADIUS; offset += 1) {
-          warmFeedAt(activeFeedIndex + offset);
+        if (!isDesktop) {
+          for (let offset = -HOME_FEED_RENDER_RADIUS; offset <= HOME_FEED_RENDER_RADIUS; offset += 1) {
+            warmFeedAt(activeFeedIndex + offset);
+          }
         }
       }, 120);
       return;
@@ -1276,7 +1321,7 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
       else pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
       restoreHomeScroll(activeFeed);
     }
-  }, [activeFeed, activeFeedIndex, returningFromTitle, store.ready, warmFeedAt]);
+  }, [activeFeed, activeFeedIndex, isDesktop, returningFromTitle, store.ready, warmFeedAt]);
 
   useEffect(() => {
     if (libraryLoaderVisible || !didInitialPagerAlignRef.current) return;
@@ -1293,17 +1338,17 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
   }, [activeFeed?.id, libraryLoaderVisible, renderCenterIndex, store.homePreviewSegmentId]);
 
   useEffect(() => {
-    if (!store.ready || libraryLoaderVisible || activeFeedIndex < 0) return;
+    if (isDesktop || !store.ready || libraryLoaderVisible || activeFeedIndex < 0) return;
     const warmOrder = [1, -1, 2, -2, 3, -3, 4, -4, 5, -5];
     const timers = warmOrder.map((offset, step) =>
       window.setTimeout(() => warmFeedAt(activeFeedIndex + offset), 2000 + step * 650),
     );
     return () => timers.forEach((timer) => window.clearTimeout(timer));
-  }, [activeFeedIndex, libraryLoaderVisible, store.ready, warmFeedAt]);
+  }, [activeFeedIndex, isDesktop, libraryLoaderVisible, store.ready, warmFeedAt]);
 
   const warmFeedsAroundScrollPosition = useCallback(() => {
     const pager = pagerRef.current;
-    if (!pager || feeds.length === 0 || !homeRestoreReadyRef.current) return;
+    if (isDesktop || !pager || feeds.length === 0 || !homeRestoreReadyRef.current) return;
     setPreloadReady(true);
     const handleScroll = () => {
       const firstPane = paneRefs.current.get(feeds[0]?.id);
@@ -1325,7 +1370,7 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
       }
     };
     handleScroll();
-  }, [activeFeedId, feeds, setActiveFeedId, warmFeedAt]);
+  }, [activeFeedId, feeds, isDesktop, setActiveFeedId, warmFeedAt]);
 
   const handleFeedPaneScroll = useCallback(
     (feed: Feed, scrollTop: number) => {
@@ -1338,16 +1383,22 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
   const goToFeed = useCallback(
     (index: number) => {
       const targetFeed = feeds[index];
-      const pane = targetFeed ? paneRefs.current.get(targetFeed.id) : null;
-      if (!targetFeed || !pane) return;
+      if (!targetFeed) return;
       warmFeedAt(index);
       renderCenterIndexRef.current = index;
       setRenderCenterIndex(index);
       setActiveFeedId(targetFeed.id);
-      pane.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" });
+      if (isDesktop) return;
+      const pane = paneRefs.current.get(targetFeed.id);
+      if (!pane) return;
+      pane.scrollIntoView({ behavior: isDesktop ? "auto" : "smooth", block: "nearest", inline: "start" });
     },
-    [feeds, setActiveFeedId, warmFeedAt],
+    [feeds, isDesktop, setActiveFeedId, warmFeedAt],
   );
+
+  const pagerFeeds = isDesktop && activeFeed
+    ? [{ feed: activeFeed, index: activeFeedIndex }]
+    : feeds.map((feed, index) => ({ feed, index }));
 
   return (
     <div className="page home-page">
@@ -1384,16 +1435,16 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
           </button>
           <div className="feed-pager" ref={pagerRef} aria-label="Home feeds" onScroll={warmFeedsAroundScrollPosition}>
             <div className="feed-pager-track">
-            {feeds.map((feed, index) => {
+            {pagerFeeds.map(({ feed, index }) => {
               const isActive = index === activeFeedIndex;
               const renderOriginIndex = renderCenterIndex >= 0 ? renderCenterIndex : activeFeedIndex;
               const renderRadius = returningFromTitle
                 ? 0
                 : preloadReady
-                  ? HOME_FEED_RENDER_RADIUS
+                  ? isDesktop ? 0 : HOME_FEED_RENDER_RADIUS
                   : HOME_FEED_INITIAL_RENDER_RADIUS;
               const isNearby = renderOriginIndex >= 0 && Math.abs(index - renderOriginIndex) <= renderRadius;
-              const shouldRenderFeed = isActive || isNearby || warmFeedIds.has(feed.id);
+              const shouldRenderFeed = isActive || isNearby || (!isDesktop && warmFeedIds.has(feed.id));
               return (
                 <div
                   key={feed.id}
@@ -2353,7 +2404,7 @@ function formatFeedMetricValue(
   return formatMetricValue(series, metric, history, latestDate);
 }
 
-function fitSingleLineText(element: HTMLElement, availableWidth = element.clientWidth) {
+function fitSingleLineText(element: HTMLElement, availableWidth = element.clientWidth, minimumSize = 6) {
   element.style.removeProperty("font-size");
   if (availableWidth <= 0 || element.scrollWidth <= availableWidth + 1) return;
   const baseSize = Number.parseFloat(getComputedStyle(element).fontSize);
@@ -2361,7 +2412,7 @@ function fitSingleLineText(element: HTMLElement, availableWidth = element.client
   for (let pass = 0; pass < 2; pass += 1) {
     const requiredWidth = element.scrollWidth;
     if (requiredWidth <= availableWidth + 1) break;
-    fittedSize = Math.max(6, fittedSize * (availableWidth / requiredWidth));
+    fittedSize = Math.max(minimumSize, fittedSize * (availableWidth / requiredWidth));
     element.style.fontSize = `${fittedSize}px`;
   }
 }
@@ -3057,7 +3108,7 @@ function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onS
         value={requireOfficialEnglishLink}
         onChange={setRequireOfficialEnglishLink}
       />
-      <div className="toolbar">
+      <div className="toolbar feed-editor-actions">
         <button className="button" type="button" onClick={onCancel}>
           Cancel
         </button>
@@ -4808,25 +4859,40 @@ function useFitDetailIdentityText(fitKey: string) {
       if (disposed) return;
       const cover = container.closest(".detail-identity")?.querySelector<HTMLElement>(".detail-cover");
       const coverHeight = cover?.getBoundingClientRect().height ?? 0;
-      if (coverHeight > 0) container.style.height = `${coverHeight}px`;
+      if (window.matchMedia(DESKTOP_LAYOUT_QUERY).matches) container.style.removeProperty("height");
+      else if (coverHeight > 0) container.style.height = `${coverHeight}px`;
       const title = content.querySelector<HTMLElement>(".detail-title");
+      const titleText = title?.querySelector<HTMLElement>(".detail-title-copy");
       const creators = content.querySelector<HTMLElement>(".detail-creators");
-      content.querySelectorAll<HTMLElement>(".detail-meta-chip strong").forEach((value) => fitSingleLineText(value));
-      container.classList.remove("is-title-fitted", "is-creators-fitted");
+      const primary = content.querySelector<HTMLElement>(".detail-copy-primary");
+      content.querySelectorAll<HTMLElement>(".detail-meta-chip strong").forEach((value) => {
+        const chip = value.closest<HTMLElement>(".detail-meta-chip");
+        const chipStyle = chip ? getComputedStyle(chip) : null;
+        const availableWidth = chip
+          ? chip.clientWidth
+            - Number.parseFloat(chipStyle?.paddingLeft ?? "0")
+            - Number.parseFloat(chipStyle?.paddingRight ?? "0")
+            - 2
+          : value.clientWidth;
+        fitSingleLineText(value, Math.max(0, availableWidth), 9);
+      });
+      container.classList.remove("is-title-fitted", "is-title-single-line", "is-creators-fitted");
       container.style.removeProperty("--detail-title-fit-size");
       container.style.removeProperty("--detail-creators-fit-size");
 
       if (!title && !creators) return;
+      const isDesktop = window.matchMedia(DESKTOP_LAYOUT_QUERY).matches;
       const titleSize = title ? Number.parseFloat(getComputedStyle(title).fontSize) : 0;
+      const creatorSize = creators ? Number.parseFloat(getComputedStyle(creators).fontSize) : 0;
+      const applyCreatorScale = (scale: number) => {
+        if (!creators) return;
+        container.style.setProperty("--detail-creators-fit-size", `${creatorSize * scale}px`);
+        container.classList.add("is-creators-fitted");
+      };
       if (creators) {
         const creatorStyle = getComputedStyle(creators);
-        const creatorSize = Number.parseFloat(creatorStyle.fontSize);
         const creatorHeightLimit = Number.parseFloat(creatorStyle.lineHeight) * 2;
-        const applyCreatorScale = (scale: number) => {
-          container.style.setProperty("--detail-creators-fit-size", `${creatorSize * scale}px`);
-          container.classList.add("is-creators-fitted");
-        };
-        if (creators.scrollHeight > creatorHeightLimit + 1) {
+        if (!isDesktop && creators.scrollHeight > creatorHeightLimit + 1) {
           let lower = 0.28;
           let upper = 1;
           applyCreatorScale(lower);
@@ -4850,7 +4916,51 @@ function useFitDetailIdentityText(fitKey: string) {
       const containerStyle = getComputedStyle(container);
       const verticalPadding = Number.parseFloat(containerStyle.paddingTop) + Number.parseFloat(containerStyle.paddingBottom);
       const availableHeight = container.clientHeight - verticalPadding;
-      const fits = () => content.scrollHeight <= availableHeight + 1 && content.scrollWidth <= container.clientWidth + 1;
+      const fits = () => {
+        const primaryContentBottom = (creators ?? title)?.getBoundingClientRect().bottom ?? 0;
+        const primaryBottom = primary?.getBoundingClientRect().bottom ?? primaryContentBottom;
+        return content.scrollHeight <= availableHeight + 1
+          && content.scrollWidth <= container.clientWidth + 1
+          && (!isDesktop || !primary || primary.scrollHeight <= primary.clientHeight + 1)
+          && (!isDesktop || primaryContentBottom <= primaryBottom + 1);
+      };
+
+      if (title && isDesktop) {
+        const minimumSingleLineSize = 26;
+        const minimumSingleLineScale = Math.min(1, minimumSingleLineSize / titleSize);
+        const singleLineWidthFits = () => (titleText?.getBoundingClientRect().width ?? title.scrollWidth) <= title.clientWidth - 10;
+        container.classList.add("is-title-single-line");
+        applyTitleScale(minimumSingleLineScale);
+        if (singleLineWidthFits()) {
+          let lower = minimumSingleLineScale;
+          let upper = 1;
+          for (let index = 0; index < 9; index += 1) {
+            const candidate = (lower + upper) / 2;
+            applyTitleScale(candidate);
+            if (singleLineWidthFits()) lower = candidate;
+            else upper = candidate;
+          }
+          applyTitleScale(lower);
+          if (fits()) return;
+          if (creators && creatorSize > 12) {
+            let creatorLower = 12 / creatorSize;
+            let creatorUpper = 1;
+            applyCreatorScale(creatorLower);
+            if (fits()) {
+              for (let index = 0; index < 8; index += 1) {
+                const candidate = (creatorLower + creatorUpper) / 2;
+                applyCreatorScale(candidate);
+                if (fits()) creatorLower = candidate;
+                else creatorUpper = candidate;
+              }
+              applyCreatorScale(creatorLower);
+              return;
+            }
+          }
+        }
+        container.classList.remove("is-title-single-line", "is-title-fitted");
+        container.style.removeProperty("--detail-title-fit-size");
+      }
 
       if (fits() || !title) return;
 
@@ -4877,10 +4987,14 @@ function useFitDetailIdentityText(fitKey: string) {
     resizeObserver.observe(container);
     const cover = container.closest(".detail-identity")?.querySelector<HTMLElement>(".detail-cover");
     if (cover) resizeObserver.observe(cover);
+    const settleTimers = [50, 250, 750].map((delay) => window.setTimeout(scheduleFit, delay));
+    window.addEventListener("resize", scheduleFit);
     void document.fonts?.ready.then(scheduleFit);
     return () => {
       disposed = true;
       window.cancelAnimationFrame(frame);
+      settleTimers.forEach((timer) => window.clearTimeout(timer));
+      window.removeEventListener("resize", scheduleFit);
       resizeObserver.disconnect();
     };
   }, [fitKey]);
@@ -4890,6 +5004,7 @@ function useFitDetailIdentityText(fitKey: string) {
 
 function TitleDetailPage() {
   const store = useAppStore();
+  const isDesktop = useDesktopLayout();
   const location = useLocation();
   const navigate = useNavigate();
   const params = useParams();
@@ -4998,6 +5113,10 @@ function TitleDetailPage() {
     ? [series.display_title, creatorLine, series.year, series.status, series.total_chapters, visible.title, visible.authorsArtists, visible.year, visible.status, visible.chapters].join("|")
     : "loading";
   const { containerRef: detailCopyRef, contentRef: detailCopyContentRef } = useFitDetailIdentityText(detailFitKey);
+  const { columnRef: detailMiddleRef, linksInMiddle } = useBalanceDesktopDetailMiddle(
+    series ? `${series.id}|${detail?.description ?? ""}|${series.tag_ids.join(",")}|${visible.description}|${visible.genreTags}|${visible.allTags}|${visible.links}` : "loading",
+    visible.allTags,
+  );
 
   useEffect(() => {
     if (!titleCopyStatus) return;
@@ -5019,6 +5138,73 @@ function TitleDetailPage() {
 
   const loadingDetail = !invalidRoute && (loading || Boolean(detail && detail.id !== id));
   const showError = invalidRoute || (!loading && !detail && status && status !== "Loading detail");
+  const detailStats = series ? (
+    <DetailStats
+      series={series}
+      visible={visible}
+      history={store.history}
+      latestDate={store.syncMeta?.historyLastDate}
+      showHeading={isDesktop}
+    />
+  ) : null;
+  const detailDescription = visible.description && detail?.description ? (
+    <section className="detail-block detail-description">
+      <h2 className="section-title">Description</h2>
+      <RichDescription text={detail.description} />
+    </section>
+  ) : visible.description && status ? (
+    <section className="detail-block detail-description">
+      <h2 className="section-title">Description</h2>
+      <p className="muted">{status}</p>
+    </section>
+  ) : null;
+  const detailGenres = series && visible.genreTags && tagsById.size > 0 ? (
+    <section className="detail-block detail-genres">
+      <h2 className="section-title desktop-detail-heading">Genres</h2>
+      <GenreChips series={series} tagsById={tagsById} />
+    </section>
+  ) : null;
+  const detailLinks = series && visible.links ? (
+    <section className="detail-block detail-links">
+      <h2 className="section-title desktop-detail-heading">Links</h2>
+      <DetailLinks series={series} />
+    </section>
+  ) : null;
+  const detailAllTags = series && visible.allTags ? (
+    <section className="detail-block detail-all-tags">
+      <h2 className="section-title">Tags</h2>
+      <div className="chips">
+        {series.tag_ids
+          .map((tagId) => tagsById.get(tagId))
+          .filter(Boolean)
+          .map((tag) => (
+            <span className="chip" key={tag!.id}>
+              {tag!.name}
+            </span>
+          ))}
+      </div>
+    </section>
+  ) : null;
+  const detailIdentityPrimary = series ? (
+    <>
+      {visible.title && (
+        <h1 className="detail-title">
+          <button
+            className="detail-title-copy"
+            type="button"
+            onClick={() => void copyDisplayedTitle()}
+            aria-label={`Copy title: ${series.display_title}`}
+            title="Copy title"
+          >
+            {series.display_title}
+          </button>
+        </h1>
+      )}
+      {visible.authorsArtists && (
+        <p className="detail-creators">{creatorLine}</p>
+      )}
+    </>
+  ) : null;
 
   return (
     <div className="detail-page">
@@ -5055,7 +5241,7 @@ function TitleDetailPage() {
       {loadingDetail ? (
         <DetailSkeleton series={catalogItem ?? null} />
       ) : series ? (
-        <>
+        <div className="detail-content-grid">
           <section className="detail-identity">
             {visible.cover && (
               <div className="detail-cover-shell">
@@ -5064,22 +5250,7 @@ function TitleDetailPage() {
             )}
             <div className="detail-copy detail-copy-fitted" ref={detailCopyRef}>
               <div className="detail-copy-inner" ref={detailCopyContentRef}>
-                {visible.title && (
-                  <h1 className="detail-title">
-                    <button
-                      className="detail-title-copy"
-                      type="button"
-                      onClick={() => void copyDisplayedTitle()}
-                      aria-label={`Copy title: ${series.display_title}`}
-                      title="Copy title"
-                    >
-                      {series.display_title}
-                    </button>
-                  </h1>
-                )}
-                {visible.authorsArtists && (
-                  <p className="detail-creators">{creatorLine}</p>
-                )}
+                {isDesktop ? <div className="detail-copy-primary">{detailIdentityPrimary}</div> : detailIdentityPrimary}
                 <section className="detail-meta-strip" aria-label="Publication details">
                   {visible.year && series.year ? (
                     <div className="detail-meta-chip">
@@ -5103,45 +5274,29 @@ function TitleDetailPage() {
               </div>
             </div>
           </section>
-          <DetailStats series={series} visible={visible} history={store.history} latestDate={store.syncMeta?.historyLastDate} />
-          {visible.description && detail?.description && (
-            <section className="detail-block">
-              <h2 className="section-title">Description</h2>
-              <RichDescription text={detail.description} />
-            </section>
-          )}
-          {visible.description && !detail?.description && status && (
-            <section className="detail-block">
-              <h2 className="section-title">Description</h2>
-              <p className="muted">{status}</p>
-            </section>
-          )}
-          {visible.genreTags && tagsById.size > 0 && (
-            <section className="detail-block">
-              <GenreChips series={series} tagsById={tagsById} />
-            </section>
-          )}
-          {visible.links && (
-            <section className="detail-block detail-links">
-              <DetailLinks series={series} />
-            </section>
-          )}
-          {visible.allTags && (
-            <section className="detail-block detail-all-tags">
-              <h2 className="section-title">Tags</h2>
-              <div className="chips">
-                {series.tag_ids
-                  .map((tagId) => tagsById.get(tagId))
-                  .filter(Boolean)
-                  .map((tag) => (
-                    <span className="chip" key={tag!.id}>
-                      {tag!.name}
-                    </span>
-                  ))}
+          {isDesktop ? (
+            <>
+              <div className="detail-middle-column" ref={detailMiddleRef}>
+                {detailDescription}
+                {detailGenres}
+                {detailAllTags}
+                {!visible.allTags && linksInMiddle ? detailLinks : null}
               </div>
-            </section>
+              <div className="detail-side-column">
+                {detailStats}
+                {visible.allTags || !linksInMiddle ? detailLinks : null}
+              </div>
+            </>
+          ) : (
+            <>
+              {detailStats}
+              {detailDescription}
+              {detailGenres}
+              {detailLinks}
+              {detailAllTags}
+            </>
           )}
-        </>
+        </div>
       ) : showError ? (
         <div className="detail-error">
           <p className="muted">{status}</p>
@@ -5224,6 +5379,7 @@ function TitleShareDrawer({
 }
 
 function DetailSkeleton({ series }: { series: SeriesCatalog | null }) {
+  const isDesktop = useDesktopLayout();
   const hiddenStats = series
     ? [
         formatMetricValue(series, "popularity", undefined, undefined),
@@ -5231,42 +5387,224 @@ function DetailSkeleton({ series }: { series: SeriesCatalog | null }) {
         formatMetricValue(series, "meanScore", undefined, undefined),
       ]
     : [];
-  return (
-    <div className="detail-skeleton" aria-hidden="true">
-      <section className="detail-identity detail-skeleton-identity">
-        <div className="detail-cover-shell">
-          <div className="detail-cover skeleton-box" />
-        </div>
-        <div className="detail-copy">
-          <div className="skeleton-line skeleton-line-title" />
-          <div className="skeleton-line skeleton-line-creators" />
-          <section className="detail-meta-strip detail-skeleton-strip">
-            <div className="detail-meta-chip skeleton-chip" />
-            <div className="detail-meta-chip skeleton-chip" />
-            <div className="detail-meta-chip skeleton-chip" />
+  const identitySkeleton = (
+    <section className="detail-identity detail-skeleton-identity">
+      <div className="detail-cover-shell">
+        <div className="detail-cover skeleton-box" />
+      </div>
+      <div className="detail-copy">
+        <div className="skeleton-line skeleton-line-title" />
+        <div className="skeleton-line skeleton-line-creators" />
+        <section className="detail-meta-strip detail-skeleton-strip">
+          <div className="detail-meta-chip skeleton-chip" />
+          <div className="detail-meta-chip skeleton-chip" />
+          <div className="detail-meta-chip skeleton-chip" />
+        </section>
+      </div>
+    </section>
+  );
+  const statsSkeleton = (
+    <section className="detail-stat-grid detail-skeleton-grid detail-skeleton-stats">
+      <div className="detail-stat skeleton-stat skeleton-stat-compact" />
+      <div className="detail-stat skeleton-stat skeleton-stat-compact" />
+      <div className="detail-stat skeleton-stat skeleton-stat-compact" />
+      {hiddenStats.length > 0 && <span className="visually-hidden">{hiddenStats.join(" ")}</span>}
+    </section>
+  );
+  const descriptionSkeleton = (
+    <section className="detail-block detail-description">
+      <h2 className="section-title">Description</h2>
+      <div className="skeleton-paragraph">
+        <span className="skeleton-line skeleton-line-body" />
+        <span className="skeleton-line skeleton-line-body" />
+        <span className="skeleton-line skeleton-line-body short" />
+      </div>
+    </section>
+  );
+
+  if (isDesktop) {
+    return (
+      <div className="detail-skeleton detail-content-grid" aria-hidden="true">
+        {identitySkeleton}
+        <div className="detail-middle-column">{descriptionSkeleton}</div>
+        <div className="detail-side-column">
+          <section className="detail-block detail-stats-panel">
+            <h2 className="section-title desktop-detail-heading">Stats</h2>
+            {statsSkeleton}
           </section>
         </div>
-      </section>
-      <section className="detail-stat-grid detail-skeleton-grid detail-skeleton-stats">
-        <div className="detail-stat skeleton-stat skeleton-stat-compact" />
-        <div className="detail-stat skeleton-stat skeleton-stat-compact" />
-        <div className="detail-stat skeleton-stat skeleton-stat-compact" />
-        {hiddenStats.length > 0 && <span className="visually-hidden">{hiddenStats.join(" ")}</span>}
-      </section>
-      <section className="detail-block">
-        <h2 className="section-title">Description</h2>
-        <div className="skeleton-paragraph">
-          <span className="skeleton-line skeleton-line-body" />
-          <span className="skeleton-line skeleton-line-body" />
-          <span className="skeleton-line skeleton-line-body short" />
-        </div>
-      </section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="detail-skeleton detail-content-grid" aria-hidden="true">
+      {identitySkeleton}
+      {statsSkeleton}
+      {descriptionSkeleton}
     </div>
   );
 }
 
 function uniqueNames(...groups: (string[] | undefined)[]) {
   return [...new Set(groups.flat().filter(Boolean))];
+}
+
+function useBalanceDesktopDetailMiddle(fitKey: string, allTagsVisible: boolean) {
+  const columnRef = useRef<HTMLDivElement>(null);
+  const [linksInMiddle, setLinksInMiddle] = useState(true);
+
+  useEffect(() => {
+    setLinksInMiddle(true);
+  }, [fitKey]);
+
+  useLayoutEffect(() => {
+    const column = columnRef.current;
+    if (!column) return;
+    let frame = 0;
+    let disposed = false;
+
+    const balance = () => {
+      if (disposed) return;
+      const description = column.querySelector<HTMLElement>(".detail-description");
+      const richDescription = description?.querySelector<HTMLElement>(".rich-description");
+      if (!description || !window.matchMedia(DESKTOP_LAYOUT_QUERY).matches) {
+        description?.style.removeProperty("height");
+        return;
+      }
+
+      description.style.removeProperty("height");
+      richDescription?.style.removeProperty("font-size");
+      const genres = column.querySelector<HTMLElement>(".detail-genres");
+      const allTags = column.querySelector<HTMLElement>(".detail-all-tags");
+      const middleLinks = column.querySelector<HTMLElement>(".detail-links");
+      const detailGrid = column.closest<HTMLElement>(".detail-content-grid");
+      const availableLinks = middleLinks ?? detailGrid?.querySelector<HTMLElement>(".detail-side-column .detail-links");
+      const genreHeight = genres?.getBoundingClientRect().height ?? 0;
+      const availableHeight = column.clientHeight;
+
+      if (!allTagsVisible && availableLinks && richDescription) {
+        richDescription.style.fontSize = "13px";
+        const readableDescriptionHeight = description.scrollHeight;
+        const linksChips = availableLinks.querySelector<HTMLElement>(".chips");
+        const linkCount = availableLinks.querySelectorAll(".link-chip").length;
+        const linkColumns = window.innerWidth >= 1200 ? 3 : 2;
+        const linkRows = Math.ceil(linkCount / linkColumns);
+        const sidePanelChrome = Math.max(
+          0,
+          availableLinks.getBoundingClientRect().height - (linksChips?.getBoundingClientRect().height ?? 0),
+        );
+        const rowHeight = linkCount >= 9
+          ? Math.min(54, Math.max(44, window.innerHeight * 0.054))
+          : linkCount >= 7
+            ? Math.min(64, Math.max(48, window.innerHeight * 0.065))
+            : Math.min(72, Math.max(52, window.innerHeight * 0.073));
+        const projectedLinksHeight = middleLinks
+          ? middleLinks.getBoundingClientRect().height
+          : sidePanelChrome + linkRows * rowHeight + Math.max(0, linkRows - 1) * 5;
+        const projectedPanelCount = 1 + (genres ? 1 : 0) + 1;
+        const canKeepDescriptionReadable = readableDescriptionHeight
+          + genreHeight
+          + projectedLinksHeight
+          + Math.max(0, projectedPanelCount - 1) * 12
+          + 24
+          <= availableHeight + 1;
+
+        if (canKeepDescriptionReadable !== linksInMiddle) {
+          setLinksInMiddle(canKeepDescriptionReadable);
+          return;
+        }
+
+        richDescription.style.removeProperty("font-size");
+      }
+
+      const visiblePanels = [description, genres, allTags, middleLinks].filter(Boolean).length;
+      const gaps = Math.max(0, visiblePanels - 1) * 12;
+      const linksHeight = middleLinks?.getBoundingClientRect().height ?? 0;
+      const naturalDescriptionHeight = description.scrollHeight;
+
+      if (!allTags) {
+        description.style.height = `${Math.min(naturalDescriptionHeight, Math.max(120, availableHeight - genreHeight - linksHeight - gaps))}px`;
+      } else {
+        const naturalTagsHeight = allTags.scrollHeight;
+        const tagShare = Math.min(naturalTagsHeight, Math.max(140, availableHeight * 0.25));
+        const descriptionBudget = Math.max(150, availableHeight - genreHeight - tagShare - gaps);
+        description.style.height = `${Math.min(naturalDescriptionHeight, descriptionBudget)}px`;
+      }
+
+      if (!allTagsVisible && middleLinks) {
+        const columnBottom = column.getBoundingClientRect().bottom;
+        const linksBottom = middleLinks.getBoundingClientRect().bottom;
+        if (linksBottom > columnBottom + 1 || column.scrollHeight > column.clientHeight + 1) {
+          setLinksInMiddle(false);
+          return;
+        }
+      }
+
+      if (allTags) {
+        const tagChips = [...allTags.querySelectorAll<HTMLElement>(".chip")];
+        tagChips.forEach((chip) => chip.style.removeProperty("font-size"));
+        const tagsFit = () => tagChips.every((chip) => chip.scrollWidth <= chip.clientWidth + 1 && chip.scrollHeight <= chip.clientHeight + 1);
+        if (!tagsFit() && tagChips.length > 0) {
+          const baseSize = Number.parseFloat(getComputedStyle(tagChips[0]).fontSize);
+          let lower = 9;
+          let upper = baseSize;
+          const applyTagSize = (size: number) => tagChips.forEach((chip) => {
+            chip.style.fontSize = `${size}px`;
+          });
+          applyTagSize(lower);
+          if (tagsFit()) {
+            for (let index = 0; index < 8; index += 1) {
+              const candidate = (lower + upper) / 2;
+              applyTagSize(candidate);
+              if (tagsFit()) lower = candidate;
+              else upper = candidate;
+            }
+            applyTagSize(lower);
+          }
+        }
+      }
+
+      if (!richDescription) return;
+      richDescription.style.removeProperty("font-size");
+      const fits = () => richDescription.scrollHeight <= richDescription.clientHeight + 1
+        && richDescription.scrollWidth <= richDescription.clientWidth + 1;
+      if (fits()) return;
+      const baseSize = Number.parseFloat(getComputedStyle(richDescription).fontSize);
+      let lower = allTags ? 12.5 : 11;
+      let upper = baseSize;
+      richDescription.style.fontSize = `${lower}px`;
+      if (!fits()) return;
+      for (let index = 0; index < 9; index += 1) {
+        const candidate = (lower + upper) / 2;
+        richDescription.style.fontSize = `${candidate}px`;
+        if (fits()) lower = candidate;
+        else upper = candidate;
+      }
+      richDescription.style.fontSize = `${lower}px`;
+    };
+    const scheduleBalance = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(balance);
+    };
+
+    balance();
+    const resizeObserver = new ResizeObserver(scheduleBalance);
+    resizeObserver.observe(column);
+    column.querySelectorAll<HTMLElement>(".detail-block").forEach((panel) => resizeObserver.observe(panel));
+    const settleTimers = [50, 250, 750].map((delay) => window.setTimeout(scheduleBalance, delay));
+    window.addEventListener("resize", scheduleBalance);
+    void document.fonts?.ready.then(scheduleBalance);
+    return () => {
+      disposed = true;
+      window.cancelAnimationFrame(frame);
+      settleTimers.forEach((timer) => window.clearTimeout(timer));
+      window.removeEventListener("resize", scheduleBalance);
+      resizeObserver.disconnect();
+    };
+  }, [allTagsVisible, fitKey, linksInMiddle]);
+
+  return { columnRef, linksInMiddle };
 }
 
 function RichDescription({ text }: { text: string }) {
@@ -5303,11 +5641,13 @@ function DetailStats({
   visible,
   history,
   latestDate,
+  showHeading = false,
 }: {
   series: SeriesCatalog;
   visible: AppSettings["detailVisible"];
   history: HistoryMap;
   latestDate?: string | null;
+  showHeading?: boolean;
 }) {
   const metrics: MetricId[] = [
     ...(visible.discoveryMetrics ? (["fanFavouriteDiscoveryPercentile"] as MetricId[]) : []),
@@ -5336,7 +5676,7 @@ function DetailStats({
     if (metric === "favourites") return "Favourites";
     return metricDefinition(metric).shortLabel;
   };
-  return (
+  const grid = (
     <section className={`detail-stat-grid detail-stat-count-${Math.min(values.length, 3)}`}>
       {values.map(({ metric, value }) => (
         <div className="detail-stat" key={metric}>
@@ -5346,9 +5686,17 @@ function DetailStats({
       ))}
     </section>
   );
+  if (!showHeading) return grid;
+  return (
+    <section className="detail-block detail-stats-panel">
+      <h2 className="section-title desktop-detail-heading">Stats</h2>
+      {grid}
+    </section>
+  );
 }
 
 function DetailLinks({ series }: { series: SeriesCatalog }) {
+  const chipsRef = useRef<HTMLDivElement>(null);
   const sourceLinks = [
     ["MangaBaka", series.links?.mangabaka],
     ["AniList", series.source?.anilist?.url],
@@ -5364,9 +5712,50 @@ function DetailLinks({ series }: { series: SeriesCatalog }) {
     ...sourceLinks,
     ...officialEnglishUrls.map((href) => [`Read on ${readingPlatformName(href)}`, href] as [string, string]),
   ];
+  const linkFitKey = links.map(([label, href]) => `${label}|${href}`).join("|");
+  useLayoutEffect(() => {
+    const chips = chipsRef.current;
+    if (!chips) return;
+    if (!window.matchMedia(DESKTOP_LAYOUT_QUERY).matches) {
+      chips.querySelectorAll<HTMLElement>(".link-chip span").forEach((label) => label.style.removeProperty("font-size"));
+      return;
+    }
+    let frame = 0;
+    const fitLabels = () => {
+      chips.querySelectorAll<HTMLElement>(".link-chip").forEach((chip) => {
+        const label = chip.querySelector<HTMLElement>("span");
+        const icon = chip.querySelector<HTMLElement>(".link-favicon");
+        if (!label) return;
+        const style = getComputedStyle(chip);
+        const parsedColumnGap = Number.parseFloat(style.columnGap);
+        const parsedGap = Number.parseFloat(style.gap);
+        const gap = Number.isFinite(parsedColumnGap) ? parsedColumnGap : Number.isFinite(parsedGap) ? parsedGap : 0;
+        const availableWidth = chip.clientWidth
+          - Number.parseFloat(style.paddingLeft)
+          - Number.parseFloat(style.paddingRight)
+          - gap
+          - (icon?.getBoundingClientRect().width ?? 0);
+        // Leave a small right-side safety margin so the last glyph never meets the chip clip edge.
+        fitSingleLineText(label, Math.max(0, availableWidth - 6), 8.75);
+      });
+    };
+    const scheduleFit = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(fitLabels);
+    };
+    fitLabels();
+    const resizeObserver = new ResizeObserver(scheduleFit);
+    resizeObserver.observe(chips);
+    chips.querySelectorAll<HTMLElement>(".link-chip").forEach((chip) => resizeObserver.observe(chip));
+    void document.fonts?.ready.then(scheduleFit);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+    };
+  }, [linkFitKey]);
   if (links.length === 0) return null;
   return (
-    <div className="chips link-chips">
+    <div className="chips link-chips" ref={chipsRef}>
       {links.map(([label, href]) => (
         <a className="chip link-chip" href={href} target="_blank" rel="noreferrer" key={`${label}-${href}`}>
           <img className="link-favicon" src={faviconForUrl(href)} alt="" aria-hidden="true" loading="lazy" decoding="async" />
