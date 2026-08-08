@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import defaultFeedSegmentsJson from "../domain/defaultFeedSegments.generated.json";
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import { createFeed } from "../domain/defaults";
 import type { Feed, FeedSegment } from "../domain/types";
+import { mergeBuiltInCuratedDefaults } from "../domain/curatedFeedDefaults";
 import { addNewFeedToUnsegmentedSegment, correctDefaultFeedDescriptions, correctDiscoverDeepCutExclusions, mergeLatestListingsDefault, migrateLegacyOelSourceMode, MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID, normalizeFeed, normalizeFeedSegments, removeRetiredDefaultFeeds, UNSEGMENTED_FEED_SEGMENT_ID } from "./useAppStore";
 
 const now = "2026-07-10T00:00:00.000Z";
@@ -245,6 +247,65 @@ describe("Latest Listings default feed installation", () => {
 
     expect(installedAgain.feeds.filter((feed) => feed.id === "b68dcc8b-3ca0-44a4-a474-dd91af2debe7")).toHaveLength(1);
     expect(installedAgain.segments[0]?.feedIds.filter((id) => id === "b68dcc8b-3ca0-44a4-a474-dd91af2debe7")).toHaveLength(1);
+    expect(installedAgain).toEqual(installed);
+  });
+});
+
+describe("curated default feed installation", () => {
+  it("keeps the fresh default placement and appends new segments at the bottom", () => {
+    const defaults = defaultFeedSegmentsJson as unknown as FeedSegment[];
+    const underrated = defaults.find((item) => item.id === "8e59f651-ff3e-4c02-8c41-0a5e93e359ae");
+
+    expect(underrated?.feedIds).toEqual([
+      "0c96761d-09d2-423a-a959-b2c3e451f739",
+      "99609e6f-9bd7-4d8c-9885-de48718fc051",
+      "2f13f7fc-37f4-4049-938a-538ebb4ecf7a",
+      "c456f0dd-adf8-4acc-8394-d2467ab5dcf8",
+    ]);
+    expect(defaults.slice(-4).map((item) => item.name)).toEqual(["OEL", "NOVEL BASED", "TAG BASED FEEDS", "Unsegmented"]);
+    expect(defaults.slice(-4, -1).every((item) => item.hiddenFromHome === false)).toBe(true);
+  });
+
+  it("does not move a feed or overwrite an existing curated segment", () => {
+    const notYetDiscovered = createFeed("NOT YET DISCOVERED");
+    notYetDiscovered.id = "2f13f7fc-37f4-4049-938a-538ebb4ecf7a";
+    const movedSegment = { ...segment("user-segment", [notYetDiscovered.id]), name: "My placement" };
+    const existingCuratedSegment = {
+      ...segment("2f90e87b-44b7-40ab-9fed-01d87241786d", ["user-feed"]),
+      collapsed: false,
+      hiddenFromHome: true,
+    };
+    const merged = mergeBuiltInCuratedDefaults([notYetDiscovered], [movedSegment, existingCuratedSegment]);
+
+    expect(merged.segments.find((item) => item.id === movedSegment.id)).toEqual(movedSegment);
+    expect(merged.segments.find((item) => item.id === existingCuratedSegment.id)).toEqual(existingCuratedSegment);
+    expect(merged.segments.filter((item) => item.feedIds.includes(notYetDiscovered.id))).toHaveLength(1);
+  });
+
+  it("adds only unassigned feeds, keeps the new segments visible, and is idempotent", () => {
+    const overhyped = createFeed("OVERHYPED");
+    overhyped.id = "c456f0dd-adf8-4acc-8394-d2467ab5dcf8";
+    const underrated = segment("8e59f651-ff3e-4c02-8c41-0a5e93e359ae", [overhyped.id]);
+    const unsegmented = segment(UNSEGMENTED_FEED_SEGMENT_ID, []);
+
+    const installed = mergeBuiltInCuratedDefaults([overhyped], [underrated, unsegmented]);
+    const installedAgain = mergeBuiltInCuratedDefaults(installed.feeds, installed.segments);
+    const installedUnderrated = installed.segments.find((item) => item.id === underrated.id);
+    const newSegments = installed.segments.filter((item) => [
+      "2f90e87b-44b7-40ab-9fed-01d87241786d",
+      "1c070ff0-0a91-4560-b9f7-cec880962c13",
+      "ef724293-e9a6-4c7b-a1e0-c398c209afc5",
+    ].includes(item.id));
+
+    expect(installedUnderrated?.feedIds).toEqual([overhyped.id, "2f13f7fc-37f4-4049-938a-538ebb4ecf7a"]);
+    expect(installed.segments.slice(-4).map((item) => item.id)).toEqual([
+      "2f90e87b-44b7-40ab-9fed-01d87241786d",
+      "1c070ff0-0a91-4560-b9f7-cec880962c13",
+      "ef724293-e9a6-4c7b-a1e0-c398c209afc5",
+      UNSEGMENTED_FEED_SEGMENT_ID,
+    ]);
+    expect(installed.segments.find((item) => item.id === UNSEGMENTED_FEED_SEGMENT_ID)?.feedIds).toEqual([]);
+    expect(newSegments.every((item) => item.hiddenFromHome === false)).toBe(true);
     expect(installedAgain).toEqual(installed);
   });
 });
