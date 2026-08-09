@@ -2,7 +2,7 @@ import defaultFeedSegmentsJson from "./defaultFeedSegments.generated.json";
 import defaultFeedsJson from "./defaultFeeds.generated.json";
 import type { Feed, FeedSegment } from "./types";
 
-export const CURATED_DEFAULT_FEEDS_VERSION = "v1";
+export const CURATED_DEFAULT_FEEDS_VERSION = "v2";
 
 const UNDERRATED_SEGMENT_ID = "8e59f651-ff3e-4c02-8c41-0a5e93e359ae";
 const UNSEGMENTED_SEGMENT_ID = "unsegmented";
@@ -69,8 +69,15 @@ export function mergeBuiltInCuratedDefaults(feeds: Feed[], segments: FeedSegment
   if (insertionIndex < 0) insertionIndex = nextSegments.length;
   for (const template of builtInCuratedSegments()) {
     const existingIndex = nextSegments.findIndex((segment) => segment.id === template.id);
-    if (existingIndex >= 0) continue;
     const feedIds = template.feedIds.filter((feedId) => availableFeedIds.has(feedId) && !assignedFeedIds.has(feedId));
+    if (existingIndex >= 0) {
+      if (feedIds.length) {
+        const existing = nextSegments[existingIndex];
+        nextSegments[existingIndex] = { ...existing, feedIds: [...existing.feedIds, ...feedIds] };
+        feedIds.forEach((feedId) => assignedFeedIds.add(feedId));
+      }
+      continue;
+    }
     nextSegments.splice(insertionIndex, 0, { ...template, library: "logic", feedIds });
     feedIds.forEach((feedId) => assignedFeedIds.add(feedId));
     insertionIndex += 1;

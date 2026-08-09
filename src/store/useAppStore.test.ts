@@ -255,12 +255,22 @@ describe("curated default feed installation", () => {
   it("keeps the fresh default placement and appends new segments at the bottom", () => {
     const defaults = defaultFeedSegmentsJson as unknown as FeedSegment[];
     const underrated = defaults.find((item) => item.id === "8e59f651-ff3e-4c02-8c41-0a5e93e359ae");
+    const tagBased = defaults.find((item) => item.id === "ef724293-e9a6-4c7b-a1e0-c398c209afc5");
 
     expect(underrated?.feedIds).toEqual([
       "0c96761d-09d2-423a-a959-b2c3e451f739",
       "99609e6f-9bd7-4d8c-9885-de48718fc051",
       "2f13f7fc-37f4-4049-938a-538ebb4ecf7a",
       "c456f0dd-adf8-4acc-8394-d2467ab5dcf8",
+    ]);
+    expect(tagBased?.feedIds).toHaveLength(24);
+    expect(tagBased?.feedIds.slice(-6)).toEqual([
+      "ad80f768-ab50-4753-9096-bf25f01222fd",
+      "43e592cd-5f18-4470-b400-a5951c3558d2",
+      "ec27fd3c-adbe-4cab-ac9c-0095d19258bf",
+      "cb77f208-8e54-43cb-ac7b-23fb9da237d8",
+      "b2e9d710-7a31-4b00-b126-c91011bbdbe0",
+      "84018df9-5dd0-43fc-a7fc-b02fa621128c",
     ]);
     expect(defaults.slice(-4).map((item) => item.name)).toEqual(["OEL", "NOVEL BASED", "TAG BASED FEEDS", "Unsegmented"]);
     expect(defaults.slice(-4, -1).every((item) => item.hiddenFromHome === false)).toBe(true);
@@ -271,14 +281,58 @@ describe("curated default feed installation", () => {
     notYetDiscovered.id = "2f13f7fc-37f4-4049-938a-538ebb4ecf7a";
     const movedSegment = { ...segment("user-segment", [notYetDiscovered.id]), name: "My placement" };
     const existingCuratedSegment = {
-      ...segment("2f90e87b-44b7-40ab-9fed-01d87241786d", ["user-feed"]),
+      ...segment("ef724293-e9a6-4c7b-a1e0-c398c209afc5", ["user-feed"]),
       collapsed: false,
       hiddenFromHome: true,
     };
     const merged = mergeBuiltInCuratedDefaults([notYetDiscovered], [movedSegment, existingCuratedSegment]);
 
     expect(merged.segments.find((item) => item.id === movedSegment.id)).toEqual(movedSegment);
-    expect(merged.segments.find((item) => item.id === existingCuratedSegment.id)).toEqual(existingCuratedSegment);
+    const mergedCuratedSegment = merged.segments.find((item) => item.id === existingCuratedSegment.id);
+    expect(mergedCuratedSegment).toMatchObject({
+      id: existingCuratedSegment.id,
+      library: existingCuratedSegment.library,
+      name: existingCuratedSegment.name,
+      collapsed: existingCuratedSegment.collapsed,
+      hiddenFromHome: existingCuratedSegment.hiddenFromHome,
+      createdAt: existingCuratedSegment.createdAt,
+      updatedAt: existingCuratedSegment.updatedAt,
+    });
+    expect(mergedCuratedSegment?.feedIds).toEqual([
+      "user-feed",
+      "2f7c754a-52ff-44d1-bdbd-e6ac47b07d75",
+      "7804e1f1-f018-4ef8-a656-80e154c0dd86",
+      "98e259c2-0a3b-4620-bd1c-9492c9c558dc",
+      "a72e8925-645d-4a84-b16b-3e32d88f0da6",
+      "8c52fcde-1df5-47b8-bb2e-9896fcac02e4",
+      "d7f02dcb-2bc5-49c0-b6f2-4dd6cb7f1e32",
+      "046cfd8e-57d2-4c70-b4c1-3ff382f61924",
+      "18e2db15-8b71-4c2f-bb6a-e42c53232219",
+      "1948e099-ba5f-43fb-96d2-f4dac85a87c1",
+      "211b483c-036a-4cdd-a955-f82417efcd34",
+      "0763db20-1b5a-429d-a1f3-9199d12e47b4",
+      "afd31cfd-62fe-44ac-a76c-10a2f19a999c",
+      "011887f7-9783-44e9-bd81-4858f446f7e5",
+      "08ed70e2-ee5f-4edd-abed-0148efc0c1bb",
+      "fa49d77a-7fbc-4833-bce0-df8e9cfe2b41",
+      "6410e2cf-7dcc-4515-b701-7babb235d3ca",
+      "b6fabf5c-5ae6-4c58-828f-085c871b43da",
+      "1c3a6507-bb7f-4e8b-8618-99086836d5ed",
+      "ad80f768-ab50-4753-9096-bf25f01222fd",
+      "43e592cd-5f18-4470-b400-a5951c3558d2",
+      "ec27fd3c-adbe-4cab-ac9c-0095d19258bf",
+      "cb77f208-8e54-43cb-ac7b-23fb9da237d8",
+      "b2e9d710-7a31-4b00-b126-c91011bbdbe0",
+      "84018df9-5dd0-43fc-a7fc-b02fa621128c",
+    ]);
+    expect(merged.feeds.filter((feed) => [
+      "ad80f768-ab50-4753-9096-bf25f01222fd",
+      "43e592cd-5f18-4470-b400-a5951c3558d2",
+      "ec27fd3c-adbe-4cab-ac9c-0095d19258bf",
+      "cb77f208-8e54-43cb-ac7b-23fb9da237d8",
+      "b2e9d710-7a31-4b00-b126-c91011bbdbe0",
+      "84018df9-5dd0-43fc-a7fc-b02fa621128c",
+    ].includes(feed.id))).toHaveLength(6);
     expect(merged.segments.filter((item) => item.feedIds.includes(notYetDiscovered.id))).toHaveLength(1);
   });
 
