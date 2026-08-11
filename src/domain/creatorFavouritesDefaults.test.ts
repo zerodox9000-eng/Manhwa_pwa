@@ -7,7 +7,7 @@ import {
 } from "./creatorFavouritesDefaults";
 
 describe("built-in creator favourites", () => {
-  it("ships as a visible MY LIST segment with fixed custom membership", () => {
+  it("ships as a hidden MY LIST segment with fixed custom membership", () => {
     const [feed] = builtInCreatorFavouriteFeeds();
     const [segment] = builtInCreatorFavouriteSegments();
 
@@ -16,7 +16,7 @@ describe("built-in creator favourites", () => {
     expect(segment).toMatchObject({
       library: "custom",
       name: "CREATOR FAVOURITES",
-      hiddenFromHome: false,
+      hiddenFromHome: true,
       feedIds: [feed.id],
     });
   });
@@ -29,6 +29,26 @@ describe("built-in creator favourites", () => {
 
     expect(second.feeds).toEqual([savedFeed]);
     expect(second.segments).toEqual([savedSegment]);
+  });
+
+  it("hides an untouched visible copy during the default migration", () => {
+    const [feed] = builtInCreatorFavouriteFeeds();
+    const [segment] = builtInCreatorFavouriteSegments();
+    const migrated = mergeBuiltInCreatorFavourites([feed], [{ ...segment, hiddenFromHome: false }]);
+
+    expect(migrated.segments[0]).toMatchObject({
+      id: segment.id,
+      hiddenFromHome: true,
+    });
+  });
+
+  it("preserves customized creator segment visibility", () => {
+    const [feed] = builtInCreatorFavouriteFeeds();
+    const [segment] = builtInCreatorFavouriteSegments();
+    const customized = { ...segment, name: "My favourites", hiddenFromHome: false };
+    const merged = mergeBuiltInCreatorFavourites([feed], [customized]);
+
+    expect(merged.segments).toEqual([customized]);
   });
 
   it("updates only the old supplied description without replacing saved settings", () => {

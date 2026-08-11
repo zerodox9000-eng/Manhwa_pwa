@@ -140,39 +140,161 @@
     "updatedAt": "2026-08-08T23:01:47.970Z"
   },
   {
-    "id": "ef724293-e9a6-4c7b-a1e0-c398c209afc5",
+    "id": "4d9b8338-29eb-4a06-8949-d13ad3f19e2b",
     "library": "logic",
-    "name": "TAG BASED FEEDS",
+    "name": "CHARACTER TYPES",
     "feedIds": [
-      "2f7c754a-52ff-44d1-bdbd-e6ac47b07d75",
-      "7804e1f1-f018-4ef8-a656-80e154c0dd86",
-      "98e259c2-0a3b-4620-bd1c-9492c9c558dc",
-      "a72e8925-645d-4a84-b16b-3e32d88f0da6",
-      "8c52fcde-1df5-47b8-bb2e-9896fcac02e4",
-      "d7f02dcb-2bc5-49c0-b6f2-4dd6cb7f1e32",
-      "046cfd8e-57d2-4c70-b4c1-3ff382f61924",
-      "18e2db15-8b71-4c2f-bb6a-e42c53232219",
-      "1948e099-ba5f-43fb-96d2-f4dac85a87c1",
-      "211b483c-036a-4cdd-a955-f82417efcd34",
-      "0763db20-1b5a-429d-a1f3-9199d12e47b4",
-      "afd31cfd-62fe-44ac-a76c-10a2f19a999c",
-      "011887f7-9783-44e9-bd81-4858f446f7e5",
-      "08ed70e2-ee5f-4edd-abed-0148efc0c1bb",
-      "fa49d77a-7fbc-4833-bce0-df8e9cfe2b41",
-      "6410e2cf-7dcc-4515-b701-7babb235d3ca",
-      "b6fabf5c-5ae6-4c58-828f-085c871b43da",
-      "1c3a6507-bb7f-4e8b-8618-99086836d5ed",
-      "ad80f768-ab50-4753-9096-bf25f01222fd",
-      "43e592cd-5f18-4470-b400-a5951c3558d2",
-      "ec27fd3c-adbe-4cab-ac9c-0095d19258bf",
-      "cb77f208-8e54-43cb-ac7b-23fb9da237d8",
-      "b2e9d710-7a31-4b00-b126-c91011bbdbe0",
-      "84018df9-5dd0-43fc-a7fc-b02fa621128c"
+      "0a6cc89d-558d-42e7-8eb9-7033cb09ce03",
+      "b385ecab-85b9-461a-85b6-573450537fce",
+      "a9021b05-5b99-414a-a80c-b67f25bbb4ca",
+      "dab84dcd-f994-4faa-9ac7-48ecd56f8b93",
+      "09a55365-c7aa-41ff-88db-eb26b86aaf17"
     ],
     "collapsed": true,
     "hiddenFromHome": false,
-    "createdAt": "2026-08-05T13:05:51.227Z",
-    "updatedAt": "2026-08-08T23:01:54.309Z"
+    "createdAt": "2026-08-10T18:49:40.170Z",
+    "updatedAt": "2026-08-10T20:20:07.167Z"
+  },
+  {
+    "id": "950d6c3d-0164-4ccc-b405-1e570d88991f",
+    "library": "logic",
+    "name": "NARRATIVE TROPES",
+    "feedIds": [
+      "b7650fdd-f491-4c7d-af29-b04e378c6ced",
+      "2feb6d72-5f5a-480b-be77-01c90eaa72c6",
+      "75c9f2d6-5e12-47e0-b2a0-a65c3d1a9514",
+      "8958e3a1-ebe0-4456-bcff-214cd2ef8407",
+      "f8a890e5-efd0-412a-b00b-c27ec0ba8d63",
+      "80fb8694-d989-4e3b-a4c2-105a46a75571"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": false,
+    "createdAt": "2026-08-10T18:35:59.893Z",
+    "updatedAt": "2026-08-10T20:24:10.629Z"
+  },
+  {
+    "id": "edff82e1-332d-41cb-83c7-59d069c39bec",
+    "library": "logic",
+    "name": "SETTINGS",
+    "feedIds": [
+      "c0283a03-68c4-49cf-a36c-8b4d1dbc16e7",
+      "c35e3761-f6c7-43fb-bd1c-1be25711576f",
+      "6b8d5e7a-9038-43a0-ad40-6afb72801425"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": false,
+    "createdAt": "2026-08-10T19:03:10.504Z",
+    "updatedAt": "2026-08-10T19:47:16.846Z"
+  },
+  {
+    "id": "ef2778ad-4548-44a3-a8c3-4a4dca58c01b",
+    "library": "logic",
+    "name": "LOCATION",
+    "feedIds": [
+      "fdd5e4d8-5d92-4fea-b75c-c5d2a7833df7",
+      "3fd3520b-8010-4881-8d8a-15e0d2fb433f",
+      "40850369-5b83-42b2-9553-f8d78293e01b",
+      "ba034d49-9561-4133-982f-1ed14b6afb15"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": false,
+    "createdAt": "2026-08-10T18:44:40.976Z",
+    "updatedAt": "2026-08-10T19:47:18.565Z"
+  },
+  {
+    "id": "cb4ee3cc-d8a5-4fd0-9713-c1432691291b",
+    "library": "logic",
+    "name": "GENRE COMBOS",
+    "feedIds": [
+      "7db7f39f-1fbb-4ca2-b6f1-23d416b4ac3c",
+      "7f8008cb-7f37-4dec-83e2-22259f59c413",
+      "32cfdba3-c5d4-42f3-8ba7-1be2ab0660bb",
+      "22919296-2ee4-4ea2-9766-29882a7b706a",
+      "77a6ee82-82e2-4e1b-bc42-c23ad48fde95",
+      "d33d661e-1260-4f5c-8c40-2f0d579b913f"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": false,
+    "createdAt": "2026-08-10T18:36:09.685Z",
+    "updatedAt": "2026-08-10T19:15:26.472Z"
+  },
+  {
+    "id": "50ae704b-b926-4dba-8779-cc4d36f4bf53",
+    "library": "logic",
+    "name": "OCCUPATIONS",
+    "feedIds": [
+      "80c49ef3-4c39-4023-9f01-1dc56d12d77d",
+      "91ecb57e-e6a1-4318-b9f6-d6a9f3ce3d71",
+      "83ea0d45-ab9b-46cd-9fb5-ea6e595d60bd",
+      "93bbb86a-fbfd-4f47-bb6f-828a5a079ed8",
+      "b93fc1b3-648d-4fe9-abd0-072c2c2247d2",
+      "c8b9798f-d44f-45ff-b8d4-e499126736e0",
+      "af505a42-109d-434d-a7fa-afc1fdb9b0eb"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": false,
+    "createdAt": "2026-08-10T19:05:24.432Z",
+    "updatedAt": "2026-08-10T20:19:12.055Z"
+  },
+  {
+    "id": "f3f55dfc-5c05-409a-94ef-5631caa09e09",
+    "library": "logic",
+    "name": "RELATIONSHIP",
+    "feedIds": [
+      "a024a2e8-99b6-4572-b712-c5a01ae4a65e",
+      "d70937a1-ebe7-4b9d-b596-bc85eb562c8d",
+      "13e079b6-8f65-4360-9dc0-38a8dd3acf73",
+      "304a63c7-c95a-4fb8-b6d1-453761904684",
+      "aafaa4c9-24a8-4fd5-b911-e0a6b7ebe2ba",
+      "38a7578e-7d0b-439c-98b2-0a20f9b7cd5f"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": false,
+    "createdAt": "2026-08-10T18:36:04.196Z",
+    "updatedAt": "2026-08-10T19:40:36.734Z"
+  },
+  {
+    "id": "b6ce4d9f-992d-4090-8ba6-22a288e87282",
+    "library": "logic",
+    "name": "THEME",
+    "feedIds": [
+      "98f7103a-3398-4a79-9e95-3c528c1d6dd1",
+      "2f676bb9-a3ec-4e4b-a8f2-519352f4fc65",
+      "efbd1ef8-855e-470f-8fdd-414e95501d10",
+      "ed55060f-3803-4d91-933c-02c97d9af3a9",
+      "0f6509ca-f198-4038-a802-c18dcb256c0c",
+      "5f922245-f9ac-4444-944d-32d1e16694cd",
+      "fecf61f3-9973-4568-b3cd-80fed26b4be8",
+      "cbabe092-89aa-4cd7-9ac0-29c71ece80d6",
+      "b4041be2-a46e-41b6-9bbb-46e22defa5d5",
+      "cb34cdc3-6a5a-49c9-9634-9ff5e25e96f9",
+      "1d9b6756-ed44-4377-92b0-e4b9fe3e0d7d",
+      "b83ad947-0de8-4624-a1d0-341aa633d56f",
+      "c566fa8f-8a66-4556-ac17-d5278a7a5f32",
+      "17739543-7751-414f-90d9-0fdd532cab5f"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": false,
+    "createdAt": "2026-08-10T18:35:50.719Z",
+    "updatedAt": "2026-08-10T20:03:30.988Z"
+  },
+  {
+    "id": "70c98c44-03d1-4e0b-b891-e0a41c0a48b8",
+    "library": "logic",
+    "name": "SPECIES & CREATURES",
+    "feedIds": [
+      "a8f88793-3c5b-4db2-851c-f97a12120f93",
+      "ecdf943a-0076-4020-a8cc-431cba1ac7e2",
+      "3c06d387-fbb2-495d-86aa-8fe88433a09a",
+      "f7694c84-4754-4cc7-9e33-82af70ea0c79",
+      "968bb4a9-02d4-4cf8-8a74-82340d52e4f0",
+      "1b94c408-df9e-4dfb-ae46-967c36be0edd",
+      "ee245001-049a-4ef6-a3cf-cdc13bfcfd84"
+    ],
+    "collapsed": true,
+    "hiddenFromHome": false,
+    "createdAt": "2026-08-10T18:35:55.297Z",
+    "updatedAt": "2026-08-10T19:58:24.990Z"
   },
   {
     "id": "unsegmented",

@@ -3674,13 +3674,13 @@
     "nonAniListPlacement": "top"
   },
   {
-    "id": "2f7c754a-52ff-44d1-bdbd-e6ac47b07d75",
+    "id": "0a6cc89d-558d-42e7-8eb9-7033cb09ce03",
     "kind": "logic",
-    "name": "SPORTS ",
-    "description": "Ranked by Engagement | Series with Sports tag",
+    "name": "VILLAINESS",
+    "description": "Ranked by Engagement | Series with Villainess tag",
     "showDescription": true,
-    "createdAt": "2026-08-05T13:47:24.820Z",
-    "updatedAt": "2026-08-08T06:07:49.746Z",
+    "createdAt": "2026-08-05T13:59:06.654Z",
+    "updatedAt": "2026-08-05T14:02:29.765Z",
     "filters": {
       "sourceMode": "anilist",
       "sourceModes": [
@@ -3688,7 +3688,7 @@
       ],
       "query": "",
       "includeTagIds": [
-        30
+        266
       ],
       "excludeTagIds": [
         4,
@@ -3725,7 +3725,7 @@
     },
     "sort": [
       {
-        "id": "30c0bf8f-6c9b-49e4-85d5-95b12d46101e",
+        "id": "83fccebc-9ed7-4517-9b6a-8cfbf9a9560d",
         "metric": "fanFavouriteDiscoveryPercentile",
         "direction": "desc"
       }
@@ -3769,13 +3769,13 @@
     "nonAniListPlacement": "top"
   },
   {
-    "id": "7804e1f1-f018-4ef8-a656-80e154c0dd86",
+    "id": "b385ecab-85b9-461a-85b6-573450537fce",
     "kind": "logic",
-    "name": "HORROR-THRILLER COMBO ",
-    "description": "Ranked by Engagement | Series with Horror and Thriller tags",
+    "name": "ADOPTED PROTAGONIST",
+    "description": "Ranked by Engagement | Series with Adopted Protagonist tag",
     "showDescription": true,
-    "createdAt": "2026-07-25T16:00:32.793Z",
-    "updatedAt": "2026-08-05T13:23:57.504Z",
+    "createdAt": "2026-08-10T20:03:41.467Z",
+    "updatedAt": "2026-08-10T20:06:42.570Z",
     "filters": {
       "sourceMode": "anilist",
       "sourceModes": [
@@ -3783,8 +3783,387 @@
       ],
       "query": "",
       "includeTagIds": [
-        19,
-        44
+        1161
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "f7562937-4233-41bf-84ff-00029fe0298a",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "a9021b05-5b99-414a-a80c-b67f25bbb4ca",
+    "kind": "logic",
+    "name": "SMART FEMALE LEAD",
+    "description": "Ranked by Engagement | Series with Smart Female Lead tag",
+    "showDescription": true,
+    "createdAt": "2026-08-09T23:24:25.423Z",
+    "updatedAt": "2026-08-09T23:44:24.740Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        577
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "8501e04a-c164-4145-8b67-f45fba1888ef",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "dab84dcd-f994-4faa-9ac7-48ecd56f8b93",
+    "kind": "logic",
+    "name": "SMART MALE LEAD",
+    "description": "Ranked by Engagement | Series with Smart Male Lead tag ",
+    "showDescription": true,
+    "createdAt": "2026-08-09T23:45:09.817Z",
+    "updatedAt": "2026-08-09T23:46:37.987Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        574
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "770df9fa-5736-4a52-a1fe-9f2179d3ab43",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "09a55365-c7aa-41ff-88db-eb26b86aaf17",
+    "kind": "logic",
+    "name": "PSYCHOPATHS",
+    "description": "Ranked by Engagement | Series with Psychopaths tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T20:07:45.245Z",
+    "updatedAt": "2026-08-10T20:11:08.751Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        758
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "55c6b6ce-7aea-4dde-97f6-5948cae85378",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "b7650fdd-f491-4c7d-af29-b04e378c6ced",
+    "kind": "logic",
+    "name": "ABUSE OF POWER",
+    "description": "Ranked by Engagement | Series with Abuse of Power tag ",
+    "showDescription": true,
+    "createdAt": "2026-08-05T14:38:41.881Z",
+    "updatedAt": "2026-08-05T14:56:25.824Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        849
       ],
       "excludeTagIds": [
         4,
@@ -3821,7 +4200,7 @@
     },
     "sort": [
       {
-        "id": "24e82095-ffee-4daf-b70e-2ebdb475679e",
+        "id": "ea670793-e248-497e-a449-a8d366447b7c",
         "metric": "fanFavouriteDiscoveryPercentile",
         "direction": "desc"
       }
@@ -3865,13 +4244,13 @@
     "nonAniListPlacement": "top"
   },
   {
-    "id": "98e259c2-0a3b-4620-bd1c-9492c9c558dc",
+    "id": "2feb6d72-5f5a-480b-be77-01c90eaa72c6",
     "kind": "logic",
-    "name": "PSYCHOLOGICAL-MYSTERY COMBO ",
-    "description": "Ranked by Engagement | Series with Psychological and Mystery tags",
+    "name": "CHARACTER GROWTH ",
+    "description": "Ranked by Engagement | Series with Character Growth tag",
     "showDescription": true,
-    "createdAt": "2026-08-05T13:28:21.412Z",
-    "updatedAt": "2026-08-05T13:33:40.861Z",
+    "createdAt": "2026-08-10T00:26:33.215Z",
+    "updatedAt": "2026-08-10T00:28:05.399Z",
     "filters": {
       "sourceMode": "anilist",
       "sourceModes": [
@@ -3879,8 +4258,7 @@
       ],
       "query": "",
       "includeTagIds": [
-        32,
-        18
+        879
       ],
       "excludeTagIds": [
         4,
@@ -3888,7 +4266,7 @@
         41,
         10
       ],
-      "tagMatch": "all",
+      "tagMatch": "any",
       "contentRatings": [
         "safe",
         "suggestive"
@@ -3917,7 +4295,7 @@
     },
     "sort": [
       {
-        "id": "e0f8e9dc-7397-4e26-b199-db8619a790ef",
+        "id": "71b2b958-5383-47d2-b891-2a6a57f88b09",
         "metric": "fanFavouriteDiscoveryPercentile",
         "direction": "desc"
       }
@@ -3961,7 +4339,1052 @@
     "nonAniListPlacement": "top"
   },
   {
-    "id": "a72e8925-645d-4a84-b16b-3e32d88f0da6",
+    "id": "75c9f2d6-5e12-47e0-b2a0-a65c3d1a9514",
+    "kind": "logic",
+    "name": "AGE REGRESSION",
+    "description": "Ranked by Engagement | Series with Age Regression tag",
+    "showDescription": true,
+    "createdAt": "2026-08-09T23:56:23.899Z",
+    "updatedAt": "2026-08-10T00:17:17.493Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        748
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "b33a3d88-1757-4a6a-9a55-3b9e467b5d6b",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "8958e3a1-ebe0-4456-bcff-214cd2ef8407",
+    "kind": "logic",
+    "name": "WEAK TO STRONG ",
+    "description": "Ranked by Engagement | Series with Weak to Strong tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T00:29:03.666Z",
+    "updatedAt": "2026-08-10T00:30:27.921Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        1064
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "b638a3f4-45d1-42a3-85f9-b231ea5f6dda",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "f8a890e5-efd0-412a-b00b-c27ec0ba8d63",
+    "kind": "logic",
+    "name": "HIDDEN PAST",
+    "description": "Ranked by Engagement | Series with Hidden Past tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T14:01:35.929Z",
+    "updatedAt": "2026-08-10T14:09:51.878Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        838
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "890916f6-cdd5-440c-9ebd-10959e940be0",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "80fb8694-d989-4e3b-a4c2-105a46a75571",
+    "kind": "logic",
+    "name": "GENDER BENDER ",
+    "description": "Ranked by Engagement | Series with Gender Bender tag",
+    "showDescription": true,
+    "createdAt": "2026-08-08T22:57:23.672Z",
+    "updatedAt": "2026-08-08T22:58:34.142Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        12
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "6bae462f-417a-412d-97cb-8738e3c55deb",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "c0283a03-68c4-49cf-a36c-8b4d1dbc16e7",
+    "kind": "logic",
+    "name": "POST-APOCALYPTIC",
+    "description": "Ranked by Engagement | Series with Post-Apocalyptic tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T12:05:25.127Z",
+    "updatedAt": "2026-08-10T12:06:31.195Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        390
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "b304dc3d-5736-4217-91c5-1d9edd2f1847",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "c35e3761-f6c7-43fb-bd1c-1be25711576f",
+    "kind": "logic",
+    "name": "MYTHOLOGY",
+    "description": "Ranked by Engagement | Series with Mythology tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T13:21:14.831Z",
+    "updatedAt": "2026-08-10T20:01:52.642Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        259
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "676b0a33-7be8-4513-b3a7-ca1dd8a30d25",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "6b8d5e7a-9038-43a0-ad40-6afb72801425",
+    "kind": "logic",
+    "name": "POLITICAL",
+    "description": "Ranked by Engagement | Series with Political tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T13:27:41.334Z",
+    "updatedAt": "2026-08-10T13:29:10.742Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        1181
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "b72756c2-bdb9-4443-9921-52f671ba054a",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "fdd5e4d8-5d92-4fea-b75c-c5d2a7833df7",
+    "kind": "logic",
+    "name": "HIGH SCHOOL ",
+    "description": "Ranked by Engagement | Series with High School tag",
+    "showDescription": true,
+    "createdAt": "2026-08-09T16:43:31.043Z",
+    "updatedAt": "2026-08-09T16:47:24.304Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        162
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "f0f286bd-ba7f-4c10-8217-485448892f31",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "3fd3520b-8010-4881-8d8a-15e0d2fb433f",
+    "kind": "logic",
+    "name": "COLLEGE ",
+    "description": "Ranked by Engagement | Series with College tag",
+    "showDescription": true,
+    "createdAt": "2026-08-09T16:52:59.799Z",
+    "updatedAt": "2026-08-09T17:36:38.038Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        257
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "330afbc8-5111-4f39-8927-f46a85c55553",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "40850369-5b83-42b2-9553-f8d78293e01b",
+    "kind": "logic",
+    "name": "DUNGEON",
+    "description": "Ranked by Engagement | Series with Dungeon tag",
+    "showDescription": true,
+    "createdAt": "2026-08-09T16:11:22.143Z",
+    "updatedAt": "2026-08-09T16:12:43.132Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        500
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "5d7c8e66-16cc-4059-b718-afd5e8856bee",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "ba034d49-9561-4133-982f-1ed14b6afb15",
+    "kind": "logic",
+    "name": "ACADEMY ",
+    "description": "Ranked by Engagement | Series with Academy tag",
+    "showDescription": true,
+    "createdAt": "2026-08-09T16:40:35.435Z",
+    "updatedAt": "2026-08-09T16:42:32.891Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        854
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "588ce1fd-4c94-4775-a453-3a1cbd18470a",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "7db7f39f-1fbb-4ca2-b6f1-23d416b4ac3c",
     "kind": "logic",
     "name": "CHILDCARE / PARENTHOOD ",
     "description": "Ranked by Engagement | Series with Childcare or Parenthood tag",
@@ -4057,13 +5480,13 @@
     "nonAniListPlacement": "top"
   },
   {
-    "id": "8c52fcde-1df5-47b8-bb2e-9896fcac02e4",
+    "id": "7f8008cb-7f37-4dec-83e2-22259f59c413",
     "kind": "logic",
-    "name": "VILLAINESS",
-    "description": "Ranked by Engagement | Series with Villainess tag",
+    "name": "PSYCHOLOGICAL ROMANCE COMBO ",
+    "description": "Ranked by Engagement | Series with both Psychological and Romance tags",
     "showDescription": true,
-    "createdAt": "2026-08-05T13:59:06.654Z",
-    "updatedAt": "2026-08-05T14:02:29.765Z",
+    "createdAt": "2026-08-09T17:36:57.465Z",
+    "updatedAt": "2026-08-09T17:44:10.113Z",
     "filters": {
       "sourceMode": "anilist",
       "sourceModes": [
@@ -4071,102 +5494,8 @@
       ],
       "query": "",
       "includeTagIds": [
-        266
-      ],
-      "excludeTagIds": [
-        4,
-        180,
-        41,
-        10
-      ],
-      "tagMatch": "any",
-      "contentRatings": [
-        "safe",
-        "suggestive"
-      ],
-      "statuses": [],
-      "minChapters": null,
-      "maxChapters": null,
-      "minYear": null,
-      "maxYear": null,
-      "minPopularity": null,
-      "maxPopularity": null,
-      "minFavourites": null,
-      "maxFavourites": null,
-      "minMeanScore": null,
-      "maxMeanScore": null,
-      "metricRanges": [],
-      "includeEstimatedDates": true,
-      "requireOfficialEnglishLink": false,
-      "dateField": "none",
-      "rolling": {
-        "mode": "none",
-        "amount": 7,
-        "unit": "days"
-      },
-      "labelIds": []
-    },
-    "sort": [
-      {
-        "id": "83fccebc-9ed7-4517-9b6a-8cfbf9a9560d",
-        "metric": "fanFavouriteDiscoveryPercentile",
-        "direction": "desc"
-      }
-    ],
-    "view": {
-      "mode": "grid",
-      "gridColumns": 4,
-      "desktopGridColumns": 6,
-      "gridDensity": "standard",
-      "listCoverSize": "medium",
-      "listDensity": "standard",
-      "metricSlots": [
-        "fanFavouriteDiscoveryPercentile"
-      ],
-      "visible": {
-        "cover": true,
-        "title": true,
-        "rank": true,
-        "genreChips": true,
-        "status": false,
-        "year": false,
-        "chapters": false,
-        "contentRating": false,
-        "popularity": true,
-        "favourites": true,
-        "meanScore": false,
-        "fanFavouriteRatio": false,
-        "discoveryScore": false,
-        "growthDelta": false,
-        "labels": false,
-        "sourceBadges": false,
-        "quickActions": false,
-        "description": false,
-        "links": false
-      }
-    },
-    "coverTitleIds": [],
-    "titleIds": [],
-    "orderMode": "automatic",
-    "newTitlePlacement": "top",
-    "nonAniListPlacement": "top"
-  },
-  {
-    "id": "d7f02dcb-2bc5-49c0-b6f2-4dd6cb7f1e32",
-    "kind": "logic",
-    "name": "FEMALE EMPOWERMENT",
-    "description": "Ranked by Engagement | Series with Female Empowerment tag",
-    "showDescription": true,
-    "createdAt": "2026-08-05T13:25:43.804Z",
-    "updatedAt": "2026-08-06T00:33:40.450Z",
-    "filters": {
-      "sourceMode": "anilist",
-      "sourceModes": [
-        "anilist"
-      ],
-      "query": "",
-      "includeTagIds": [
-        1816
+        18,
+        9
       ],
       "excludeTagIds": [
         4,
@@ -4203,7 +5532,7 @@
     },
     "sort": [
       {
-        "id": "cf4ed65e-9bfd-4197-9331-abf87218846f",
+        "id": "dd2e0ba7-e8be-4de2-92a4-bd92bd3280e5",
         "metric": "fanFavouriteDiscoveryPercentile",
         "direction": "desc"
       }
@@ -4247,7 +5576,199 @@
     "nonAniListPlacement": "top"
   },
   {
-    "id": "046cfd8e-57d2-4c70-b4c1-3ff382f61924",
+    "id": "32cfdba3-c5d4-42f3-8ba7-1be2ab0660bb",
+    "kind": "logic",
+    "name": "HORROR-THRILLER COMBO ",
+    "description": "Ranked by Engagement | Series with Horror and Thriller tags",
+    "showDescription": true,
+    "createdAt": "2026-07-25T16:00:32.793Z",
+    "updatedAt": "2026-08-05T13:23:57.504Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        19,
+        44
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "all",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "24e82095-ffee-4daf-b70e-2ebdb475679e",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "22919296-2ee4-4ea2-9766-29882a7b706a",
+    "kind": "logic",
+    "name": "PSYCHOLOGICAL-MYSTERY COMBO ",
+    "description": "Ranked by Engagement | Series with Psychological and Mystery tags",
+    "showDescription": true,
+    "createdAt": "2026-08-05T13:28:21.412Z",
+    "updatedAt": "2026-08-05T13:33:40.861Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        32,
+        18
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "all",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "e0f8e9dc-7397-4e26-b199-db8619a790ef",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "77a6ee82-82e2-4e1b-bc42-c23ad48fde95",
     "kind": "logic",
     "name": "MARTIAL ARTS ",
     "description": "Ranked by Engagement | Series with Martial Arts tag",
@@ -4342,577 +5863,7 @@
     "nonAniListPlacement": "top"
   },
   {
-    "id": "18e2db15-8b71-4c2f-bb6a-e42c53232219",
-    "kind": "logic",
-    "name": "WUXIA",
-    "description": "Ranked by Engagement | Series with Wuxia tag",
-    "showDescription": true,
-    "createdAt": "2026-08-04T13:34:46.199Z",
-    "updatedAt": "2026-08-06T00:34:00.066Z",
-    "filters": {
-      "sourceMode": "anilist",
-      "sourceModes": [
-        "anilist"
-      ],
-      "query": "",
-      "includeTagIds": [
-        505
-      ],
-      "excludeTagIds": [
-        4,
-        180,
-        41,
-        10
-      ],
-      "tagMatch": "any",
-      "contentRatings": [
-        "safe",
-        "suggestive"
-      ],
-      "statuses": [],
-      "minChapters": null,
-      "maxChapters": null,
-      "minYear": null,
-      "maxYear": null,
-      "minPopularity": null,
-      "maxPopularity": null,
-      "minFavourites": null,
-      "maxFavourites": null,
-      "minMeanScore": null,
-      "maxMeanScore": null,
-      "metricRanges": [],
-      "includeEstimatedDates": true,
-      "requireOfficialEnglishLink": false,
-      "dateField": "none",
-      "rolling": {
-        "mode": "none",
-        "amount": 7,
-        "unit": "days"
-      },
-      "labelIds": []
-    },
-    "sort": [
-      {
-        "id": "1abbbf5d-992f-4483-b1d0-888285316048",
-        "metric": "fanFavouriteDiscoveryPercentile",
-        "direction": "desc"
-      }
-    ],
-    "view": {
-      "mode": "grid",
-      "gridColumns": 4,
-      "desktopGridColumns": 6,
-      "gridDensity": "standard",
-      "listCoverSize": "medium",
-      "listDensity": "standard",
-      "metricSlots": [
-        "fanFavouriteDiscoveryPercentile"
-      ],
-      "visible": {
-        "cover": true,
-        "title": true,
-        "rank": true,
-        "genreChips": true,
-        "status": false,
-        "year": false,
-        "chapters": false,
-        "contentRating": false,
-        "popularity": true,
-        "favourites": true,
-        "meanScore": false,
-        "fanFavouriteRatio": false,
-        "discoveryScore": false,
-        "growthDelta": false,
-        "labels": false,
-        "sourceBadges": false,
-        "quickActions": false,
-        "description": false,
-        "links": false
-      }
-    },
-    "coverTitleIds": [],
-    "titleIds": [],
-    "orderMode": "automatic",
-    "newTitlePlacement": "top",
-    "nonAniListPlacement": "top"
-  },
-  {
-    "id": "1948e099-ba5f-43fb-96d2-f4dac85a87c1",
-    "kind": "logic",
-    "name": "REVENGE",
-    "description": "Ranked by Engagement | Series with Revenge tag",
-    "showDescription": true,
-    "createdAt": "2026-08-05T14:11:37.023Z",
-    "updatedAt": "2026-08-05T14:14:37.703Z",
-    "filters": {
-      "sourceMode": "anilist",
-      "sourceModes": [
-        "anilist"
-      ],
-      "query": "",
-      "includeTagIds": [
-        227
-      ],
-      "excludeTagIds": [
-        4,
-        180,
-        41,
-        10
-      ],
-      "tagMatch": "any",
-      "contentRatings": [
-        "safe",
-        "suggestive"
-      ],
-      "statuses": [],
-      "minChapters": null,
-      "maxChapters": null,
-      "minYear": null,
-      "maxYear": null,
-      "minPopularity": null,
-      "maxPopularity": null,
-      "minFavourites": null,
-      "maxFavourites": null,
-      "minMeanScore": null,
-      "maxMeanScore": null,
-      "metricRanges": [],
-      "includeEstimatedDates": true,
-      "requireOfficialEnglishLink": false,
-      "dateField": "none",
-      "rolling": {
-        "mode": "none",
-        "amount": 7,
-        "unit": "days"
-      },
-      "labelIds": []
-    },
-    "sort": [
-      {
-        "id": "79a90f6b-6e52-487f-b29f-aba47ae29626",
-        "metric": "fanFavouriteDiscoveryPercentile",
-        "direction": "desc"
-      }
-    ],
-    "view": {
-      "mode": "grid",
-      "gridColumns": 4,
-      "desktopGridColumns": 6,
-      "gridDensity": "standard",
-      "listCoverSize": "medium",
-      "listDensity": "standard",
-      "metricSlots": [
-        "fanFavouriteDiscoveryPercentile"
-      ],
-      "visible": {
-        "cover": true,
-        "title": true,
-        "rank": true,
-        "genreChips": true,
-        "status": false,
-        "year": false,
-        "chapters": false,
-        "contentRating": false,
-        "popularity": true,
-        "favourites": true,
-        "meanScore": false,
-        "fanFavouriteRatio": false,
-        "discoveryScore": false,
-        "growthDelta": false,
-        "labels": false,
-        "sourceBadges": false,
-        "quickActions": false,
-        "description": false,
-        "links": false
-      }
-    },
-    "coverTitleIds": [],
-    "titleIds": [],
-    "orderMode": "automatic",
-    "newTitlePlacement": "top",
-    "nonAniListPlacement": "top"
-  },
-  {
-    "id": "211b483c-036a-4cdd-a955-f82417efcd34",
-    "kind": "logic",
-    "name": "BREAKUP ",
-    "description": "Ranked by Engagement | Series with Breakup tag",
-    "showDescription": true,
-    "createdAt": "2026-08-05T14:09:21.161Z",
-    "updatedAt": "2026-08-05T14:11:16.369Z",
-    "filters": {
-      "sourceMode": "anilist",
-      "sourceModes": [
-        "anilist"
-      ],
-      "query": "",
-      "includeTagIds": [
-        906
-      ],
-      "excludeTagIds": [
-        4,
-        180,
-        41,
-        10
-      ],
-      "tagMatch": "any",
-      "contentRatings": [
-        "safe",
-        "suggestive"
-      ],
-      "statuses": [],
-      "minChapters": null,
-      "maxChapters": null,
-      "minYear": null,
-      "maxYear": null,
-      "minPopularity": null,
-      "maxPopularity": null,
-      "minFavourites": null,
-      "maxFavourites": null,
-      "minMeanScore": null,
-      "maxMeanScore": null,
-      "metricRanges": [],
-      "includeEstimatedDates": true,
-      "requireOfficialEnglishLink": false,
-      "dateField": "none",
-      "rolling": {
-        "mode": "none",
-        "amount": 7,
-        "unit": "days"
-      },
-      "labelIds": []
-    },
-    "sort": [
-      {
-        "id": "42d94b6f-0380-4322-9251-7adef75e7769",
-        "metric": "fanFavouriteDiscoveryPercentile",
-        "direction": "desc"
-      }
-    ],
-    "view": {
-      "mode": "grid",
-      "gridColumns": 4,
-      "desktopGridColumns": 6,
-      "gridDensity": "standard",
-      "listCoverSize": "medium",
-      "listDensity": "standard",
-      "metricSlots": [
-        "fanFavouriteDiscoveryPercentile"
-      ],
-      "visible": {
-        "cover": true,
-        "title": true,
-        "rank": true,
-        "genreChips": true,
-        "status": false,
-        "year": false,
-        "chapters": false,
-        "contentRating": false,
-        "popularity": true,
-        "favourites": true,
-        "meanScore": false,
-        "fanFavouriteRatio": false,
-        "discoveryScore": false,
-        "growthDelta": false,
-        "labels": false,
-        "sourceBadges": false,
-        "quickActions": false,
-        "description": false,
-        "links": false
-      }
-    },
-    "coverTitleIds": [],
-    "titleIds": [],
-    "orderMode": "automatic",
-    "newTitlePlacement": "top",
-    "nonAniListPlacement": "top"
-  },
-  {
-    "id": "0763db20-1b5a-429d-a1f3-9199d12e47b4",
-    "kind": "logic",
-    "name": "ABUSE OF POWER",
-    "description": "Ranked by Engagement | Series with Abuse of Power tag ",
-    "showDescription": true,
-    "createdAt": "2026-08-05T14:38:41.881Z",
-    "updatedAt": "2026-08-05T14:56:25.824Z",
-    "filters": {
-      "sourceMode": "anilist",
-      "sourceModes": [
-        "anilist"
-      ],
-      "query": "",
-      "includeTagIds": [
-        849
-      ],
-      "excludeTagIds": [
-        4,
-        180,
-        41,
-        10
-      ],
-      "tagMatch": "all",
-      "contentRatings": [
-        "safe",
-        "suggestive"
-      ],
-      "statuses": [],
-      "minChapters": null,
-      "maxChapters": null,
-      "minYear": null,
-      "maxYear": null,
-      "minPopularity": null,
-      "maxPopularity": null,
-      "minFavourites": null,
-      "maxFavourites": null,
-      "minMeanScore": null,
-      "maxMeanScore": null,
-      "metricRanges": [],
-      "includeEstimatedDates": true,
-      "requireOfficialEnglishLink": false,
-      "dateField": "none",
-      "rolling": {
-        "mode": "none",
-        "amount": 7,
-        "unit": "days"
-      },
-      "labelIds": []
-    },
-    "sort": [
-      {
-        "id": "ea670793-e248-497e-a449-a8d366447b7c",
-        "metric": "fanFavouriteDiscoveryPercentile",
-        "direction": "desc"
-      }
-    ],
-    "view": {
-      "mode": "grid",
-      "gridColumns": 4,
-      "desktopGridColumns": 6,
-      "gridDensity": "standard",
-      "listCoverSize": "medium",
-      "listDensity": "standard",
-      "metricSlots": [
-        "fanFavouriteDiscoveryPercentile"
-      ],
-      "visible": {
-        "cover": true,
-        "title": true,
-        "rank": true,
-        "genreChips": true,
-        "status": false,
-        "year": false,
-        "chapters": false,
-        "contentRating": false,
-        "popularity": true,
-        "favourites": true,
-        "meanScore": false,
-        "fanFavouriteRatio": false,
-        "discoveryScore": false,
-        "growthDelta": false,
-        "labels": false,
-        "sourceBadges": false,
-        "quickActions": false,
-        "description": false,
-        "links": false
-      }
-    },
-    "coverTitleIds": [],
-    "titleIds": [],
-    "orderMode": "automatic",
-    "newTitlePlacement": "top",
-    "nonAniListPlacement": "top"
-  },
-  {
-    "id": "afd31cfd-62fe-44ac-a76c-10a2f19a999c",
-    "kind": "logic",
-    "name": "MATURE",
-    "description": "Ranked by Engagement | Series with Mature tag",
-    "showDescription": true,
-    "createdAt": "2026-08-05T14:16:24.170Z",
-    "updatedAt": "2026-08-05T14:32:42.585Z",
-    "filters": {
-      "sourceMode": "anilist",
-      "sourceModes": [
-        "anilist"
-      ],
-      "query": "",
-      "includeTagIds": [
-        15
-      ],
-      "excludeTagIds": [
-        4,
-        180,
-        41,
-        10
-      ],
-      "tagMatch": "all",
-      "contentRatings": [
-        "safe",
-        "suggestive"
-      ],
-      "statuses": [],
-      "minChapters": null,
-      "maxChapters": null,
-      "minYear": null,
-      "maxYear": null,
-      "minPopularity": null,
-      "maxPopularity": null,
-      "minFavourites": null,
-      "maxFavourites": null,
-      "minMeanScore": null,
-      "maxMeanScore": null,
-      "metricRanges": [],
-      "includeEstimatedDates": true,
-      "requireOfficialEnglishLink": false,
-      "dateField": "none",
-      "rolling": {
-        "mode": "none",
-        "amount": 7,
-        "unit": "days"
-      },
-      "labelIds": []
-    },
-    "sort": [
-      {
-        "id": "03cb5275-5da8-40bd-9317-0d5a11674e1e",
-        "metric": "fanFavouriteDiscoveryPercentile",
-        "direction": "desc"
-      }
-    ],
-    "view": {
-      "mode": "grid",
-      "gridColumns": 4,
-      "desktopGridColumns": 6,
-      "gridDensity": "standard",
-      "listCoverSize": "medium",
-      "listDensity": "standard",
-      "metricSlots": [
-        "fanFavouriteDiscoveryPercentile"
-      ],
-      "visible": {
-        "cover": true,
-        "title": true,
-        "rank": true,
-        "genreChips": true,
-        "status": false,
-        "year": false,
-        "chapters": false,
-        "contentRating": false,
-        "popularity": true,
-        "favourites": true,
-        "meanScore": false,
-        "fanFavouriteRatio": false,
-        "discoveryScore": false,
-        "growthDelta": false,
-        "labels": false,
-        "sourceBadges": false,
-        "quickActions": false,
-        "description": false,
-        "links": false
-      }
-    },
-    "coverTitleIds": [],
-    "titleIds": [],
-    "orderMode": "automatic",
-    "newTitlePlacement": "top",
-    "nonAniListPlacement": "top"
-  },
-  {
-    "id": "011887f7-9783-44e9-bd81-4858f446f7e5",
-    "kind": "logic",
-    "name": "CROSSDRESSING ",
-    "description": "Ranked by Engagement | Series with Crossdressing tag",
-    "showDescription": true,
-    "createdAt": "2026-08-05T16:33:11.430Z",
-    "updatedAt": "2026-08-08T22:56:54.809Z",
-    "filters": {
-      "sourceMode": "anilist",
-      "sourceModes": [
-        "anilist"
-      ],
-      "query": "",
-      "includeTagIds": [
-        167
-      ],
-      "excludeTagIds": [
-        4,
-        180,
-        41,
-        10
-      ],
-      "tagMatch": "any",
-      "contentRatings": [
-        "safe",
-        "suggestive"
-      ],
-      "statuses": [],
-      "minChapters": null,
-      "maxChapters": null,
-      "minYear": null,
-      "maxYear": null,
-      "minPopularity": null,
-      "maxPopularity": null,
-      "minFavourites": null,
-      "maxFavourites": null,
-      "minMeanScore": null,
-      "maxMeanScore": null,
-      "metricRanges": [],
-      "includeEstimatedDates": true,
-      "requireOfficialEnglishLink": false,
-      "dateField": "none",
-      "rolling": {
-        "mode": "none",
-        "amount": 7,
-        "unit": "days"
-      },
-      "labelIds": []
-    },
-    "sort": [
-      {
-        "id": "89a5e80f-9ee7-4c19-847b-ce106ad5d519",
-        "metric": "fanFavouriteDiscoveryPercentile",
-        "direction": "desc"
-      }
-    ],
-    "view": {
-      "mode": "grid",
-      "gridColumns": 4,
-      "desktopGridColumns": 6,
-      "gridDensity": "standard",
-      "listCoverSize": "medium",
-      "listDensity": "standard",
-      "metricSlots": [
-        "fanFavouriteDiscoveryPercentile"
-      ],
-      "visible": {
-        "cover": true,
-        "title": true,
-        "rank": true,
-        "genreChips": true,
-        "status": false,
-        "year": false,
-        "chapters": false,
-        "contentRating": false,
-        "popularity": true,
-        "favourites": true,
-        "meanScore": false,
-        "fanFavouriteRatio": false,
-        "discoveryScore": false,
-        "growthDelta": false,
-        "labels": false,
-        "sourceBadges": false,
-        "quickActions": false,
-        "description": false,
-        "links": false
-      }
-    },
-    "coverTitleIds": [],
-    "titleIds": [],
-    "orderMode": "automatic",
-    "newTitlePlacement": "top",
-    "nonAniListPlacement": "top"
-  },
-  {
-    "id": "08ed70e2-ee5f-4edd-abed-0148efc0c1bb",
+    "id": "d33d661e-1260-4f5c-8c40-2f0d579b913f",
     "kind": "logic",
     "name": "ECCHI ",
     "description": "Ranked by Engagement | Series with Ecchi tag",
@@ -5007,292 +5958,7 @@
     "nonAniListPlacement": "top"
   },
   {
-    "id": "fa49d77a-7fbc-4833-bce0-df8e9cfe2b41",
-    "kind": "logic",
-    "name": "GENDER BENDER ",
-    "description": "Ranked by Engagement | Series with Gender Bender tag",
-    "showDescription": true,
-    "createdAt": "2026-08-08T22:57:23.672Z",
-    "updatedAt": "2026-08-08T22:58:34.142Z",
-    "filters": {
-      "sourceMode": "anilist",
-      "sourceModes": [
-        "anilist"
-      ],
-      "query": "",
-      "includeTagIds": [
-        12
-      ],
-      "excludeTagIds": [
-        4,
-        180,
-        41,
-        10
-      ],
-      "tagMatch": "any",
-      "contentRatings": [
-        "safe",
-        "suggestive"
-      ],
-      "statuses": [],
-      "minChapters": null,
-      "maxChapters": null,
-      "minYear": null,
-      "maxYear": null,
-      "minPopularity": null,
-      "maxPopularity": null,
-      "minFavourites": null,
-      "maxFavourites": null,
-      "minMeanScore": null,
-      "maxMeanScore": null,
-      "metricRanges": [],
-      "includeEstimatedDates": true,
-      "requireOfficialEnglishLink": false,
-      "dateField": "none",
-      "rolling": {
-        "mode": "none",
-        "amount": 7,
-        "unit": "days"
-      },
-      "labelIds": []
-    },
-    "sort": [
-      {
-        "id": "6bae462f-417a-412d-97cb-8738e3c55deb",
-        "metric": "fanFavouriteDiscoveryPercentile",
-        "direction": "desc"
-      }
-    ],
-    "view": {
-      "mode": "grid",
-      "gridColumns": 4,
-      "desktopGridColumns": 6,
-      "gridDensity": "standard",
-      "listCoverSize": "medium",
-      "listDensity": "standard",
-      "metricSlots": [
-        "fanFavouriteDiscoveryPercentile"
-      ],
-      "visible": {
-        "cover": true,
-        "title": true,
-        "rank": true,
-        "genreChips": true,
-        "status": false,
-        "year": false,
-        "chapters": false,
-        "contentRating": false,
-        "popularity": true,
-        "favourites": true,
-        "meanScore": false,
-        "fanFavouriteRatio": false,
-        "discoveryScore": false,
-        "growthDelta": false,
-        "labels": false,
-        "sourceBadges": false,
-        "quickActions": false,
-        "description": false,
-        "links": false
-      }
-    },
-    "coverTitleIds": [],
-    "titleIds": [],
-    "orderMode": "automatic",
-    "newTitlePlacement": "top",
-    "nonAniListPlacement": "top"
-  },
-  {
-    "id": "6410e2cf-7dcc-4515-b701-7babb235d3ca",
-    "kind": "logic",
-    "name": "ZOMBIES",
-    "description": "Ranked by Engagement | Series with Zombies tag",
-    "showDescription": true,
-    "createdAt": "2026-08-05T14:59:00.326Z",
-    "updatedAt": "2026-08-05T15:00:47.792Z",
-    "filters": {
-      "sourceMode": "anilist",
-      "sourceModes": [
-        "anilist"
-      ],
-      "query": "",
-      "includeTagIds": [
-        413
-      ],
-      "excludeTagIds": [
-        4,
-        180,
-        41,
-        10
-      ],
-      "tagMatch": "any",
-      "contentRatings": [
-        "safe",
-        "suggestive"
-      ],
-      "statuses": [],
-      "minChapters": null,
-      "maxChapters": null,
-      "minYear": null,
-      "maxYear": null,
-      "minPopularity": null,
-      "maxPopularity": null,
-      "minFavourites": null,
-      "maxFavourites": null,
-      "minMeanScore": null,
-      "maxMeanScore": null,
-      "metricRanges": [],
-      "includeEstimatedDates": true,
-      "requireOfficialEnglishLink": false,
-      "dateField": "none",
-      "rolling": {
-        "mode": "none",
-        "amount": 7,
-        "unit": "days"
-      },
-      "labelIds": []
-    },
-    "sort": [
-      {
-        "id": "cfd74a7a-1dc0-43db-8617-cb5a8979303b",
-        "metric": "fanFavouriteDiscoveryPercentile",
-        "direction": "desc"
-      }
-    ],
-    "view": {
-      "mode": "grid",
-      "gridColumns": 4,
-      "desktopGridColumns": 6,
-      "gridDensity": "standard",
-      "listCoverSize": "medium",
-      "listDensity": "standard",
-      "metricSlots": [
-        "fanFavouriteDiscoveryPercentile"
-      ],
-      "visible": {
-        "cover": true,
-        "title": true,
-        "rank": true,
-        "genreChips": true,
-        "status": false,
-        "year": false,
-        "chapters": false,
-        "contentRating": false,
-        "popularity": true,
-        "favourites": true,
-        "meanScore": false,
-        "fanFavouriteRatio": false,
-        "discoveryScore": false,
-        "growthDelta": false,
-        "labels": false,
-        "sourceBadges": false,
-        "quickActions": false,
-        "description": false,
-        "links": false
-      }
-    },
-    "coverTitleIds": [],
-    "titleIds": [],
-    "orderMode": "automatic",
-    "newTitlePlacement": "top",
-    "nonAniListPlacement": "top"
-  },
-  {
-    "id": "b6fabf5c-5ae6-4c58-828f-085c871b43da",
-    "kind": "logic",
-    "name": "DEMON KING",
-    "description": "Ranked by Engagement | Series with Demon King tag ",
-    "showDescription": true,
-    "createdAt": "2026-08-05T14:06:05.390Z",
-    "updatedAt": "2026-08-05T14:08:07.231Z",
-    "filters": {
-      "sourceMode": "anilist",
-      "sourceModes": [
-        "anilist"
-      ],
-      "query": "",
-      "includeTagIds": [
-        698
-      ],
-      "excludeTagIds": [
-        4,
-        180,
-        41,
-        10
-      ],
-      "tagMatch": "any",
-      "contentRatings": [
-        "safe",
-        "suggestive"
-      ],
-      "statuses": [],
-      "minChapters": null,
-      "maxChapters": null,
-      "minYear": null,
-      "maxYear": null,
-      "minPopularity": null,
-      "maxPopularity": null,
-      "minFavourites": null,
-      "maxFavourites": null,
-      "minMeanScore": null,
-      "maxMeanScore": null,
-      "metricRanges": [],
-      "includeEstimatedDates": true,
-      "requireOfficialEnglishLink": false,
-      "dateField": "none",
-      "rolling": {
-        "mode": "none",
-        "amount": 7,
-        "unit": "days"
-      },
-      "labelIds": []
-    },
-    "sort": [
-      {
-        "id": "4d177ffa-6d14-426d-b9b0-ac96aac0109f",
-        "metric": "fanFavouriteDiscoveryPercentile",
-        "direction": "desc"
-      }
-    ],
-    "view": {
-      "mode": "grid",
-      "gridColumns": 4,
-      "desktopGridColumns": 6,
-      "gridDensity": "standard",
-      "listCoverSize": "medium",
-      "listDensity": "standard",
-      "metricSlots": [
-        "fanFavouriteDiscoveryPercentile"
-      ],
-      "visible": {
-        "cover": true,
-        "title": true,
-        "rank": true,
-        "genreChips": true,
-        "status": false,
-        "year": false,
-        "chapters": false,
-        "contentRating": false,
-        "popularity": true,
-        "favourites": true,
-        "meanScore": false,
-        "fanFavouriteRatio": false,
-        "discoveryScore": false,
-        "growthDelta": false,
-        "labels": false,
-        "sourceBadges": false,
-        "quickActions": false,
-        "description": false,
-        "links": false
-      }
-    },
-    "coverTitleIds": [],
-    "titleIds": [],
-    "orderMode": "automatic",
-    "newTitlePlacement": "top",
-    "nonAniListPlacement": "top"
-  },
-  {
-    "id": "1c3a6507-bb7f-4e8b-8618-99086836d5ed",
+    "id": "80c49ef3-4c39-4023-9f01-1dc56d12d77d",
     "kind": "logic",
     "name": "OFFICE WORKER / WORKING ",
     "description": "Ranked by Engagement | Series with Office worker or working tag | Excluded: Nobility, Royalty & Wuxia tags",
@@ -5391,13 +6057,13 @@
     "nonAniListPlacement": "top"
   },
   {
-    "id": "ad80f768-ab50-4753-9096-bf25f01222fd",
+    "id": "91ecb57e-e6a1-4318-b9f6-d6a9f3ce3d71",
     "kind": "logic",
-    "name": "PSYCHOLOGICAL ROMANCE COMBO ",
-    "description": "Ranked by Engagement | Series with both Psychological and Romance tags",
+    "name": "TEACHERS ",
+    "description": "Ranked by Engagement | Series with Teachers tag",
     "showDescription": true,
-    "createdAt": "2026-08-09T17:36:57.465Z",
-    "updatedAt": "2026-08-09T17:44:10.113Z",
+    "createdAt": "2026-08-10T20:11:30.895Z",
+    "updatedAt": "2026-08-10T20:18:33.637Z",
     "filters": {
       "sourceMode": "anilist",
       "sourceModes": [
@@ -5405,8 +6071,958 @@
       ],
       "query": "",
       "includeTagIds": [
-        18,
-        9
+        175
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "7008bd4d-c692-49c8-9e0c-0ecfda7dff24",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "83ea0d45-ab9b-46cd-9fb5-ea6e595d60bd",
+    "kind": "logic",
+    "name": "ACTOR / ACTRESS ",
+    "description": "Ranked by Engagement | Series with Actor or Actress tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T00:20:12.266Z",
+    "updatedAt": "2026-08-10T13:51:39.335Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        591,
+        855
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "d29e57ff-59a3-4a58-8964-3dca94900760",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "93bbb86a-fbfd-4f47-bb6f-828a5a079ed8",
+    "kind": "logic",
+    "name": "IDOLS ",
+    "description": "Ranked by Engagement | Series with Idols tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T19:47:27.431Z",
+    "updatedAt": "2026-08-10T19:48:37.309Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        281
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "97718925-00c9-46fa-b4fc-255978376394",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "b93fc1b3-648d-4fe9-abd0-072c2c2247d2",
+    "kind": "logic",
+    "name": "KNIGHT ",
+    "description": "Ranked by Engagement | Series with Knight tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T19:52:31.537Z",
+    "updatedAt": "2026-08-10T19:53:45.215Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        578
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "df23b499-cca4-4d96-806a-c6fb6b2c1911",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "c8b9798f-d44f-45ff-b8d4-e499126736e0",
+    "kind": "logic",
+    "name": "WITCH",
+    "description": "Ranked by Engagement | Series with Witch tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T19:54:05.402Z",
+    "updatedAt": "2026-08-10T19:55:09.317Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        497
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "9de620e0-72a0-44c1-bbb7-ac94a49fbcd9",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "af505a42-109d-434d-a7fa-afc1fdb9b0eb",
+    "kind": "logic",
+    "name": "ASSASSINS",
+    "description": "Ranked by Engagement | Series with Assassins tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T19:55:21.862Z",
+    "updatedAt": "2026-08-10T19:58:20.315Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        357
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "e7574d19-5f57-4ff3-83f1-f3e5f45fd5cc",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "a024a2e8-99b6-4572-b712-c5a01ae4a65e",
+    "kind": "logic",
+    "name": "SLOW ROMANCE",
+    "description": "Ranked by Engagement | Series with Slow Romance tag",
+    "showDescription": true,
+    "createdAt": "2026-08-09T23:06:04.432Z",
+    "updatedAt": "2026-08-09T23:23:29.644Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        998
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "61193424-61fe-4f8d-a7e7-db45efbe2d24",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "d70937a1-ebe7-4b9d-b596-bc85eb562c8d",
+    "kind": "logic",
+    "name": "FIRST LOVE",
+    "description": "Ranked by Engagement | Series with First Love tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T18:26:14.268Z",
+    "updatedAt": "2026-08-10T18:35:31.090Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        875
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "b2e1db15-2639-44af-bca5-818dfbbd4238",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "13e079b6-8f65-4360-9dc0-38a8dd3acf73",
+    "kind": "logic",
+    "name": "CHILDHOOD FRIENDS",
+    "description": "Ranked by Engagement | Series with Childhood Friends tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T19:25:55.607Z",
+    "updatedAt": "2026-08-10T19:30:21.217Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        97
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "8b782ed8-5229-4c98-af56-ac07dd05af86",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "304a63c7-c95a-4fb8-b6d1-453761904684",
+    "kind": "logic",
+    "name": "NEIGHBORS",
+    "description": "Ranked by Engagement | Series with Neighbors tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T19:30:29.525Z",
+    "updatedAt": "2026-08-10T19:31:45.337Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        401
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "41015cff-1213-4260-81ba-e000db59c2e8",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "aafaa4c9-24a8-4fd5-b911-e0a6b7ebe2ba",
+    "kind": "logic",
+    "name": "MATURE",
+    "description": "Ranked by Engagement | Series with Mature tag",
+    "showDescription": true,
+    "createdAt": "2026-08-05T14:16:24.170Z",
+    "updatedAt": "2026-08-05T14:32:42.585Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        15
       ],
       "excludeTagIds": [
         4,
@@ -5443,7 +7059,7 @@
     },
     "sort": [
       {
-        "id": "dd2e0ba7-e8be-4de2-92a4-bd92bd3280e5",
+        "id": "03cb5275-5da8-40bd-9317-0d5a11674e1e",
         "metric": "fanFavouriteDiscoveryPercentile",
         "direction": "desc"
       }
@@ -5487,13 +7103,13 @@
     "nonAniListPlacement": "top"
   },
   {
-    "id": "43e592cd-5f18-4470-b400-a5951c3558d2",
+    "id": "38a7578e-7d0b-439c-98b2-0a20f9b7cd5f",
     "kind": "logic",
-    "name": "ACADEMY ",
-    "description": "Ranked by Engagement | Series with Academy tag",
+    "name": "BREAKUP ",
+    "description": "Ranked by Engagement | Series with Breakup tag",
     "showDescription": true,
-    "createdAt": "2026-08-09T16:40:35.435Z",
-    "updatedAt": "2026-08-09T16:42:32.891Z",
+    "createdAt": "2026-08-05T14:09:21.161Z",
+    "updatedAt": "2026-08-05T14:11:16.369Z",
     "filters": {
       "sourceMode": "anilist",
       "sourceModes": [
@@ -5501,7 +7117,7 @@
       ],
       "query": "",
       "includeTagIds": [
-        854
+        906
       ],
       "excludeTagIds": [
         4,
@@ -5538,7 +7154,7 @@
     },
     "sort": [
       {
-        "id": "588ce1fd-4c94-4775-a453-3a1cbd18470a",
+        "id": "42d94b6f-0380-4322-9251-7adef75e7769",
         "metric": "fanFavouriteDiscoveryPercentile",
         "direction": "desc"
       }
@@ -5582,13 +7198,13 @@
     "nonAniListPlacement": "top"
   },
   {
-    "id": "ec27fd3c-adbe-4cab-ac9c-0095d19258bf",
+    "id": "98f7103a-3398-4a79-9e95-3c528c1d6dd1",
     "kind": "logic",
-    "name": "COLLEGE ",
-    "description": "Ranked by Engagement | Series with College tag",
+    "name": "SPORTS ",
+    "description": "Ranked by Engagement | Series with Sports tag",
     "showDescription": true,
-    "createdAt": "2026-08-09T16:52:59.799Z",
-    "updatedAt": "2026-08-09T17:36:38.038Z",
+    "createdAt": "2026-08-05T13:47:24.820Z",
+    "updatedAt": "2026-08-08T06:07:49.746Z",
     "filters": {
       "sourceMode": "anilist",
       "sourceModes": [
@@ -5596,7 +7212,7 @@
       ],
       "query": "",
       "includeTagIds": [
-        257
+        30
       ],
       "excludeTagIds": [
         4,
@@ -5633,7 +7249,7 @@
     },
     "sort": [
       {
-        "id": "330afbc8-5111-4f39-8927-f46a85c55553",
+        "id": "30c0bf8f-6c9b-49e4-85d5-95b12d46101e",
         "metric": "fanFavouriteDiscoveryPercentile",
         "direction": "desc"
       }
@@ -5677,13 +7293,13 @@
     "nonAniListPlacement": "top"
   },
   {
-    "id": "cb77f208-8e54-43cb-ac7b-23fb9da237d8",
+    "id": "2f676bb9-a3ec-4e4b-a8f2-519352f4fc65",
     "kind": "logic",
-    "name": "DUNGEON",
-    "description": "Ranked by Engagement | Series with Dungeon tag",
+    "name": "MEDICAL ",
+    "description": "Ranked by Engagement | Series with Medical tag",
     "showDescription": true,
-    "createdAt": "2026-08-09T16:11:22.143Z",
-    "updatedAt": "2026-08-09T16:12:43.132Z",
+    "createdAt": "2026-08-10T14:32:06.171Z",
+    "updatedAt": "2026-08-10T14:33:49.534Z",
     "filters": {
       "sourceMode": "anilist",
       "sourceModes": [
@@ -5691,7 +7307,7 @@
       ],
       "query": "",
       "includeTagIds": [
-        500
+        350
       ],
       "excludeTagIds": [
         4,
@@ -5728,7 +7344,7 @@
     },
     "sort": [
       {
-        "id": "5d7c8e66-16cc-4059-b718-afd5e8856bee",
+        "id": "1f8f0945-a65b-4959-9ed0-5c09f4f9fbdd",
         "metric": "fanFavouriteDiscoveryPercentile",
         "direction": "desc"
       }
@@ -5772,7 +7388,1340 @@
     "nonAniListPlacement": "top"
   },
   {
-    "id": "b2e9d710-7a31-4b00-b126-c91011bbdbe0",
+    "id": "efbd1ef8-855e-470f-8fdd-414e95501d10",
+    "kind": "logic",
+    "name": "MAFIA / GANGS ",
+    "description": "Ranked by Engagement | Series with Mafia or Gangs tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T11:26:37.871Z",
+    "updatedAt": "2026-08-10T11:49:08.911Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        392,
+        353
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "759629be-2a7c-4a2e-80c5-ade30902980e",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "ed55060f-3803-4d91-933c-02c97d9af3a9",
+    "kind": "logic",
+    "name": "BULLYING ",
+    "description": "Ranked by Engagement | Series with Bullying tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T14:13:51.211Z",
+    "updatedAt": "2026-08-10T14:56:34.540Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        235
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "e413eaa9-19c4-4870-aeb9-a7c67fc8f372",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "0f6509ca-f198-4038-a802-c18dcb256c0c",
+    "kind": "logic",
+    "name": "WAR",
+    "description": "Ranked by Engagement | Series with War tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T12:01:30.113Z",
+    "updatedAt": "2026-08-10T12:03:26.259Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        238
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "f4a57e6a-e722-438f-95b8-73d6dd812799",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "5f922245-f9ac-4444-944d-32d1e16694cd",
+    "kind": "logic",
+    "name": "WUXIA",
+    "description": "Ranked by Engagement | Series with Wuxia tag",
+    "showDescription": true,
+    "createdAt": "2026-08-04T13:34:46.199Z",
+    "updatedAt": "2026-08-06T00:34:00.066Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        505
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "1abbbf5d-992f-4483-b1d0-888285316048",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "fecf61f3-9973-4568-b3cd-80fed26b4be8",
+    "kind": "logic",
+    "name": "FEMALE EMPOWERMENT",
+    "description": "Ranked by Engagement | Series with Female Empowerment tag",
+    "showDescription": true,
+    "createdAt": "2026-08-05T13:25:43.804Z",
+    "updatedAt": "2026-08-06T00:33:40.450Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        1816
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "all",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "cf4ed65e-9bfd-4197-9331-abf87218846f",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "cbabe092-89aa-4cd7-9ac0-29c71ece80d6",
+    "kind": "logic",
+    "name": "SECOND CHANCE ",
+    "description": "Ranked by Engagement | Series with Second Chance tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T14:29:06.270Z",
+    "updatedAt": "2026-08-10T14:31:43.015Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        990
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "c59b5dee-3c00-42ed-a0a8-cac7c02c0e5b",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "b4041be2-a46e-41b6-9bbb-46e22defa5d5",
+    "kind": "logic",
+    "name": "REVENGE",
+    "description": "Ranked by Engagement | Series with Revenge tag",
+    "showDescription": true,
+    "createdAt": "2026-08-05T14:11:37.023Z",
+    "updatedAt": "2026-08-05T14:14:37.703Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        227
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "79a90f6b-6e52-487f-b29f-aba47ae29626",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "cb34cdc3-6a5a-49c9-9634-9ff5e25e96f9",
+    "kind": "logic",
+    "name": "SECRETS",
+    "description": "Ranked by Engagement | Series with Secrets tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T14:34:49.290Z",
+    "updatedAt": "2026-08-10T14:37:33.648Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        1151
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "f91b1795-8773-43d1-8ebb-c17abaf6dafe",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "1d9b6756-ed44-4377-92b0-e4b9fe3e0d7d",
+    "kind": "logic",
+    "name": "PARODY / SATIRE",
+    "description": "Ranked by Engagement | Series with Parody, Satire or Gag Humour tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T14:40:17.025Z",
+    "updatedAt": "2026-08-10T14:43:00.251Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        321,
+        263,
+        474
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "a276713b-586b-4485-b586-708236dc3032",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "b83ad947-0de8-4624-a1d0-341aa633d56f",
+    "kind": "logic",
+    "name": "FOUND FAMILY ",
+    "description": "Ranked by Engagement | Series with Found Family tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T14:44:20.763Z",
+    "updatedAt": "2026-08-10T14:45:54.277Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        1052
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "00f06ca5-96bf-46b7-8842-036645da7311",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "c566fa8f-8a66-4556-ac17-d5278a7a5f32",
+    "kind": "logic",
+    "name": "RICH FAMILY ",
+    "description": "Ranked by Engagement | Series with Rich Family tag ",
+    "showDescription": true,
+    "createdAt": "2026-08-10T14:50:11.654Z",
+    "updatedAt": "2026-08-10T14:51:39.920Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        1584
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "a3708fc3-ea21-4b26-b438-c2159b206529",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "17739543-7751-414f-90d9-0fdd532cab5f",
+    "kind": "logic",
+    "name": "COMING OF AGE",
+    "description": "Ranked by Engagement | Series with Coming of Age tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T14:52:27.337Z",
+    "updatedAt": "2026-08-10T15:00:21.291Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        117
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "c0a2e711-5294-4db0-9a4e-1fb705a0782c",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "a8f88793-3c5b-4db2-851c-f97a12120f93",
+    "kind": "logic",
+    "name": "ALIEN ",
+    "description": "Ranked by Engagement | Series with Alien tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T13:30:06.591Z",
+    "updatedAt": "2026-08-10T13:46:21.935Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        296
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "fbc63228-fb42-4964-9625-92de9be040de",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "ecdf943a-0076-4020-a8cc-431cba1ac7e2",
+    "kind": "logic",
+    "name": "ZOMBIES",
+    "description": "Ranked by Engagement | Series with Zombies tag",
+    "showDescription": true,
+    "createdAt": "2026-08-05T14:59:00.326Z",
+    "updatedAt": "2026-08-05T15:00:47.792Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        413
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "cfd74a7a-1dc0-43db-8617-cb5a8979303b",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "3c06d387-fbb2-495d-86aa-8fe88433a09a",
     "kind": "logic",
     "name": "GHOST ",
     "description": "Ranked by Engagement | Series with Ghost tag",
@@ -5868,13 +8817,13 @@
     "nonAniListPlacement": "top"
   },
   {
-    "id": "84018df9-5dd0-43fc-a7fc-b02fa621128c",
+    "id": "f7694c84-4754-4cc7-9e33-82af70ea0c79",
     "kind": "logic",
-    "name": "HIGH SCHOOL ",
-    "description": "Ranked by Engagement | Series with High School tag",
+    "name": "NON-HUMAN",
+    "description": "Ranked by Engagement | Series with Non-human tag",
     "showDescription": true,
-    "createdAt": "2026-08-09T16:43:31.043Z",
-    "updatedAt": "2026-08-09T16:47:24.304Z",
+    "createdAt": "2026-08-10T19:40:46.428Z",
+    "updatedAt": "2026-08-10T19:42:09.731Z",
     "filters": {
       "sourceMode": "anilist",
       "sourceModes": [
@@ -5882,7 +8831,7 @@
       ],
       "query": "",
       "includeTagIds": [
-        162
+        547
       ],
       "excludeTagIds": [
         4,
@@ -5919,7 +8868,292 @@
     },
     "sort": [
       {
-        "id": "f0f286bd-ba7f-4c10-8217-485448892f31",
+        "id": "e4ca46f0-3ead-4e0d-946b-366e6f548927",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "968bb4a9-02d4-4cf8-8a74-82340d52e4f0",
+    "kind": "logic",
+    "name": "VAMPIRES ",
+    "description": "Ranked by Engagement | Series with Vampires tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T19:42:12.734Z",
+    "updatedAt": "2026-08-10T19:43:01.909Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        252
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "d23ebe4a-da55-4e79-9f71-730116cc3ae0",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "1b94c408-df9e-4dfb-ae46-967c36be0edd",
+    "kind": "logic",
+    "name": "ANGELS",
+    "description": "Ranked by Engagement | Series with Angels tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T19:49:09.617Z",
+    "updatedAt": "2026-08-10T19:50:55.326Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        423
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "5805e3a0-8a96-4b0c-b0ea-7c998f08aa2f",
+        "metric": "fanFavouriteDiscoveryPercentile",
+        "direction": "desc"
+      }
+    ],
+    "view": {
+      "mode": "grid",
+      "gridColumns": 4,
+      "desktopGridColumns": 6,
+      "gridDensity": "standard",
+      "listCoverSize": "medium",
+      "listDensity": "standard",
+      "metricSlots": [
+        "fanFavouriteDiscoveryPercentile"
+      ],
+      "visible": {
+        "cover": true,
+        "title": true,
+        "rank": true,
+        "genreChips": true,
+        "status": false,
+        "year": false,
+        "chapters": false,
+        "contentRating": false,
+        "popularity": true,
+        "favourites": true,
+        "meanScore": false,
+        "fanFavouriteRatio": false,
+        "discoveryScore": false,
+        "growthDelta": false,
+        "labels": false,
+        "sourceBadges": false,
+        "quickActions": false,
+        "description": false,
+        "links": false
+      }
+    },
+    "coverTitleIds": [],
+    "titleIds": [],
+    "orderMode": "automatic",
+    "newTitlePlacement": "top",
+    "nonAniListPlacement": "top"
+  },
+  {
+    "id": "ee245001-049a-4ef6-a3cf-cdc13bfcfd84",
+    "kind": "logic",
+    "name": "GODS",
+    "description": "Ranked by Engagement | Series with Gods tag",
+    "showDescription": true,
+    "createdAt": "2026-08-10T19:43:07.104Z",
+    "updatedAt": "2026-08-10T19:46:23.989Z",
+    "filters": {
+      "sourceMode": "anilist",
+      "sourceModes": [
+        "anilist"
+      ],
+      "query": "",
+      "includeTagIds": [
+        176
+      ],
+      "excludeTagIds": [
+        4,
+        180,
+        41,
+        10
+      ],
+      "tagMatch": "any",
+      "contentRatings": [
+        "safe",
+        "suggestive"
+      ],
+      "statuses": [],
+      "minChapters": null,
+      "maxChapters": null,
+      "minYear": null,
+      "maxYear": null,
+      "minPopularity": null,
+      "maxPopularity": null,
+      "minFavourites": null,
+      "maxFavourites": null,
+      "minMeanScore": null,
+      "maxMeanScore": null,
+      "metricRanges": [],
+      "includeEstimatedDates": true,
+      "requireOfficialEnglishLink": false,
+      "dateField": "none",
+      "rolling": {
+        "mode": "none",
+        "amount": 7,
+        "unit": "days"
+      },
+      "labelIds": []
+    },
+    "sort": [
+      {
+        "id": "192cda84-c0c5-4ecd-b4c4-e304849d0940",
         "metric": "fanFavouriteDiscoveryPercentile",
         "direction": "desc"
       }

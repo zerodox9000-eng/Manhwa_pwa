@@ -90,7 +90,7 @@
       "name": "CREATOR FAVOURITES",
       "feedIds": ["d5593838-86b2-4c0b-a18b-87ec70ed2749"],
       "collapsed": true,
-      "hiddenFromHome": false,
+      "hiddenFromHome": true,
       "createdAt": "2026-07-13T23:17:43.594Z",
       "updatedAt": "2026-07-14T00:35:27.723Z"
     }
