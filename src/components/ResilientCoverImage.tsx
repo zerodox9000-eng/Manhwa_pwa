@@ -2,10 +2,13 @@ import { useCallback, useEffect, useRef, useState, type ImgHTMLAttributes, type 
 
 const COVER_CACHE_NAME = "manhwa-covers";
 const RETRY_DELAYS_MS = [250, 800] as const;
+const COVER_RESPONSE_TIMEOUT_MS = 4000;
+const coverResponseCache = new Map<string, Promise<boolean>>();
 
 type ResilientCoverImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> & {
   src: string;
   fallback?: ReactNode;
+  onPermanentError?: () => void;
 };
 
 export function coverRetryUrl(src: string, token: string) {
@@ -24,7 +27,39 @@ export async function evictFailedCover(src: string) {
   }
 }
 
-export function ResilientCoverImage({ src, fallback = null, onError, onLoad, ...imageProps }: ResilientCoverImageProps) {
+export function checkCoverResponse(src: string) {
+  const cached = coverResponseCache.get(src);
+  if (cached) return cached;
+
+  const result = new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (available: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(available);
+    };
+    const timer = globalThis.setTimeout(() => finish(true), COVER_RESPONSE_TIMEOUT_MS);
+    void fetch(src, { cache: "force-cache", credentials: "omit", mode: "cors" })
+      .then((response) => {
+        globalThis.clearTimeout(timer);
+        void response.body?.cancel();
+        finish(response.ok);
+      })
+      .catch(() => {
+        globalThis.clearTimeout(timer);
+        // A blocked or offline validation request must not hide a real cover.
+        finish(true);
+      });
+  });
+  coverResponseCache.set(src, result);
+  if (coverResponseCache.size > 256) {
+    const oldest = coverResponseCache.keys().next().value;
+    if (oldest) coverResponseCache.delete(oldest);
+  }
+  return result;
+}
+
+export function ResilientCoverImage({ src, fallback = null, onPermanentError, onError, onLoad, ...imageProps }: ResilientCoverImageProps) {
   const [currentSrc, setCurrentSrc] = useState(src);
   const [failed, setFailed] = useState(false);
   const attemptsRef = useRef(0);
@@ -52,6 +87,7 @@ export function ResilientCoverImage({ src, fallback = null, onError, onLoad, ...
     if (retryPendingRef.current) return;
     const nextAttempt = attemptsRef.current + 1;
     if (nextAttempt > RETRY_DELAYS_MS.length) {
+      onPermanentError?.();
       setFailed(true);
       return;
     }
@@ -68,7 +104,7 @@ export function ResilientCoverImage({ src, fallback = null, onError, onLoad, ...
       setFailed(false);
       setCurrentSrc(coverRetryUrl(src, token));
     }, RETRY_DELAYS_MS[nextAttempt - 1]);
-  }, [src]);
+  }, [onPermanentError, src]);
 
   useEffect(() => {
     if (!failed) return;

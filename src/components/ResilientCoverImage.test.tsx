@@ -50,6 +50,19 @@ describe("ResilientCoverImage", () => {
     expect(screen.getByText("AB")).toBeTruthy();
   });
 
+  it("reports a cover only after the final retry fails", () => {
+    const onPermanentError = vi.fn();
+    render(<ResilientCoverImage src="https://cdn.mangabaka.dev/cover.jpg" alt="Cover" onPermanentError={onPermanentError} />);
+
+    fireEvent.error(screen.getByRole("img"));
+    act(() => vi.advanceTimersByTime(250));
+    fireEvent.error(screen.getByRole("img"));
+    act(() => vi.advanceTimersByTime(800));
+    fireEvent.error(screen.getByRole("img"));
+
+    expect(onPermanentError).toHaveBeenCalledTimes(1);
+  });
+
   it("tries again after connectivity returns", () => {
     render(<ResilientCoverImage src="https://cdn.mangabaka.dev/cover.jpg" alt="Cover" fallback={<span>AB</span>} />);
 

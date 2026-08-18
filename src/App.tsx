@@ -51,7 +51,7 @@ import {
 } from "react-router-dom";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import { ResilientCoverImage } from "./components/ResilientCoverImage";
+import { checkCoverResponse, ResilientCoverImage } from "./components/ResilientCoverImage";
 import { createCustomFeed, createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
 import {
   CHAPTER_PRESETS,
@@ -1528,6 +1528,7 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
 
 function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) => void }) {
   const store = useAppStore();
+  const [failedCoverIds, setFailedCoverIds] = useState<Set<number>>(() => new Set());
   const [titleExpanded, setTitleExpanded] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [localSearchOpen, setLocalSearchOpen] = useState(false);
@@ -1557,6 +1558,20 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
       }),
     [feed, store.catalog, store.history, store.labels, store.settings, store.syncMeta, store.tags],
   );
+  const validateLatestCovers = feedNeedsCoverValidation(feed);
+  useEffect(() => {
+    setFailedCoverIds((current) => {
+      if (!validateLatestCovers) return current.size === 0 ? current : new Set();
+      const queryIds = new Set(query.items.map((item) => item.id));
+      const next = new Set([...current].filter((id) => queryIds.has(id)));
+      if (next.size === current.size && [...next].every((id) => current.has(id))) return current;
+      return next;
+    });
+  }, [query.items, validateLatestCovers]);
+  const handleCoverUnavailable = useCallback((id: number) => {
+    if (!validateLatestCovers) return;
+    setFailedCoverIds((current) => current.has(id) ? current : new Set(current).add(id));
+  }, [validateLatestCovers]);
   const hasDescription = feed.showDescription && Boolean(feed.description.trim());
   const titleCanExpand = feed.name.trim().length > 34;
   const descriptionCanExpand = hasDescription;
@@ -1569,6 +1584,10 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
     if (words.length === 0) return query.items;
     return query.items.filter((item) => matchesSearchTextWords(seriesSearchText(item), words));
   }, [deferredLocalSearchQuery, query.items]);
+  const feedWashItems = useMemo(
+    () => (validateLatestCovers ? query.items.filter((item) => !failedCoverIds.has(item.id)) : query.items).slice(0, 3),
+    [failedCoverIds, query.items, validateLatestCovers],
+  );
   const addSearchResources = useMemo(() => {
     if (deferredCustomMode !== "add" || feed.kind !== "custom") return null;
     const sensitiveTagIds = buildSensitiveTagGroups(store.tags);
@@ -1680,7 +1699,7 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
           className={`feed-summary-card ${titleExpanded || descriptionExpanded ? "expanded" : ""}`}
           onDoubleClick={() => feed.kind === "custom" ? setCustomActionOpen(true) : setLocalSearchOpen(true)}
         >
-          <FeedBarCoverWash items={query.items.slice(0, 3)} />
+          <FeedBarCoverWash items={feedWashItems} />
           <div className="feed-summary-content">
             <button
               className={`feed-title-button ${titleCanExpand ? "expandable" : ""}`}
@@ -1781,6 +1800,8 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
           history={store.history}
           latestDate={store.syncMeta?.historyLastDate}
           rankById={originalRanks}
+          failedCoverIds={validateLatestCovers ? failedCoverIds : undefined}
+          onCoverUnavailable={validateLatestCovers ? handleCoverUnavailable : undefined}
           catalogReady={store.ready}
         />
       )}
@@ -2118,6 +2139,8 @@ function TitleCollection({
   history,
   latestDate,
   rankById,
+  failedCoverIds,
+  onCoverUnavailable,
   loading = false,
   catalogReady = true,
   pageSizeOverride,
@@ -2127,6 +2150,8 @@ function TitleCollection({
   history: HistoryMap;
   latestDate?: string | null;
   rankById?: ReadonlyMap<number, number>;
+  failedCoverIds?: ReadonlySet<number>;
+  onCoverUnavailable?: (id: number) => void;
   loading?: boolean;
   catalogReady?: boolean;
   pageSizeOverride?: number;
@@ -2135,11 +2160,19 @@ function TitleCollection({
   const countKey = `manhwa-visible-count:${feed.id}:${feed.view.gridColumns}:${feed.view.gridDensity}`;
   const legacyCountKey = `manhwa-visible-count:${feed.id}:${feed.view.gridColumns}`;
   const [visibleCount, setVisibleCount] = useState(() => readPersistedVisibleCount(countKey, legacyCountKey, pageSize));
+  const visibleItems = useMemo(
+    () => failedCoverIds?.size ? items.filter((item) => !failedCoverIds.has(item.id)) : items,
+    [failedCoverIds, items],
+  );
+  const visibleRankById = useMemo(
+    () => failedCoverIds?.size ? new Map(visibleItems.map((item, index) => [item.id, index + 1])) : rankById,
+    [failedCoverIds, rankById, visibleItems],
+  );
   useEffect(() => {
     if (!catalogReady) return;
     const saved = readPersistedVisibleCount(countKey, legacyCountKey, pageSize);
-    setVisibleCount(Math.max(pageSize, Math.min(saved, Math.max(pageSize, items.length))));
-  }, [catalogReady, countKey, items.length, legacyCountKey, pageSize]);
+    setVisibleCount(Math.max(pageSize, Math.min(saved, Math.max(pageSize, visibleItems.length))));
+  }, [catalogReady, countKey, legacyCountKey, pageSize, visibleItems.length]);
   useEffect(() => {
     if (!catalogReady) return;
     try {
@@ -2150,14 +2183,14 @@ function TitleCollection({
       // Keep the current in-memory count if persistent storage is unavailable.
     }
   }, [catalogReady, countKey, visibleCount]);
-  const visibleItems = items.slice(0, visibleCount);
+  const pagedItems = visibleItems.slice(0, visibleCount);
   const metricWindow = useMemo(() => defaultGrowthWindow(latestDate), [latestDate]);
 
   if (loading) {
     return <TitleCollectionSkeleton columns={feed.view.gridColumns} />;
   }
 
-  if (items.length === 0) {
+  if (visibleItems.length === 0) {
     return (
       <div className="empty-state">
         <Filter size={28} />
@@ -2181,20 +2214,21 @@ function TitleCollection({
           "--desktop-grid-columns": resolvedDesktopGridColumns(feed.view),
         } as React.CSSProperties}
       >
-        {visibleItems.map((series, index) => (
+        {pagedItems.map((series, index) => (
           <MemoTitleCard
             key={series.id}
             series={series}
-            rank={rankById?.get(series.id) ?? index + 1}
+            rank={visibleRankById?.get(series.id) ?? index + 1}
             view={feed.view}
             feed={feed}
             history={history}
             latestDate={latestDate}
             metricWindow={metricWindow}
+            onCoverUnavailable={onCoverUnavailable}
           />
         ))}
       </div>
-      <LoadMore visibleCount={visibleCount} total={items.length} onMore={() => setVisibleCount((count) => count + pageSize)} />
+      <LoadMore visibleCount={visibleCount} total={visibleItems.length} onMore={() => setVisibleCount((count) => count + pageSize)} />
     </>
   );
 }
@@ -2212,7 +2246,7 @@ function LoadMore({ visibleCount, total, onMore }: { visibleCount: number; total
   );
 }
 
-function Cover({ series, priority = false }: { series: SeriesCatalog; priority?: boolean }) {
+function Cover({ series, priority = false, onPermanentError, validateResponse = false }: { series: SeriesCatalog; priority?: boolean; onPermanentError?: () => void; validateResponse?: boolean }) {
   const title = visibleTitle(series);
   const initials = title
     .split(/\s+/)
@@ -2230,6 +2264,14 @@ function Cover({ series, priority = false }: { series: SeriesCatalog; priority?:
           loading={priority ? "eager" : "lazy"}
           decoding="async"
           fetchPriority={priority ? "high" : "auto"}
+          onLoad={() => {
+            if (validateResponse && series.cover) {
+              void checkCoverResponse(series.cover).then((available) => {
+                if (!available) onPermanentError?.();
+              });
+            }
+          }}
+          onPermanentError={onPermanentError}
           fallback={<div className="cover-fallback cover-fallback-initials">{initials || "ML"}</div>}
         />
       ) : (
@@ -2277,6 +2319,7 @@ function TitleCard({
   history,
   latestDate,
   metricWindow,
+  onCoverUnavailable,
 }: {
   series: SeriesCatalog;
   rank: number;
@@ -2285,6 +2328,7 @@ function TitleCard({
   history: HistoryMap;
   latestDate?: string | null;
   metricWindow?: { from: string; to: string } | null;
+  onCoverUnavailable?: (id: number) => void;
 }) {
   const title = visibleTitle(series);
   const selection = useTitleSelection();
@@ -2343,7 +2387,12 @@ function TitleCard({
         }}
       >
         <div className="poster-shell">
-          <Cover series={series} priority={rank <= 18} />
+          <Cover
+            series={series}
+            priority={rank <= 18}
+            validateResponse={Boolean(onCoverUnavailable)}
+            onPermanentError={() => onCoverUnavailable?.(series.id)}
+          />
           {view.visible.rank && <span className="rank">{rank}</span>}
           <div className="poster-metrics">
             <MemoTitleMetrics series={series} view={view} compact history={history} latestDate={latestDate} metricWindow={metricWindow} />
@@ -2395,6 +2444,22 @@ function TitleCollectionSkeleton({ columns }: { columns: 1 | 2 | 3 | 4 | 5 }) {
       ))}
     </div>
   );
+}
+
+const LATEST_LISTINGS_FEED_ID = "b68dcc8b-3ca0-44a4-a474-dd91af2debe7";
+
+function feedNeedsCoverValidation(feed: Feed) {
+  if (feed.id !== LATEST_LISTINGS_FEED_ID || feed.kind !== "logic" || !feed.sort.some((rule) => rule.metric === "mangabakaLatestRank")) return false;
+  const sourceModes = feed.filters.sourceModes?.length
+    ? feed.filters.sourceModes
+    : feed.filters.sourceMode === "non-anilist"
+      ? ["non-anilist"]
+      : feed.filters.sourceMode === "oel"
+        ? ["oel"]
+        : feed.filters.sourceMode === "anilist"
+          ? ["anilist"]
+          : ["anilist", "non-anilist", "oel"];
+  return sourceModes.includes("non-anilist") && !sourceModes.includes("anilist");
 }
 
 function formatRawMetricValue(metric: MetricId, value: number) {
