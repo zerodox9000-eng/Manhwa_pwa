@@ -1200,6 +1200,8 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
       return feed ? [feed] : [];
     });
   }, [previewSegment, store.feedLibraryOrder, store.feedSegments, store.feeds, store.settings]);
+  const mobileRenderRadius = feeds.length > HOME_FEED_RENDER_RADIUS * 2 + 1 ? 2 : HOME_FEED_RENDER_RADIUS;
+  const feedIndexById = useMemo(() => new Map(feeds.map((feed, index) => [feed.id, index])), [feeds]);
   const { activeFeedId, completeHomeReset, setActiveFeedId } = store;
   const activeFeed = feeds.find((feed) => feed.id === activeFeedId) ?? feeds[0] ?? null;
   const activeFeedIndex = activeFeed ? feeds.findIndex((feed) => feed.id === activeFeed.id) : -1;
@@ -1259,13 +1261,30 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
   const warmFeedAt = useCallback(
     (index: number) => {
       const feed = feeds[Math.max(0, Math.min(feeds.length - 1, index))];
-      if (!feed || warmFeedIdsRef.current.has(feed.id)) return;
-      const nextWarmFeedIds = new Set(warmFeedIdsRef.current);
+      if (!feed) return;
+      const centerIndex = Math.max(
+        0,
+        Math.min(
+          feeds.length - 1,
+          renderCenterIndexRef.current >= 0 ? renderCenterIndexRef.current : activeFeedIndex,
+        ),
+      );
+      const warmRadius = mobileRenderRadius + 1;
+      const nextWarmFeedIds = new Set(
+        [...warmFeedIdsRef.current].filter((feedId) => {
+          const feedIndex = feedIndexById.get(feedId);
+          return feedIndex !== undefined && Math.abs(feedIndex - centerIndex) <= warmRadius;
+        }),
+      );
       nextWarmFeedIds.add(feed.id);
+      if (
+        nextWarmFeedIds.size === warmFeedIdsRef.current.size
+        && [...nextWarmFeedIds].every((feedId) => warmFeedIdsRef.current.has(feedId))
+      ) return;
       warmFeedIdsRef.current = nextWarmFeedIds;
       startTransition(() => setWarmFeedIds(nextWarmFeedIds));
     },
-    [feeds],
+    [activeFeedIndex, feedIndexById, feeds, mobileRenderRadius],
   );
 
   useLayoutEffect(() => {
@@ -1305,7 +1324,7 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
       window.setTimeout(() => {
         setPreloadReady(true);
         if (!isDesktop) {
-          for (let offset = -HOME_FEED_RENDER_RADIUS; offset <= HOME_FEED_RENDER_RADIUS; offset += 1) {
+          for (let offset = -mobileRenderRadius; offset <= mobileRenderRadius; offset += 1) {
             warmFeedAt(activeFeedIndex + offset);
           }
         }
@@ -1321,7 +1340,7 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
       else pane.scrollIntoView({ behavior: "auto", block: "nearest", inline: "start" });
       restoreHomeScroll(activeFeed);
     }
-  }, [activeFeed, activeFeedIndex, isDesktop, returningFromTitle, store.ready, warmFeedAt]);
+  }, [activeFeed, activeFeedIndex, isDesktop, mobileRenderRadius, returningFromTitle, store.ready, warmFeedAt]);
 
   useEffect(() => {
     if (libraryLoaderVisible || !didInitialPagerAlignRef.current) return;
@@ -1365,12 +1384,12 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
         renderCenterIndexRef.current = nearestIndex;
         startTransition(() => setRenderCenterIndex(nearestIndex));
       }
-      for (let offset = -HOME_FEED_RENDER_RADIUS; offset <= HOME_FEED_RENDER_RADIUS; offset += 1) {
+      for (let offset = -mobileRenderRadius; offset <= mobileRenderRadius; offset += 1) {
         warmFeedAt(nearestIndex + offset);
       }
     };
     handleScroll();
-  }, [activeFeedId, feeds, isDesktop, setActiveFeedId, warmFeedAt]);
+  }, [activeFeedId, feeds, isDesktop, mobileRenderRadius, setActiveFeedId, warmFeedAt]);
 
   const handleFeedPaneScroll = useCallback(
     (feed: Feed, scrollTop: number) => {
@@ -1441,7 +1460,7 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
               const renderRadius = returningFromTitle
                 ? 0
                 : preloadReady
-                  ? isDesktop ? 0 : HOME_FEED_RENDER_RADIUS
+                  ? isDesktop ? 0 : mobileRenderRadius
                   : HOME_FEED_INITIAL_RENDER_RADIUS;
               const isNearby = renderOriginIndex >= 0 && Math.abs(index - renderOriginIndex) <= renderRadius;
               const shouldRenderFeed = isActive || isNearby || (!isDesktop && warmFeedIds.has(feed.id));
@@ -1460,7 +1479,9 @@ function HomePage({ libraryLoaderVisible }: { libraryLoaderVisible: boolean }) {
                     data-home-scroll-key={homeScrollKey(feed)}
                     onScroll={(event) => handleFeedPaneScroll(feed, event.currentTarget.scrollTop)}
                   >
-                    {shouldRenderFeed ? <FeedView feed={feed} onEditFeed={setEditorFeed} /> : <HomeFeedPaneSkeleton feed={feed} />}
+                    {shouldRenderFeed
+                      ? <FeedView feed={feed} onEditFeed={setEditorFeed} />
+                      : <HomeFeedPaneSkeleton feed={feed} lightweight={store.ready} />}
                   </div>
                 </div>
               );
@@ -2034,7 +2055,8 @@ function FitSingleLineTitle({ text, expanded = false, maxChars = FEED_TITLE_EXPA
   );
 }
 
-function HomeFeedPaneSkeleton({ feed }: { feed: Feed }) {
+function HomeFeedPaneSkeleton({ feed, lightweight = false }: { feed: Feed; lightweight?: boolean }) {
+  if (lightweight) return <div className="home-feed-pane-placeholder" aria-hidden="true" />;
   return (
     <>
       <section className="section feed-summary-section">
