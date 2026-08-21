@@ -4,10 +4,12 @@ import type {
   Feed,
   FeedFilters,
   FeedViewSettings,
+  MetricId,
   RecommendationShelf,
   SortRule,
   VisibleTitleFields,
 } from "./types";
+import defaultFeedsJson from "./defaultFeeds.generated.json";
 
 const DEFAULT_RAW_EXPORT_BASE =
   "https://raw.githubusercontent.com/zerodox9000-eng/manhwa_db/main/db/exports/frontend";
@@ -156,6 +158,27 @@ export const DEFAULT_SETTINGS: AppSettings = {
   searchRelationshipTags: false,
   searchAdultTags: false,
 };
+
+const SHIPPED_DEFAULT_METRIC_SLOTS = new Map<string, MetricId[]>(
+  (defaultFeedsJson as unknown as Feed[]).map((feed) => [feed.id, (feed.view?.metricSlots ?? []) as MetricId[]]),
+);
+
+export function defaultMetricSlotsForFeed(feed: Feed): MetricId[] {
+  const shippedSlots = SHIPPED_DEFAULT_METRIC_SLOTS.get(feed.id);
+  if (shippedSlots?.length) return shippedSlots.slice(0, 3);
+
+  const sourceModes = feed.filters.sourceModes?.length
+    ? feed.filters.sourceModes.filter((mode) => mode !== "mixed")
+    : feed.filters.sourceMode === "anilist"
+      ? ["anilist"]
+      : feed.filters.sourceMode === "non-anilist"
+        ? ["non-anilist"]
+        : feed.filters.sourceMode === "oel"
+          ? ["oel"]
+          : ["anilist", "non-anilist", "oel"];
+  const canUseAniListMetrics = sourceModes.length === 0 || sourceModes.includes("anilist");
+  return [canUseAniListMetrics ? "fanFavouriteDiscoveryPercentile" : "year"];
+}
 
 export function makeId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();

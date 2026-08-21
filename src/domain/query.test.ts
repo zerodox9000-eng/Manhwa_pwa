@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, createCustomFeed, createFeed } from "./defaults";
+import { defaultMetricSlotsForFeed, DEFAULT_SETTINGS, createCustomFeed, createFeed } from "./defaults";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, toggleFeedSourceModeForEditor } from "./query";
 import type { HistoryMap, SeriesCatalog, TagNode } from "./types";
 
@@ -72,6 +72,28 @@ const history: HistoryMap = {
 };
 
 describe("runFeedQuery", () => {
+  it("uses a source-compatible cover stat when a non-AniList feed has stats disabled", () => {
+    const feed = createFeed("Latest Listings");
+    feed.filters.sourceMode = "non-anilist";
+    feed.filters.sourceModes = ["non-anilist"];
+    feed.view.metricSlots = [];
+
+    feed.id = "b68dcc8b-3ca0-44a4-a474-dd91af2debe7";
+    expect(defaultMetricSlotsForFeed(feed)).toEqual(["year"]);
+
+    const releases = createFeed("New Releases");
+    releases.id = "3511ae36-01bd-432b-9287-b1afdf85869a";
+    releases.view.metricSlots = [];
+    expect(defaultMetricSlotsForFeed(releases)).toEqual(["releaseDate"]);
+
+    const oel = createFeed("OEL");
+    oel.id = "974b13cf-ae37-4f53-85c7-0519b323345d";
+    oel.filters.sourceMode = "oel";
+    oel.filters.sourceModes = ["oel"];
+    oel.view.metricSlots = [];
+    expect(defaultMetricSlotsForFeed(oel)).toEqual(["year"]);
+  });
+
   it("makes a newly selected OEL source immediately compatible", () => {
     const feed = createFeed("OEL");
     feed.filters.statuses = ["releasing"];

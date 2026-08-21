@@ -52,7 +52,7 @@ import {
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { checkCoverResponse, ResilientCoverImage } from "./components/ResilientCoverImage";
-import { createCustomFeed, createFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
+import { createCustomFeed, createFeed, defaultMetricSlotsForFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
 import {
   CHAPTER_PRESETS,
   FAN_RANK_PRESETS,
@@ -3127,7 +3127,7 @@ function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onS
     feed.filters.statuses.filter((status) => status === "completed" || status === "hiatus"),
   );
   const [requireOfficialEnglishLink, setRequireOfficialEnglishLink] = useState(feed.filters.requireOfficialEnglishLink);
-  const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : ["fanFavouriteDiscoveryPercentile"]);
+  const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : defaultMetricSlotsForFeed(feed));
   const coverStatsVisible = view.metricSlots.length > 0;
 
   const setCoverStatsVisible = (visible: boolean) => {
