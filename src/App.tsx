@@ -52,7 +52,7 @@ import {
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { checkCoverResponse, ResilientCoverImage } from "./components/ResilientCoverImage";
-import { createCustomFeed, createFeed, defaultMetricSlotsForFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
+import { createCustomFeed, createFeed, DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS, metricSlotsToRestoreForFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
 import {
   CHAPTER_PRESETS,
   FAN_RANK_PRESETS,
@@ -1558,20 +1558,20 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
       }),
     [feed, store.catalog, store.history, store.labels, store.settings, store.syncMeta, store.tags],
   );
-  const validateLatestCovers = feedNeedsCoverValidation(feed);
+  const validateAddSortCovers = feedNeedsCoverValidation(feed);
   useEffect(() => {
     setFailedCoverIds((current) => {
-      if (!validateLatestCovers) return current.size === 0 ? current : new Set();
+      if (!validateAddSortCovers) return current.size === 0 ? current : new Set();
       const queryIds = new Set(query.items.map((item) => item.id));
       const next = new Set([...current].filter((id) => queryIds.has(id)));
       if (next.size === current.size && [...next].every((id) => current.has(id))) return current;
       return next;
     });
-  }, [query.items, validateLatestCovers]);
+  }, [query.items, validateAddSortCovers]);
   const handleCoverUnavailable = useCallback((id: number) => {
-    if (!validateLatestCovers) return;
+    if (!validateAddSortCovers) return;
     setFailedCoverIds((current) => current.has(id) ? current : new Set(current).add(id));
-  }, [validateLatestCovers]);
+  }, [validateAddSortCovers]);
   const hasDescription = feed.showDescription && Boolean(feed.description.trim());
   const titleCanExpand = feed.name.trim().length > 34;
   const descriptionCanExpand = hasDescription;
@@ -1585,8 +1585,8 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
     return query.items.filter((item) => matchesSearchTextWords(seriesSearchText(item), words));
   }, [deferredLocalSearchQuery, query.items]);
   const feedWashItems = useMemo(
-    () => (validateLatestCovers ? query.items.filter((item) => !failedCoverIds.has(item.id)) : query.items).slice(0, 3),
-    [failedCoverIds, query.items, validateLatestCovers],
+    () => (validateAddSortCovers ? query.items.filter((item) => !failedCoverIds.has(item.id)) : query.items).slice(0, 3),
+    [failedCoverIds, query.items, validateAddSortCovers],
   );
   const addSearchResources = useMemo(() => {
     if (deferredCustomMode !== "add" || feed.kind !== "custom") return null;
@@ -1800,8 +1800,8 @@ function FeedView({ feed, onEditFeed }: { feed: Feed; onEditFeed?: (feed: Feed) 
           history={store.history}
           latestDate={store.syncMeta?.historyLastDate}
           rankById={originalRanks}
-          failedCoverIds={validateLatestCovers ? failedCoverIds : undefined}
-          onCoverUnavailable={validateLatestCovers ? handleCoverUnavailable : undefined}
+          failedCoverIds={validateAddSortCovers ? failedCoverIds : undefined}
+          onCoverUnavailable={validateAddSortCovers ? handleCoverUnavailable : undefined}
           catalogReady={store.ready}
         />
       )}
@@ -2446,20 +2446,8 @@ function TitleCollectionSkeleton({ columns }: { columns: 1 | 2 | 3 | 4 | 5 }) {
   );
 }
 
-const LATEST_LISTINGS_FEED_ID = "b68dcc8b-3ca0-44a4-a474-dd91af2debe7";
-
 function feedNeedsCoverValidation(feed: Feed) {
-  if (feed.id !== LATEST_LISTINGS_FEED_ID || feed.kind !== "logic" || !feed.sort.some((rule) => rule.metric === "mangabakaLatestRank")) return false;
-  const sourceModes = feed.filters.sourceModes?.length
-    ? feed.filters.sourceModes
-    : feed.filters.sourceMode === "non-anilist"
-      ? ["non-anilist"]
-      : feed.filters.sourceMode === "oel"
-        ? ["oel"]
-        : feed.filters.sourceMode === "anilist"
-          ? ["anilist"]
-          : ["anilist", "non-anilist", "oel"];
-  return sourceModes.includes("non-anilist") && !sourceModes.includes("anilist");
+  return feed.kind === "logic" && feed.sort.some((rule) => rule.metric === "mangabakaLatestRank");
 }
 
 function formatRawMetricValue(metric: MetricId, value: number) {
@@ -3127,14 +3115,17 @@ function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onS
     feed.filters.statuses.filter((status) => status === "completed" || status === "hiatus"),
   );
   const [requireOfficialEnglishLink, setRequireOfficialEnglishLink] = useState(feed.filters.requireOfficialEnglishLink);
-  const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : defaultMetricSlotsForFeed(feed));
+  const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : metricSlotsToRestoreForFeed(feed));
   const coverStatsVisible = view.metricSlots.length > 0;
 
   const setCoverStatsVisible = (visible: boolean) => {
     setView((current) => {
-      if (visible) return { ...current, metricSlots: [...savedMetricSlotsRef.current] };
+      if (visible) {
+        const metricSlots = [...savedMetricSlotsRef.current];
+        return { ...current, metricSlots, metricSlotsWhenHidden: metricSlots };
+      }
       if (current.metricSlots.length) savedMetricSlotsRef.current = [...current.metricSlots];
-      return { ...current, metricSlots: [] };
+      return { ...current, metricSlots: [], metricSlotsWhenHidden: [...savedMetricSlotsRef.current] };
     });
   };
 
@@ -3271,12 +3262,14 @@ function FeedPresetControls({
   onChange,
   onCustomSort,
   customSortActive = false,
+  applyLatestAddedRules = false,
 }: {
   filters: Feed["filters"];
   sort: Feed["sort"];
   onChange: (filters: Feed["filters"], sort: Feed["sort"]) => void;
   onCustomSort?: () => void;
   customSortActive?: boolean;
+  applyLatestAddedRules?: boolean;
 }) {
   const popularity = new Set(selectedFeedPresetIds(filters, "popularity"));
   const fanRank = new Set(selectedFeedPresetIds(filters, "fan-rank"));
@@ -3285,6 +3278,7 @@ function FeedPresetControls({
   const sorting = selectedSortPresetId(sort);
   const customSorting = customSortActive || (!sorting && sort.length > 0);
   const sortDirection = sort[0]?.direction ?? "desc";
+  const isLatestAddedSort = sort[0]?.metric === "mangabakaLatestRank";
   const period = selectedPeriodPresetId(filters);
   const periodPurpose = PERIOD_PURPOSES.find((option) => option.dateField === filters.dateField)?.id ?? "growth";
   const periodOptions = periodPurpose === "growth" ? [WEEKLY_GROWTH_PERIOD] : PERIOD_PRESETS;
@@ -3350,9 +3344,15 @@ function FeedPresetControls({
           }
           const option = SORT_PRESETS.find((item) => item.id === id);
           const usesGrowth = option?.metric === "popularityGrowthPercent" || option?.metric === "discoveryPercentileDelta";
-          const nextFilters = usesGrowth && filters.rolling.mode === "none"
+          const baseFilters = usesGrowth && filters.rolling.mode === "none"
             ? { ...filters, dateField: "none" as const, rolling: { ...filters.rolling, mode: "last" as const, amount: 1, unit: "weeks" as const } }
             : filters;
+          const nextFilters = applyLatestAddedRules && option?.metric === "mangabakaLatestRank"
+            ? {
+              ...baseFilters,
+              excludeTagIds: [...new Set([...baseFilters.excludeTagIds, ...DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS])],
+            }
+            : baseFilters;
           onChange(nextFilters, selectSortPreset(sort, id));
         }, "wide-labels")}
       </div>
@@ -3361,8 +3361,8 @@ function FeedPresetControls({
           <span className="small-label">Order</span>
           {renderOptions(
             [
-              { id: "desc", label: "High first" },
-              { id: "asc", label: "Low first" },
+              { id: "desc", label: isLatestAddedSort ? "Oldest first" : "High first" },
+              { id: "asc", label: isLatestAddedSort ? "Newest first" : "Low first" },
             ],
             new Set([sortDirection]),
             (direction) => onChange(filters, sort.map((rule) => ({
@@ -3474,11 +3474,12 @@ function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSa
   const [draft, setDraft] = useState<Feed>(() => structuredClone(feed));
   const [advanced, setAdvanced] = useState(false);
   const [coverStatsEnabled, setCoverStatsEnabled] = useState(feed.view.metricSlots.length > 0);
-  const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : ["fanFavouriteDiscoveryPercentile"]);
+  const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : metricSlotsToRestoreForFeed(feed));
   const updateView = (patch: Partial<FeedViewSettings>) => setDraft((current) => ({ ...current, view: { ...current.view, ...patch } }));
   const setCoverStatsVisible = (visible: boolean) => {
     setCoverStatsEnabled(visible);
-    updateView({ metricSlots: visible ? [...savedMetricSlotsRef.current] : [] });
+    const metricSlots = visible ? [...savedMetricSlotsRef.current] : [];
+    updateView({ metricSlots, metricSlotsWhenHidden: [...savedMetricSlotsRef.current] });
   };
 
   return (
@@ -3532,7 +3533,7 @@ function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSa
           {coverStatsEnabled ? (
             <MetricSlotPicker slots={draft.view.metricSlots} onChange={(metricSlots) => {
               savedMetricSlotsRef.current = [...metricSlots];
-              updateView({ metricSlots });
+              updateView({ metricSlots, metricSlotsWhenHidden: [...metricSlots] });
             }} />
           ) : null}
           <FeedParameterEditor filters={draft.filters} onChange={(filters) => setDraft((current) => ({ ...current, filters }))} />
@@ -3541,8 +3542,8 @@ function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSa
           <div className="settings-list">
             {draft.sort.map((rule, index) => <div className="setting-row" key={rule.id}>
               <div className="sort-editor">
-                <div className="metric-choice">{SORT_OPTIONS.map((option) => <button className={`metric-option ${rule.metric === option ? "active" : ""}`} type="button" key={option} onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.map((item) => item.id === rule.id ? { ...item, metric: option } : item) }))}>{metricDefinition(option).shortLabel}</button>)}</div>
-                <div className="segmented compact-segments">{(["desc", "asc"] as const).map((direction) => <button className={`segment ${rule.direction === direction ? "active" : ""}`} type="button" key={direction} onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.map((item) => item.id === rule.id ? { ...item, direction } : item) }))}>{direction === "desc" ? "High first" : "Low first"}</button>)}</div>
+                <div className="metric-choice">{SORT_OPTIONS.map((option) => <button className={`metric-option ${rule.metric === option ? "active" : ""}`} type="button" key={option} onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.map((item) => item.id === rule.id ? { ...item, metric: option, direction: option === "mangabakaLatestRank" ? "asc" : item.direction } : item) }))}>{metricDefinition(option).shortLabel}</button>)}</div>
+                <div className="segmented compact-segments">{(["desc", "asc"] as const).map((direction) => <button className={`segment ${rule.direction === direction ? "active" : ""}`} type="button" key={direction} onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.map((item) => item.id === rule.id ? { ...item, direction } : item) }))}>{rule.metric === "mangabakaLatestRank" ? (direction === "desc" ? "Oldest first" : "Newest first") : direction === "desc" ? "High first" : "Low first"}</button>)}</div>
               </div>
               <button className="icon-button" type="button" onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.filter((item) => item.id !== rule.id) }))} aria-label={`Remove sort ${index + 1}`}><Trash2 size={16} /></button>
             </div>)}
@@ -3569,7 +3570,7 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
   const [advanced, setAdvanced] = useState(false);
   const [showMoreTags, setShowMoreTags] = useState(false);
   const [coverStatsEnabled, setCoverStatsEnabled] = useState(feed.view.metricSlots.length > 0);
-  const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : ["fanFavouriteDiscoveryPercentile"]);
+  const savedMetricSlotsRef = useRef<MetricId[]>(feed.view.metricSlots.length ? [...feed.view.metricSlots] : metricSlotsToRestoreForFeed(feed));
   const statusOptions = useMemo(
     () => [...new Set(store.catalog.map((item) => item.status).filter(Boolean) as string[])].sort(),
     [store.catalog],
@@ -3594,7 +3595,8 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
   };
   const setCoverStatsVisible = (visible: boolean) => {
     setCoverStatsEnabled(visible);
-    updateView({ metricSlots: visible ? [...savedMetricSlotsRef.current] : [] });
+    const metricSlots = visible ? [...savedMetricSlotsRef.current] : [];
+    updateView({ metricSlots, metricSlotsWhenHidden: [...savedMetricSlotsRef.current] });
   };
   const toggleArrayValue = <T,>(values: T[], value: T) => (values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
   const toggleSourceMode = (mode: Exclude<SourceMode, "mixed">) => {
@@ -3602,9 +3604,20 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
     const addingMangaBakaSource = mode !== "anilist" && !currentModes.includes(mode);
     const nextDraft = toggleFeedSourceModeForEditor(draft, mode);
     if (addingMangaBakaSource) {
+      const coverStatsWereVisible = draft.view.metricSlots.length > 0;
       const compatibleSlots = nextDraft.view.metricSlots;
-      savedMetricSlotsRef.current = compatibleSlots.length > 0 ? [...compatibleSlots] : ["year"];
-      setCoverStatsEnabled(compatibleSlots.length > 0);
+      const restoreSlots = coverStatsWereVisible ? [...compatibleSlots] : metricSlotsToRestoreForFeed(nextDraft);
+      savedMetricSlotsRef.current = restoreSlots;
+      setCoverStatsEnabled(coverStatsWereVisible);
+      nextDraft.filters = {
+        ...nextDraft.filters,
+        excludeTagIds: [...new Set([...nextDraft.filters.excludeTagIds, ...DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS])],
+      };
+      nextDraft.view = {
+        ...nextDraft.view,
+        metricSlots: coverStatsWereVisible ? compatibleSlots : [],
+        metricSlotsWhenHidden: restoreSlots,
+      };
     }
     setDraft(nextDraft);
   };
@@ -3664,6 +3677,7 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
       <FeedPresetControls
         filters={draft.filters}
         sort={draft.sort}
+        applyLatestAddedRules
         onChange={(filters, sort) => setDraft((current) => ({ ...current, filters, sort }))}
       />
 
@@ -3708,7 +3722,7 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
           ))}
         </div>
         {anilistLocked && (
-          <p className="muted tiny">Choosing Non-AniList or OEL will switch this feed to compatible Add sorting and remove AniList-only ranges or cover stats.</p>
+          <p className="muted tiny">Choosing Non-AniList or OEL switches this feed to compatible Add sorting, removes AniList-only ranges, and uses Year when Fan Rank is not compatible.</p>
         )}
       </div>
 
@@ -3748,7 +3762,7 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
       {coverStatsEnabled ? (
         <MetricSlotPicker slots={draft.view.metricSlots} onChange={(metricSlots) => {
           savedMetricSlotsRef.current = [...metricSlots];
-          updateView({ metricSlots });
+          updateView({ metricSlots, metricSlotsWhenHidden: [...metricSlots] });
         }} />
       ) : null}
       <FeedParameterEditor filters={draft.filters} onChange={(filters) => setDraft((current) => ({ ...current, filters }))} />
@@ -3769,7 +3783,7 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
                     onClick={() =>
                       setDraft((current) => ({
                         ...current,
-                        sort: current.sort.map((item) => (item.id === rule.id ? { ...item, metric: option } : item)),
+                        sort: current.sort.map((item) => (item.id === rule.id ? { ...item, metric: option, direction: option === "mangabakaLatestRank" ? "asc" : item.direction } : item)),
                       }))
                     }
                     title={metricDefinition(option).help}
@@ -3791,7 +3805,7 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
                       }))
                     }
                   >
-                    {direction === "desc" ? "High first" : "Low first"}
+                    {rule.metric === "mangabakaLatestRank" ? (direction === "desc" ? "Oldest first" : "Newest first") : direction === "desc" ? "High first" : "Low first"}
                   </button>
                 ))}
               </div>
@@ -4635,7 +4649,7 @@ function RecommendationShelfEditor({
                       onClick={() =>
                         setDraft({
                           ...draft,
-                          sort: draft.sort.map((item) => (item.id === rule.id ? { ...item, metric: option } : item)),
+                          sort: draft.sort.map((item) => (item.id === rule.id ? { ...item, metric: option, direction: option === "mangabakaLatestRank" ? "asc" : item.direction } : item)),
                         })
                       }
                       title={metricDefinition(option).help}
@@ -4657,7 +4671,7 @@ function RecommendationShelfEditor({
                         })
                       }
                     >
-                      {direction === "desc" ? "High first" : "Low first"}
+                      {rule.metric === "mangabakaLatestRank" ? (direction === "desc" ? "Oldest first" : "Newest first") : direction === "desc" ? "High first" : "Low first"}
                     </button>
                   ))}
                 </div>

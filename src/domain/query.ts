@@ -1,8 +1,10 @@
 import Fuse from "fuse.js";
+import { DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS } from "./defaults";
 import type {
   AppSettings,
   Feed,
   HistoryMap,
+  MetricId,
   MetricRange,
   QueryResult,
   SeriesCatalog,
@@ -130,10 +132,6 @@ function dateTimeValue(value?: string | null) {
   return Number.isFinite(parsed) ? parsed : -Infinity;
 }
 
-function anilistFirstAddedValue(series: SeriesCatalog) {
-  return dateTimeValue(series.anilist_first_seen_at ?? series.first_seen_at ?? series.created_at ?? series.added_at ?? series.last_updated_at);
-}
-
 function hasMangaUpdates(series: SeriesCatalog) {
   return Boolean(series.source?.mangaupdates?.id || series.source?.mangaupdates?.url);
 }
@@ -199,6 +197,7 @@ export function toggleFeedSourceModeForEditor(feed: Feed, mode: Exclude<SourceMo
 
   const compatibleSort = feed.sort.filter((rule) => !metricDefinition(rule.metric).anilistOnly);
   const compatibleMetricSlots = feed.view.metricSlots.filter((metric) => !metricDefinition(metric).anilistOnly);
+  const nextMetricSlots = compatibleMetricSlots.length > 0 ? compatibleMetricSlots : (["year"] as MetricId[]);
   return {
     ...feed,
     filters: {
@@ -216,7 +215,7 @@ export function toggleFeedSourceModeForEditor(feed: Feed, mode: Exclude<SourceMo
       : [{ id: feed.sort[0]?.id ?? "mangabaka-add", metric: "mangabakaLatestRank", direction: "asc" }],
     view: {
       ...feed.view,
-      metricSlots: compatibleMetricSlots,
+      metricSlots: nextMetricSlots,
     },
   };
 }
@@ -283,7 +282,10 @@ export function runFeedQuery(args: {
   const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
   const includeTagGroups = filters.includeTagIds.map((id) => [id]);
   const includeTagIds = [...new Set(filters.includeTagIds)];
-  const excludeTagIds = filters.excludeTagIds;
+  const usesLatestAddedSort = feed.sort.some((rule) => rule.metric === "mangabakaLatestRank");
+  const excludeTagIds = feed.kind === "logic" && usesLatestAddedSort
+    ? [...new Set([...filters.excludeTagIds, ...DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS])]
+    : filters.excludeTagIds;
   const activeNotes: string[] = [];
   let limitedHistory = false;
   let missingDateData = false;
@@ -295,8 +297,6 @@ export function runFeedQuery(args: {
       return item ? [item] : [];
     });
   }
-  const usesLatestAddedSort = feed.sort.some((rule) => rule.metric === "mangabakaLatestRank");
-
   if (feed.kind === "logic" && filters.query.trim()) {
     const q = filters.query.trim().toLocaleLowerCase();
     const exactMatches = series.filter((item) => {
@@ -344,8 +344,8 @@ export function runFeedQuery(args: {
     if (feed.kind === "logic") {
       const sourceModes = effectiveSourceModesForFeed(feed);
       if (!sourceModes.includes(sourceMode)) return false;
-      if (sourceMode === "non-anilist" && usesLatestAddedSort && (!hasMangaUpdates(item) || !hasCover(item))) return false;
-      if (sourceMode === "oel" && usesLatestAddedSort && item.tag_ids.length === 0) return false;
+      if (usesLatestAddedSort && (!hasCover(item) || item.tag_ids.length === 0)) return false;
+      if (sourceMode === "non-anilist" && usesLatestAddedSort && !hasMangaUpdates(item)) return false;
     }
 
     if (filters.statuses.length > 0 && (!item.status || !filters.statuses.includes(item.status))) return false;
@@ -412,8 +412,6 @@ export function runFeedQuery(args: {
     return { items: result, limitedHistory, missingDateData, activeNotes };
   }
 
-  const effectiveSourceModes = effectiveSourceModesForFeed(feed);
-  const usesAniListAddedSort = usesLatestAddedSort && effectiveSourceModes.length === 1 && effectiveSourceModes[0] === "anilist";
   const sorted = [...result].sort((a, b) => {
     const aAni = hasAniList(a);
     const bAni = hasAniList(b);
@@ -424,14 +422,7 @@ export function runFeedQuery(args: {
       return settings.nonAniListPlacement === "top" ? (aAni ? 1 : -1) : aAni ? -1 : 1;
     }
 
-    if (usesAniListAddedSort) {
-      const av = anilistFirstAddedValue(a);
-      const bv = anilistFirstAddedValue(b);
-      if (av !== bv) return av - bv;
-    }
-
     for (const rule of feed.sort) {
-      if (usesAniListAddedSort && rule.metric === "mangabakaLatestRank") continue;
       let av = metricValue(a, rule.metric, history, metaHistoryLast);
       let bv = metricValue(b, rule.metric, history, metaHistoryLast);
       if (isGrowthMetric(rule.metric)) {

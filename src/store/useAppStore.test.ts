@@ -63,10 +63,12 @@ describe("normalizeFeed", () => {
   it("preserves shared cover stats when requested", () => {
     const feed = createFeed("shared exact");
     feed.view.metricSlots = ["mangabakaLatestRank", "popularity", "favourites"];
+    feed.view.metricSlotsWhenHidden = ["year"];
 
     const normalized = normalizeFeed(feed, { preserveMetricSlots: true });
 
     expect(normalized.view.metricSlots).toEqual(["mangabakaLatestRank", "popularity", "favourites"]);
+    expect(normalized.view.metricSlotsWhenHidden).toEqual(["year"]);
   });
 
   it("preserves an explicitly cleared sensitive exclusion list", () => {

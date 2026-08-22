@@ -89,9 +89,13 @@ describe("feed presets", () => {
     feed.filters = selectStatusPreset(feed.filters, "all");
     expect(selectedStatusPresetId(feed.filters)).toBe("all");
 
+    feed.sort = selectSortPreset(feed.sort, "latest-added");
+    expect(selectedSortPresetId(feed.sort)).toBe("latest-added");
+    expect(feed.sort).toMatchObject([{ metric: "mangabakaLatestRank", direction: "asc" }]);
+
     feed.sort = selectSortPreset(feed.sort, "popularity-growth");
     expect(selectedSortPresetId(feed.sort)).toBe("popularity-growth");
-    expect(feed.sort).toMatchObject([{ metric: "popularityGrowthPercent", direction: "desc" }]);
+    expect(feed.sort).toMatchObject([{ metric: "popularityGrowthPercent", direction: "asc" }]);
 
     feed.sort = [{ ...feed.sort[0], direction: "asc" }];
     feed.sort = selectSortPreset(feed.sort, "popularity");

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultMetricSlotsForFeed, DEFAULT_SETTINGS, createCustomFeed, createFeed } from "./defaults";
+import { defaultMetricSlotsForFeed, DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS, createCustomFeed, createFeed, metricSlotsToRestoreForFeed } from "./defaults";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, toggleFeedSourceModeForEditor } from "./query";
 import type { HistoryMap, SeriesCatalog, TagNode } from "./types";
 
@@ -71,6 +71,8 @@ const history: HistoryMap = {
   ],
 };
 
+const validTestCover = "https://cdn.mangabaka.dev/covers/valid.webp";
+
 describe("runFeedQuery", () => {
   it("uses a source-compatible cover stat when a non-AniList feed has stats disabled", () => {
     const feed = createFeed("Latest Listings");
@@ -94,6 +96,19 @@ describe("runFeedQuery", () => {
     expect(defaultMetricSlotsForFeed(oel)).toEqual(["year"]);
   });
 
+  it("restores a non-default feed's last cover stat after it was hidden", () => {
+    const feed = createFeed("Tagged non-AniList");
+    feed.filters.sourceMode = "non-anilist";
+    feed.filters.sourceModes = ["non-anilist"];
+    feed.view.metricSlots = [];
+    feed.view.metricSlotsWhenHidden = ["chapters"];
+
+    expect(metricSlotsToRestoreForFeed(feed)).toEqual(["chapters"]);
+
+    feed.view.metricSlotsWhenHidden = ["fanFavouriteDiscoveryPercentile"];
+    expect(metricSlotsToRestoreForFeed(feed)).toEqual(["year"]);
+  });
+
   it("makes a newly selected OEL source immediately compatible", () => {
     const feed = createFeed("OEL");
     feed.filters.statuses = ["releasing"];
@@ -113,7 +128,7 @@ describe("runFeedQuery", () => {
     expect(compatible.filters.minPopularity).toBeNull();
     expect(compatible.filters.metricRanges).toEqual([{ id: "year", metric: "year", min: 2020, max: null }]);
     expect(compatible.sort).toEqual([{ id: feed.sort[0].id, metric: "mangabakaLatestRank", direction: "asc" }]);
-    expect(compatible.view.metricSlots).toEqual([]);
+    expect(compatible.view.metricSlots).toEqual(["year"]);
     expect(feedUsesAniListOnlyParameters(compatible)).toBe(false);
   });
 
@@ -460,7 +475,7 @@ describe("runFeedQuery", () => {
     const result = runFeedQuery({
       feed,
       series: [
-        { ...baseSeries[0], id: 90, display_title: "AniList rank one", mangabaka_latest_rank: 1 },
+        { ...baseSeries[0], id: 90, display_title: "AniList rank one", cover: validTestCover, mangabaka_latest_rank: 1 },
         {
           ...baseSeries[2],
           id: 91,
@@ -606,12 +621,14 @@ describe("runFeedQuery", () => {
         id: 128,
         type: "oel",
         display_title: "Tagged OEL",
+        cover: validTestCover,
       },
       {
         ...baseSeries[2],
         id: 127,
         type: "oel",
         display_title: "Untagged OEL",
+        cover: validTestCover,
         tag_ids: [],
       },
     ];
@@ -622,7 +639,7 @@ describe("runFeedQuery", () => {
     expect(runFeedQuery({ feed, series, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id)).toEqual([128, 127]);
   });
 
-  it("uses AniList first-seen ordering for Add in AniList-only feeds", () => {
+  it("uses MangaBaka ID ordering for Add in AniList-only feeds", () => {
     const feed = createFeed("ani add");
     feed.filters.sourceMode = "anilist";
     feed.filters.sourceModes = ["anilist"];
@@ -633,18 +650,20 @@ describe("runFeedQuery", () => {
         {
           ...baseSeries[0],
           id: 120,
-          display_title: "Older AniList title",
+          display_title: "Lower AniList ID",
+          cover: validTestCover,
           source: { anilist: { id: 120, rating: null, url: "https://anilist.co/manga/120" } },
-          anilist_first_seen_at: "2026-06-01T00:00:00.000Z",
-          first_seen_at: "2026-05-01T00:00:00.000Z",
+          anilist_first_seen_at: "2026-06-10T00:00:00.000Z",
+          first_seen_at: "2026-06-10T00:00:00.000Z",
         },
         {
           ...baseSeries[0],
           id: 121,
-          display_title: "Later AniList title",
+          display_title: "Higher AniList ID",
+          cover: validTestCover,
           source: { anilist: { id: 121, rating: null, url: "https://anilist.co/manga/121" } },
-          anilist_first_seen_at: "2026-06-10T00:00:00.000Z",
-          first_seen_at: "2026-01-01T00:00:00.000Z",
+          anilist_first_seen_at: "2026-06-01T00:00:00.000Z",
+          first_seen_at: "2026-06-01T00:00:00.000Z",
         },
       ],
       tags,
@@ -654,7 +673,61 @@ describe("runFeedQuery", () => {
       metaHistoryFirst: null,
       metaHistoryLast: null,
     });
-    expect(result.items.map((item) => item.id)).toEqual([120, 121]);
+    expect(result.items.map((item) => item.id)).toEqual([121, 120]);
+  });
+
+  it("applies Add hygiene and shipped Latest Listings exclusions to AniList feeds", () => {
+    const feed = createFeed("AniList Add hygiene");
+    feed.filters.sourceMode = "anilist";
+    feed.filters.sourceModes = ["anilist"];
+    feed.sort = [{ id: "mb", metric: "mangabakaLatestRank", direction: "asc" }];
+    const validCover = "https://cdn.mangabaka.dev/covers/valid.webp";
+    const result = runFeedQuery({
+      feed,
+      series: [
+        {
+          ...baseSeries[0],
+          id: 150,
+          display_title: "Valid AniList Add",
+          cover: validCover,
+          source: { anilist: { id: 150, rating: null, url: "https://anilist.co/manga/150" } },
+          mangabaka_latest_rank: 1,
+        },
+        {
+          ...baseSeries[0],
+          id: 151,
+          display_title: "Missing cover",
+          cover: null,
+          source: { anilist: { id: 151, rating: null, url: "https://anilist.co/manga/151" } },
+          mangabaka_latest_rank: 2,
+        },
+        {
+          ...baseSeries[0],
+          id: 152,
+          display_title: "Missing detail tags",
+          cover: validCover,
+          tag_ids: [],
+          source: { anilist: { id: 152, rating: null, url: "https://anilist.co/manga/152" } },
+          mangabaka_latest_rank: 3,
+        },
+        {
+          ...baseSeries[0],
+          id: 153,
+          display_title: "Shipped excluded tag",
+          cover: validCover,
+          tag_ids: [DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS.at(-1)!],
+          source: { anilist: { id: 153, rating: null, url: "https://anilist.co/manga/153" } },
+          mangabaka_latest_rank: 4,
+        },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+      metaHistoryFirst: null,
+      metaHistoryLast: null,
+    });
+    expect(result.items.map((item) => item.id)).toEqual([150]);
   });
 
   it("matches MangaBaka safe latest by applying local safety and exact tag filters after rank order", () => {
@@ -669,10 +742,10 @@ describe("runFeedQuery", () => {
     const result = runFeedQuery({
       feed,
       series: [
-        { ...baseSeries[0], id: 100, display_title: "Safe rank two", content_rating: "safe", tag_ids: [1], mangabaka_latest_rank: 2 },
-        { ...baseSeries[0], id: 101, display_title: "Suggestive rank one", content_rating: "suggestive", tag_ids: [1], mangabaka_latest_rank: 1 },
-        { ...baseSeries[0], id: 102, display_title: "BL exact rank three", content_rating: "safe", tag_ids: [180], mangabaka_latest_rank: 3 },
-        { ...baseSeries[0], id: 103, display_title: "Safe rank four", content_rating: "safe", tag_ids: [1], mangabaka_latest_rank: 4 },
+        { ...baseSeries[0], id: 100, display_title: "Safe rank two", cover: validTestCover, content_rating: "safe", tag_ids: [1], mangabaka_latest_rank: 2 },
+        { ...baseSeries[0], id: 101, display_title: "Suggestive rank one", cover: validTestCover, content_rating: "suggestive", tag_ids: [1], mangabaka_latest_rank: 1 },
+        { ...baseSeries[0], id: 102, display_title: "BL exact rank three", cover: validTestCover, content_rating: "safe", tag_ids: [180], mangabaka_latest_rank: 3 },
+        { ...baseSeries[0], id: 103, display_title: "Safe rank four", cover: validTestCover, content_rating: "safe", tag_ids: [1], mangabaka_latest_rank: 4 },
       ],
       tags,
       history,

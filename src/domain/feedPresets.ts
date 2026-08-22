@@ -55,6 +55,7 @@ export const STATUS_PRESETS = [
 ] as const;
 
 export const SORT_PRESETS: ReadonlyArray<{ id: string; label: string; metric: MetricId }> = [
+  { id: "latest-added", label: "Latest added", metric: "mangabakaLatestRank" },
   { id: "fan-rank", label: "Fan Rank", metric: "fanFavouriteDiscoveryPercentile" },
   { id: "popularity-growth", label: "Popularity Growth", metric: "popularityGrowthPercent" },
   { id: "popularity", label: "Popularity", metric: "popularity" },
@@ -182,7 +183,7 @@ export function selectSortPreset(sort: SortRule[], id: string): SortRule[] {
   return [{
     id: sort[0]?.id ?? `sort:preset:${id}`,
     metric: option.metric,
-    direction: sort[0]?.direction ?? "desc",
+    direction: option.metric === "mangabakaLatestRank" ? "asc" : sort[0]?.direction ?? "desc",
   }];
 }
 

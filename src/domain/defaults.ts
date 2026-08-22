@@ -7,9 +7,11 @@ import type {
   MetricId,
   RecommendationShelf,
   SortRule,
+  SourceMode,
   VisibleTitleFields,
 } from "./types";
 import defaultFeedsJson from "./defaultFeeds.generated.json";
+import { metricDefinition } from "./metrics";
 
 const DEFAULT_RAW_EXPORT_BASE =
   "https://raw.githubusercontent.com/zerodox9000-eng/manhwa_db/main/db/exports/frontend";
@@ -159,9 +161,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   searchAdultTags: false,
 };
 
+const SHIPPED_DEFAULT_FEEDS = defaultFeedsJson as unknown as Feed[];
 const SHIPPED_DEFAULT_METRIC_SLOTS = new Map<string, MetricId[]>(
-  (defaultFeedsJson as unknown as Feed[]).map((feed) => [feed.id, (feed.view?.metricSlots ?? []) as MetricId[]]),
+  SHIPPED_DEFAULT_FEEDS.map((feed) => [feed.id, (feed.view?.metricSlots ?? []) as MetricId[]]),
 );
+
+export const DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS = (
+  SHIPPED_DEFAULT_FEEDS.find((feed) => feed.id === "b68dcc8b-3ca0-44a4-a474-dd91af2debe7")?.filters.excludeTagIds
+  ?? DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS
+).slice();
 
 export function defaultMetricSlotsForFeed(feed: Feed): MetricId[] {
   const shippedSlots = SHIPPED_DEFAULT_METRIC_SLOTS.get(feed.id);
@@ -178,6 +186,31 @@ export function defaultMetricSlotsForFeed(feed: Feed): MetricId[] {
           : ["anilist", "non-anilist", "oel"];
   const canUseAniListMetrics = sourceModes.length === 0 || sourceModes.includes("anilist");
   return [canUseAniListMetrics ? "fanFavouriteDiscoveryPercentile" : "year"];
+}
+
+function sourceModesForMetricRestore(feed: Feed): SourceMode[] {
+  const filters = feed.filters;
+  return (filters.sourceModes?.length
+    ? filters.sourceModes
+    : filters.sourceMode === "anilist"
+      ? ["anilist"]
+      : filters.sourceMode === "non-anilist"
+        ? ["non-anilist"]
+        : filters.sourceMode === "oel"
+          ? ["oel"]
+          : ["anilist", "non-anilist", "oel"]) as SourceMode[];
+}
+
+export function metricSlotsToRestoreForFeed(feed: Feed): MetricId[] {
+  const sourceModes = sourceModesForMetricRestore(feed);
+  const nonAniListOnly = feed.kind !== "custom" && sourceModes.length > 0 && sourceModes.every((mode) => mode === "non-anilist" || mode === "oel");
+  const sourceCompatible = (slots: MetricId[]) => (nonAniListOnly
+    ? slots.filter((metric) => !metricDefinition(metric).anilistOnly)
+    : slots).slice(0, 3);
+  const savedSlots = sourceCompatible(feed.view.metricSlotsWhenHidden ?? []);
+  if (savedSlots.length) return savedSlots;
+  const fallbackSlots = sourceCompatible(defaultMetricSlotsForFeed(feed));
+  return fallbackSlots.length ? fallbackSlots : ["year"];
 }
 
 export function makeId() {

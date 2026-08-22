@@ -231,6 +231,7 @@ export interface FeedViewSettings {
   listCoverSize: ListCoverSize;
   listDensity: ListDensity;
   metricSlots: MetricId[];
+  metricSlotsWhenHidden?: MetricId[];
   visible: VisibleTitleFields;
 }
 
