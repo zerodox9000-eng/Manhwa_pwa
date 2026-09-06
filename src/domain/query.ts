@@ -305,7 +305,11 @@ export function runFeedQuery(args: {
   let missingDateData = false;
   let candidates = series;
   if (feed.kind === "custom") {
-    const byId = new Map(series.map((item) => [item.id, item]));
+    const byId = new Map<number, SeriesCatalog>();
+    for (const item of series) {
+      byId.set(item.id, item);
+      for (const mergedId of item.merged_ids ?? []) byId.set(mergedId, item);
+    }
     candidates = feed.titleIds.flatMap((id) => {
       const item = byId.get(id);
       return item ? [item] : [];

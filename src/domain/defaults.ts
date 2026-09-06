@@ -261,8 +261,14 @@ export function createFeed(name = "New Feed"): Feed {
     filters: {
       ...DEFAULT_FILTERS,
       sourceModes: [...(DEFAULT_FILTERS.sourceModes ?? [])],
+      includeTagIds: [...DEFAULT_FILTERS.includeTagIds],
+      excludeTagIds: [...DEFAULT_FILTERS.excludeTagIds],
+      tagWeightTypes: [...(DEFAULT_FILTERS.tagWeightTypes ?? DEFAULT_TAG_WEIGHT_TYPES)],
       contentRatings: [...DEFAULT_FILTERS.contentRatings],
+      statuses: [...DEFAULT_FILTERS.statuses],
       metricRanges: [],
+      rolling: { ...DEFAULT_FILTERS.rolling },
+      labelIds: [...DEFAULT_FILTERS.labelIds],
     },
     sort: DEFAULT_SORT.map((rule) => ({ ...rule, id: makeId() })),
     view: {

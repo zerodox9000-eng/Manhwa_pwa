@@ -110,6 +110,16 @@ describe("feed presets", () => {
     expect(selectedSortPresetId(custom.sort)).toBe("fan-rank");
   });
 
+  it("gives each new feed independent filter collections", () => {
+    const first = createFeed("First");
+    const second = createFeed("Second");
+
+    expect(first.filters.tagWeightTypes).not.toBe(second.filters.tagWeightTypes);
+    expect(first.filters.includeTagIds).not.toBe(second.filters.includeTagIds);
+    expect(first.filters.excludeTagIds).not.toBe(second.filters.excludeTagIds);
+    expect(first.filters.rolling).not.toBe(second.filters.rolling);
+  });
+
   it("selects rolling periods and their purpose without replacing advanced dates", () => {
     const feed = createFeed();
     feed.filters = selectPeriodPurpose(feed.filters, "release");

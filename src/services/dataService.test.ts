@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyTagWeightExport, CATALOG_NORMALIZATION_VERSION, detailSourceCandidates, needsCatalogNormalizationRepair } from "./dataService";
+import { parseCatalogList } from "../domain/validation";
 
 describe("detailSourceCandidates", () => {
   it("keeps the preferred detail source first and falls back to configured sources", () => {
@@ -25,6 +26,19 @@ describe("catalog normalization repair", () => {
 });
 
 describe("tag weight export", () => {
+  it("keeps cached unweighted rows when the sync marker is null", () => {
+    const parsed = parseCatalogList([{
+      id: 588985,
+      display_title: "Teto X Egen",
+      tag_weights: null,
+      tag_ids: [],
+    }]);
+
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].display_title).toBe("Teto X Egen");
+    expect(parsed[0].tag_weights).toBeNull();
+  });
+
   it("adds valid exported weights without removing existing catalog weights", () => {
     const catalog = [{
       id: 7,

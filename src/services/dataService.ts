@@ -127,14 +127,15 @@ function mergeLiveCatalog(
   return liveCatalog.map((live) => {
     const previous = previousById.get(live.id);
     const fixedLive = fixMangaBakaLink(live);
-    const catalog = { ...fixedLive };
+    const { tag_weights: liveTagWeights, ...catalog } = fixedLive;
     delete catalog.animeplanet_title;
     return {
       ...catalog,
       anilist_first_seen_at: fixedLive.anilist_first_seen_at ?? previous?.anilist_first_seen_at ?? null,
       // Weight exports are optional and authoritative for the current sync. Do not
-      // carry old classifications into a newer catalogue/export.
-      tag_weights: fixedLive.tag_weights ?? null,
+      // carry old classifications into a newer catalogue/export. Omit the field
+      // when no weights exist so older validators and caches keep the row intact.
+      ...(liveTagWeights ? { tag_weights: liveTagWeights } : {}),
     };
   });
 }

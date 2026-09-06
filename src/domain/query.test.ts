@@ -154,6 +154,30 @@ describe("runFeedQuery", () => {
     expect(query().items.map((item) => item.id)).toEqual([3, 2]);
   });
 
+  it("keeps custom membership visible when a saved id is now a merged id", () => {
+    const feed = createCustomFeed("Merged membership");
+    feed.orderMode = "manual";
+    feed.titleIds = [9001];
+    const merged = {
+      ...baseSeries[0],
+      id: 588985,
+      display_title: "Teto X Egen",
+      merged_ids: [588985, 9001],
+      source: { anilist: { id: 215080 } },
+    };
+
+    const result = runFeedQuery({
+      feed,
+      series: [merged],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+    });
+
+    expect(result.items.map((item) => item.id)).toEqual([588985]);
+  });
+
   it("filters both logic and custom feeds to titles with an official English link", () => {
     const series = [
       { ...baseSeries[0], links: { read_en: "https://example.com/read" } },
