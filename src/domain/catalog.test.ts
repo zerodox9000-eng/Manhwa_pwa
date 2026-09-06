@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeCatalog, resolveDisplayTitle } from "./catalog";
+import { mergeCatalogLinks, normalizeCatalog, resolveDisplayTitle } from "./catalog";
 import { resolveVisibleTitle } from "./displayTitle";
 import { formatMetricValue, metricValue } from "./metrics";
 import type { HistoryMap, SeriesCatalog } from "./types";
@@ -47,6 +47,108 @@ describe("catalog normalization", () => {
     expect(normalized.catalog[0].display_title).toBe("Blind Devotion");
     expect(normalized.catalog[0].merged_ids).toEqual(expect.arrayContaining([1, 2]));
     expect(normalized.history[String(normalized.catalog[0].id)]).toHaveLength(2);
+  });
+
+  it("does not merge distinct source records that reuse a cover", () => {
+    const firstPart: SeriesCatalog = {
+      ...base,
+      id: 514258,
+      display_title: "Pungsajeongi 1-bu",
+      source: { anilist: { id: 198979 } },
+    };
+    const secondPart: SeriesCatalog = {
+      ...base,
+      id: 514259,
+      display_title: "Pungsajeongi 2-bu",
+      source: { anilist: { id: 198980 } },
+    };
+
+    const normalized = normalizeCatalog([firstPart, secondPart], {});
+
+    expect(normalized.catalog).toHaveLength(2);
+    expect(normalized.catalog.map((item) => item.merged_ids)).toEqual([[514258], [514259]]);
+  });
+
+  it("preserves canonical links, source fields, title aliases, and read links across duplicates", () => {
+    const older = {
+      ...base,
+      id: 10,
+      display_title: "Canonical series",
+      last_updated_at: "2026-06-01T00:00:00.000Z",
+      titles: [{ language: "en", title: "Canonical series", traits: [], is_primary: true, note: null }],
+      links: {
+        mangabaka: "https://mangabaka.org/10",
+        read_en: "https://reader.example/older",
+        read_en_all: ["https://reader.example/older"],
+      },
+      source: {
+        anilist: { id: 123, rating: 82, url: "https://anilist.co/manga/123" },
+        mangaupdates: { id: "abc", url: "https://www.mangaupdates.com/series/abc" },
+      },
+    } as SeriesCatalog;
+    const newer = {
+      ...base,
+      id: 20,
+      display_title: "Alternate series title",
+      last_updated_at: "2026-06-02T00:00:00.000Z",
+      titles: [{ language: "en", title: "Alternate series title", traits: [], is_primary: false, note: null }],
+      links: {
+        mangabaka: "https://mangabaka.org/20",
+        read_en: null,
+        read_en_all: ["https://reader.example/newer"],
+      },
+      source: {
+        anilist: { id: 123, rating: null, url: null },
+        animeplanet: { id: "alternate-series", url: "https://www.anime-planet.com/manga/alternate-series" },
+      },
+    } as SeriesCatalog;
+
+    const normalized = normalizeCatalog([older, newer], {});
+    const [merged] = normalized.catalog;
+
+    expect(merged.id).toBe(10);
+    expect(merged.display_title).toBe("Canonical series");
+    expect(merged.links?.mangabaka).toBe("https://mangabaka.org/10");
+    expect(merged.links?.read_en).toBe("https://reader.example/older");
+    expect(merged.links?.read_en_all).toEqual(expect.arrayContaining([
+      "https://reader.example/older",
+      "https://reader.example/newer",
+    ]));
+    expect(merged.source?.anilist?.url).toBe("https://anilist.co/manga/123");
+    expect(merged.source?.mangaupdates?.id).toBe("abc");
+    expect(merged.source?.animeplanet?.id).toBe("alternate-series");
+    expect(merged.titles?.map((title) => title.title)).toEqual(expect.arrayContaining([
+      "Canonical series",
+      "Alternate series title",
+    ]));
+  });
+
+  it("joins explicit merged IDs even when source identities and covers differ", () => {
+    const first = { ...base, id: 30, source: { anilist: { id: 300 } } } as SeriesCatalog;
+    const second = {
+      ...base,
+      id: 31,
+      cover: "https://example.com/another-cover.jpg",
+      source: { anilist: { id: 301 } },
+    } as SeriesCatalog;
+    const declared = { ...first, merged_ids: [30, 31] };
+
+    const normalized = normalizeCatalog([declared, second], {});
+
+    expect(normalized.catalog).toHaveLength(1);
+    expect(normalized.catalog[0].merged_ids).toEqual(expect.arrayContaining([30, 31]));
+  });
+
+  it("normalizes an old numeric MangaBaka link to the selected canonical ID", () => {
+    const links = mergeCatalogLinks(
+      { mangabaka: "https://mangabaka.org/37098", read_en: "https://reader.example/title" },
+      { mangabaka: "https://mangabaka.org/42991", read_en: null },
+      42991,
+      true,
+    );
+
+    expect(links?.mangabaka).toBe("https://mangabaka.org/42991");
+    expect(links?.read_en).toBe("https://reader.example/title");
   });
 
   it("keeps tag weights when duplicate records are normalized together", () => {

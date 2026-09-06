@@ -1,12 +1,12 @@
 import { db, saveSyncMeta } from "../db/appDb";
 import { DATA_SOURCE_CANDIDATES } from "../domain/defaults";
-import { normalizeCatalog } from "../domain/catalog";
+import { catalogMergeKeys, mergeCatalogRecords, normalizeCatalog } from "../domain/catalog";
 import type { RecommendationFeature, SeriesCatalog, SeriesDetail, SyncMeta } from "../domain/types";
 import { parseCatalogList, parseDetail, parseHistory, parseTags } from "../domain/validation";
 import { decodeJsonBytes, fetchChunkedFrontendData, parseFrontendDataManifest } from "./chunkedData";
 
 // Bump only when stored catalogue records need a one-time repair after a frontend rule change.
-export const CATALOG_NORMALIZATION_VERSION = 4;
+export const CATALOG_NORMALIZATION_VERSION = 5;
 const TAG_WEIGHT_EXPORT_PATH = "meta/mangabaka-tag-weights.safe-suggestive-anilist.json";
 
 export function needsCatalogNormalizationRepair(meta: Pick<SyncMeta, "catalogNormalizationVersion"> | null | undefined) {
@@ -45,7 +45,14 @@ async function fetchJsonValidated<T>(base: string, path: string, parser: (value:
 }
 
 function fixMangaBakaLink<T extends SeriesCatalog>(item: T): T {
-  if (item.links?.mangabaka?.includes("/series/")) {
+  const mangaBakaLink = item.links?.mangabaka?.trim();
+  const needsCanonicalMangaBakaLink = Boolean(
+    mangaBakaLink && (
+      mangaBakaLink.includes("/series/") ||
+      /mangabaka\.org\/\d+\/?$/i.test(mangaBakaLink) && !mangaBakaLink.endsWith(`/${item.id}`)
+    ),
+  );
+  if (needsCanonicalMangaBakaLink) {
     return { ...item, links: { ...item.links, mangabaka: `https://mangabaka.org/${item.id}` } };
   }
   if (item.links?.mangabaka) return item;
@@ -59,6 +66,20 @@ function indexCatalog(catalog: SeriesCatalog[] | null | undefined) {
     for (const mergedId of item.merged_ids ?? []) index.set(mergedId, item);
   }
   return index;
+}
+
+function indexCatalogIdentities(catalog: SeriesCatalog[] | null | undefined) {
+  const index = new Map<string, SeriesCatalog>();
+  for (const item of catalog ?? []) {
+    for (const key of catalogMergeKeys(item)) {
+      if (!index.has(key)) index.set(key, item);
+    }
+  }
+  return index;
+}
+
+function uniqueIds(values: (number | null | undefined)[]) {
+  return [...new Set(values.filter((value): value is number => Number.isSafeInteger(value)))];
 }
 
 function isAniListBacked(item: SeriesCatalog) {
@@ -92,14 +113,22 @@ export function applyTagWeightExport(catalog: SeriesCatalog[], value: unknown) {
   const weightsBySeriesId = parseTagWeightExport(value);
   return catalog.map((item) => {
     if (!isAniListBacked(item)) return item;
-    const exportedWeights = weightsBySeriesId.get(item.id);
-    if (!exportedWeights) return item;
+    const candidateIds = [item.id, ...(item.merged_ids ?? [])];
+    const exportedWeights = Object.assign(
+      {},
+      ...candidateIds
+        .slice()
+        .reverse()
+        .map((id) => weightsBySeriesId.get(id) ?? {}),
+    );
+    const mergedWeights = {
+      ...exportedWeights,
+      ...(item.tag_weights ?? {}),
+    };
+    if (Object.keys(mergedWeights).length === 0) return item;
     return {
       ...item,
-      tag_weights: {
-        ...(item.tag_weights ?? {}),
-        ...exportedWeights,
-      },
+      tag_weights: mergedWeights,
     };
   });
 }
@@ -119,18 +148,54 @@ async function fetchOptionalTagWeightExport(preferredSource: string) {
   return null;
 }
 
-function mergeLiveCatalog(
+export function mergeLiveCatalog(
   liveCatalog: SeriesCatalog[],
   previousCatalog: SeriesCatalog[] | null,
 ) {
   const previousById = indexCatalog(previousCatalog);
+  const previousByIdentity = indexCatalogIdentities(previousCatalog);
+  const liveIds = new Set(liveCatalog.map((item) => item.id));
   return liveCatalog.map((live) => {
-    const previous = previousById.get(live.id);
+    const previousCandidate = previousById.get(live.id) ?? catalogMergeKeys(live)
+      .map((key) => previousByIdentity.get(key))
+      .find((item): item is SeriesCatalog => Boolean(item));
+    // A previous cache may contain a false cover-based merge. If more than one
+    // of that old group's IDs is present in the current export, let the current
+    // source identities rebuild the group instead of reintroducing the stale
+    // alias set and its links.
+    const hasCurrentAliasSibling = Boolean(
+      previousCandidate?.merged_ids?.some((id) => id !== live.id && liveIds.has(id)),
+    );
+    const previous = hasCurrentAliasSibling ? null : previousCandidate;
     const fixedLive = fixMangaBakaLink(live);
+    const continuity = previous ? mergeCatalogRecords(previous, fixedLive) : fixedLive;
     const { tag_weights: liveTagWeights, ...catalog } = fixedLive;
     delete catalog.animeplanet_title;
-    return {
+    const carriedMergedIds = uniqueIds([
+      ...(live.merged_ids ?? []),
+      ...(!hasCurrentAliasSibling ? previousCandidate?.merged_ids ?? [] : []),
+      ...(!hasCurrentAliasSibling && previousCandidate && previousCandidate.id !== live.id ? [previousCandidate.id] : []),
+    ]);
+    const continuityLinks = previous ? continuity.links : fixedLive.links;
+    const continuitySource = previous ? continuity.source : fixedLive.source;
+    const continuityTitles = previous ? continuity.titles : fixedLive.titles;
+    const continuityAuthors = previous ? continuity.authors : fixedLive.authors;
+    const continuityArtists = previous ? continuity.artists : fixedLive.artists;
+    const continuityType = fixedLive.type ?? previous?.type ?? null;
+    const liveWithContinuity = fixMangaBakaLink({
       ...catalog,
+      ...(continuityLinks ? { links: continuityLinks } : {}),
+      ...(continuitySource ? { source: continuitySource } : {}),
+      ...(continuityTitles ? { titles: continuityTitles } : {}),
+      ...(continuityAuthors ? { authors: continuityAuthors } : {}),
+      ...(continuityArtists ? { artists: continuityArtists } : {}),
+      type: [fixedLive.type, previous?.type].some((value) => value?.toLocaleLowerCase() === "oel")
+        ? "oel"
+        : continuityType,
+    });
+    return {
+      ...liveWithContinuity,
+      ...(carriedMergedIds.length > 0 ? { merged_ids: uniqueIds([live.id, ...carriedMergedIds]) } : {}),
       anilist_first_seen_at: fixedLive.anilist_first_seen_at ?? previous?.anilist_first_seen_at ?? null,
       // Weight exports are optional and authoritative for the current sync. Do not
       // carry old classifications into a newer catalogue/export. Omit the field
@@ -244,18 +309,18 @@ export async function syncFrontendData(
     chunkedData?.catalog ??
     await fetchJsonValidated(source, "series/all.json", parseCatalogList, true);
 
+  const cachedCatalog = parseCatalogList(await db.catalog.toArray());
+  const cachedIndex = indexCatalog(cachedCatalog);
+
+  const mergedCatalog = mergeLiveCatalog(liveCatalog, cachedCatalog);
+
   onProgress?.("Loading tag weights");
-  const liveCatalogWithWeights = applyTagWeightExport(
-    liveCatalog,
+  const catalogWithWeights = applyTagWeightExport(
+    mergedCatalog,
     await fetchOptionalTagWeightExport(source),
   );
 
   onProgress?.("Preparing search fields");
-
-  const cachedCatalog = parseCatalogList(await db.catalog.toArray());
-  const cachedIndex = indexCatalog(cachedCatalog);
-
-  const mergedCatalog = mergeLiveCatalog(liveCatalogWithWeights, cachedCatalog);
 
   onProgress?.("Downloading tags");
 
@@ -273,7 +338,7 @@ export async function syncFrontendData(
 
   onProgress?.("Saving offline data");
 
-  const normalized = normalizeCatalog(mergedCatalog, rawHistory, cachedIndex, syncTimestamp);
+  const normalized = normalizeCatalog(catalogWithWeights, rawHistory, cachedIndex, syncTimestamp);
   const catalog = normalized.catalog;
   const history = normalized.history;
 

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { applyTagWeightExport, CATALOG_NORMALIZATION_VERSION, detailSourceCandidates, needsCatalogNormalizationRepair } from "./dataService";
+import { applyTagWeightExport, CATALOG_NORMALIZATION_VERSION, detailSourceCandidates, mergeLiveCatalog, needsCatalogNormalizationRepair } from "./dataService";
+import { normalizeCatalog } from "../domain/catalog";
 import { parseCatalogList } from "../domain/validation";
+import type { SeriesCatalog } from "../domain/types";
 
 describe("detailSourceCandidates", () => {
   it("keeps the preferred detail source first and falls back to configured sources", () => {
@@ -63,6 +65,36 @@ describe("tag weight export", () => {
     expect(enriched[0].tag_weights).toEqual({ 1: "core", 2: "defining" });
   });
 
+  it("looks up weights through merged IDs while letting the current ID win", () => {
+    const catalog = [{
+      id: 7,
+      merged_ids: [7, 70],
+      display_title: "Weighted title",
+      cover: null,
+      year: null,
+      status: "releasing",
+      content_rating: "safe",
+      total_chapters: null,
+      tag_ids: [1, 2, 3],
+      stats: { popularity: null, favourites: null, meanScore: null },
+      analytics: {},
+      source: { anilist: { id: 7 } },
+      tag_weights: { 1: "core" },
+    }];
+
+    const enriched = applyTagWeightExport(catalog, [
+      { id: 70, tag_weights: { "2": "incidental", "4": "defining" } },
+      { id: 7, tag_weights: { "2": "core", "3": "recurrent" } },
+    ]);
+
+    expect(enriched[0].tag_weights).toEqual({
+      1: "core",
+      2: "core",
+      3: "recurrent",
+      4: "defining",
+    });
+  });
+
   it("does not attach the AniList weight export to non-AniList records", () => {
     const catalog = [{
       id: 8,
@@ -81,5 +113,72 @@ describe("tag weight export", () => {
     const enriched = applyTagWeightExport(catalog, [{ id: 8, tag_weights: { "1": "incidental" } }]);
 
     expect(enriched[0].tag_weights).toBeUndefined();
+  });
+});
+
+describe("live catalogue continuity", () => {
+  const record = (overrides: Partial<SeriesCatalog>): SeriesCatalog => ({
+    id: 1,
+    display_title: "Series",
+    cover: "https://example.com/cover.jpg",
+    year: null,
+    status: "releasing",
+    content_rating: "safe",
+    total_chapters: null,
+    tag_ids: [1],
+    stats: { popularity: null, favourites: null, meanScore: null },
+    analytics: {},
+    ...overrides,
+  });
+
+  it("does not reintroduce a stale cover merge when the current export has separate source IDs", () => {
+    const previous = [record({
+      id: 514258,
+      display_title: "Pungsajeongi 1-bu",
+      merged_ids: [514258, 514259],
+      source: { anilist: { id: 198979 } },
+      links: { mangabaka: "https://mangabaka.org/514258" },
+    })];
+    const live = [
+      record({ id: 514258, display_title: "Pungsajeongi 1-bu", source: { anilist: { id: 198979 } } }),
+      record({ id: 514259, display_title: "Pungsajeongi 2-bu", source: { anilist: { id: 198980 } } }),
+    ];
+
+    const normalized = normalizeCatalog(mergeLiveCatalog(live, previous), {});
+
+    expect(normalized.catalog).toHaveLength(2);
+    expect(normalized.catalog.map((item) => item.display_title)).toEqual([
+      "Pungsajeongi 1-bu",
+      "Pungsajeongi 2-bu",
+    ]);
+  });
+
+  it("carries links, sources, and the old ID when a current record changes ID", () => {
+    const previous = [record({
+      id: 90,
+      display_title: "Old title",
+      source: {
+        anilist: { id: 900, url: "https://anilist.co/manga/900" },
+        mangaupdates: { id: "old-slug", url: "https://www.mangaupdates.com/series/old-slug" },
+      },
+      links: {
+        mangabaka: "https://mangabaka.org/90",
+        read_en: "https://reader.example/old-title",
+      },
+    })];
+    const live = [record({
+      id: 91,
+      display_title: "Current title",
+      source: { anilist: { id: 900, url: null } },
+      links: { mangabaka: "https://mangabaka.org/91", read_en: null },
+    })];
+
+    const [merged] = mergeLiveCatalog(live, previous);
+
+    expect(merged.merged_ids).toEqual(expect.arrayContaining([90, 91]));
+    expect(merged.links?.mangabaka).toBe("https://mangabaka.org/91");
+    expect(merged.links?.read_en).toBe("https://reader.example/old-title");
+    expect(merged.source?.anilist?.url).toBe("https://anilist.co/manga/900");
+    expect(merged.source?.mangaupdates?.id).toBe("old-slug");
   });
 });
