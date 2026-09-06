@@ -10,8 +10,10 @@ import type {
   SeriesCatalog,
   SourceMode,
   TagNode,
+  TagWeightType,
   UserLabel,
 } from "./types";
+import { TAG_WEIGHT_TYPES } from "./types";
 import { isDateWithin, isFutureDate, resolveRollingWindow, WEEKLY_GROWTH_WINDOW } from "./dates";
 import { chapterNumber, displayComparableMetricValue, displayReleaseDate, effectiveEndDate, effectiveReleaseDate, historyDeltaForWindow, isGrowthMetric, metricDefinition, metricValue } from "./metrics";
 
@@ -134,6 +136,17 @@ function dateTimeValue(value?: string | null) {
 
 function hasMangaUpdates(series: SeriesCatalog) {
   return Boolean(series.source?.mangaupdates?.id || series.source?.mangaupdates?.url);
+}
+
+function tagWeightMatches(series: SeriesCatalog, tagId: number, activeTypes: ReadonlySet<TagWeightType>) {
+  // Weight classifications are generated for AniList-backed records only.
+  // Non-AniList and OEL records keep their normal tag matching behavior.
+  if (series.source?.anilist?.id == null) return true;
+  const rawWeight = series.tag_weights?.[tagId];
+  if (rawWeight == null) return activeTypes.size === TAG_WEIGHT_TYPES.length;
+  const weight = String(rawWeight).trim().toLocaleLowerCase();
+  if (!TAG_WEIGHT_TYPES.includes(weight as TagWeightType)) return activeTypes.size === TAG_WEIGHT_TYPES.length;
+  return activeTypes.has(weight as TagWeightType);
 }
 
 function hasCover(series: SeriesCatalog) {
@@ -282,6 +295,7 @@ export function runFeedQuery(args: {
   const tagsById = new Map(tags.map((tag) => [tag.id, tag]));
   const includeTagGroups = filters.includeTagIds.map((id) => [id]);
   const includeTagIds = [...new Set(filters.includeTagIds)];
+  const activeTagWeightTypes = new Set(filters.tagWeightTypes ?? TAG_WEIGHT_TYPES);
   const usesLatestAddedSort = feed.sort.some((rule) => rule.metric === "mangabakaLatestRank");
   const excludeTagIds = feed.kind === "logic" && usesLatestAddedSort
     ? [...new Set([...filters.excludeTagIds, ...DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS])]
@@ -383,7 +397,7 @@ export function runFeedQuery(args: {
     }
 
     if (feed.kind === "logic" && includeTagIds.length > 0) {
-      const hasTagGroup = (ids: number[]) => ids.some((id) => item.tag_ids.includes(id));
+      const hasTagGroup = (ids: number[]) => ids.some((id) => item.tag_ids.includes(id) && tagWeightMatches(item, id, activeTagWeightTypes));
       const ok = filters.tagMatch === "all" ? includeTagGroups.every(hasTagGroup) : includeTagGroups.some(hasTagGroup);
       if (!ok) return false;
     }

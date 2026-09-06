@@ -169,6 +169,9 @@ function mergeRecord(left: SeriesCatalog, right: SeriesCatalog) {
       ...(rightIsNewer ? right.analytics : left.analytics),
     },
     tag_ids: unique([...(left.tag_ids ?? []), ...(right.tag_ids ?? [])]),
+    ...(left.tag_weights || right.tag_weights
+      ? { tag_weights: { ...(left.tag_weights ?? {}), ...(right.tag_weights ?? {}) } }
+      : {}),
     authors: unique([...(left.authors ?? []), ...(right.authors ?? [])]),
     artists: unique([...(left.artists ?? []), ...(right.artists ?? [])]),
     links: {

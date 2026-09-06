@@ -7,6 +7,8 @@ export type SourceMode = "anilist" | "non-anilist" | "oel" | "mixed";
 export type NonAniListPlacement = "top" | "bottom" | "mixed";
 export type ControlPlacement = "drawer" | "toolbar" | "fab";
 export type ThemeMode = "system" | "dark" | "light";
+export const TAG_WEIGHT_TYPES = ["core", "defining", "recurrent", "incidental", "unweighted"] as const;
+export type TagWeightType = typeof TAG_WEIGHT_TYPES[number];
 
 export interface AniListStats {
   popularity: number | null;
@@ -181,6 +183,7 @@ export interface FeedFilters {
   includeTagIds: number[];
   excludeTagIds: number[];
   tagMatch: "any" | "all";
+  tagWeightTypes?: TagWeightType[];
   contentRatings: ContentRating[];
   statuses: string[];
   minChapters: number | null;

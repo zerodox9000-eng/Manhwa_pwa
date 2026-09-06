@@ -78,6 +78,45 @@ describe("normalizeFeed", () => {
     expect(normalizeFeed(feed).filters.excludeTagIds).toEqual([]);
   });
 
+  it("defaults legacy feeds to all five tag weight types", () => {
+    const feed = createFeed("legacy weights");
+    delete (feed.filters as Partial<typeof feed.filters>).tagWeightTypes;
+
+    expect(normalizeFeed(feed).filters.tagWeightTypes).toEqual([
+      "core",
+      "defining",
+      "recurrent",
+      "incidental",
+      "unweighted",
+    ]);
+  });
+
+  it("defaults built-in tag feeds to core and defining weights", () => {
+    const generatedFeeds = defaultFeedsJson as unknown as Feed[];
+    const genderBender = generatedFeeds.find((feed) => feed.name.trim() === "GENDER BENDER");
+    expect(genderBender).toBeDefined();
+
+    const normalized = normalizeFeed(genderBender!);
+
+    expect(normalized.filters.tagWeightTypes).toEqual(["core", "defining"]);
+  });
+
+  it("leaves Novel Based feeds unfiltered by weight and keeps the named broad tag feeds fully enabled", () => {
+    const generatedFeeds = defaultFeedsJson as unknown as Feed[];
+    const expectedAllTypes = ["core", "defining", "recurrent", "incidental", "unweighted"];
+    const novelBased = generatedFeeds.find((feed) => feed.name.trim() === "BASED ON A NOVEL");
+    const broadTagFeeds = ["POLITICAL", "FEMALE EMPOWERMENT", "SECOND CHANCE", "NON-HUMAN"]
+      .map((name) => generatedFeeds.find((feed) => feed.name.trim() === name));
+
+    expect(normalizeFeed(novelBased!).filters.tagWeightTypes).toEqual(expectedAllTypes);
+    expect(broadTagFeeds.map((feed) => normalizeFeed(feed!).filters.tagWeightTypes)).toEqual([
+      expectedAllTypes,
+      expectedAllTypes,
+      expectedAllTypes,
+      expectedAllTypes,
+    ]);
+  });
+
   it("keeps existing sensitive exclusions unchanged", () => {
     const feed = createFeed("safe feed");
     const savedExclusions = [...feed.filters.excludeTagIds];

@@ -1,5 +1,5 @@
 import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS, RAW_EXPORT_BASE, makeId } from "../domain/defaults";
+import { defaultTagWeightTypesForBuiltInFeed, DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS, DEFAULT_SETTINGS, isNovelBasedFeed, normalizeTagWeightTypes, RAW_EXPORT_BASE, makeId } from "../domain/defaults";
 import defaultFeedSegmentsJson from "../domain/defaultFeedSegments.generated.json";
 import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import defaultSettingsJson from "../domain/defaultSettings.generated.json";
@@ -22,6 +22,7 @@ import type {
   SeriesCatalog,
   SyncMeta,
   TagNode,
+  TagWeightType,
   UserLabel,
 } from "../domain/types";
 import { db, loadSyncMeta } from "../db/appDb";
@@ -231,6 +232,11 @@ function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
 export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boolean; preserveFeedSettings?: boolean } = {}): Feed {
   // An empty array is an intentional user choice; only legacy feeds missing this field get the safe defaults.
   const excludeTagIds = feed.filters.excludeTagIds ?? DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS;
+  const missingTagWeightTypes = feed.filters.tagWeightTypes == null;
+  const builtInTagWeightTypes = isBuiltInDefaultFeed(feed) ? defaultTagWeightTypesForBuiltInFeed(feed) : null;
+  const defaultTagWeightTypes: TagWeightType[] = builtInTagWeightTypes && (missingTagWeightTypes || isNovelBasedFeed(feed))
+    ? builtInTagWeightTypes
+    : normalizeTagWeightTypes(feed.filters.tagWeightTypes);
   const rawMetricSlots = feed.view?.metricSlots ?? DEFAULT_SETTINGS.defaultFeedView.metricSlots;
   const metricSlots = (options.preserveMetricSlots
     ? rawMetricSlots
@@ -259,6 +265,7 @@ export function normalizeFeed(feed: Feed, options: { preserveMetricSlots?: boole
       includeEstimatedDates: feed.filters.includeEstimatedDates ?? true,
       requireOfficialEnglishLink: feed.filters.requireOfficialEnglishLink ?? false,
       excludeTagIds,
+      tagWeightTypes: defaultTagWeightTypes,
       labelIds: options.preserveFeedSettings ? feed.filters.labelIds ?? [] : [],
       query: options.preserveFeedSettings ? feed.filters.query ?? "" : "",
     },

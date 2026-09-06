@@ -8,8 +8,10 @@ import type {
   RecommendationShelf,
   SortRule,
   SourceMode,
+  TagWeightType,
   VisibleTitleFields,
 } from "./types";
+import { TAG_WEIGHT_TYPES } from "./types";
 import defaultFeedsJson from "./defaultFeeds.generated.json";
 import { metricDefinition } from "./metrics";
 
@@ -25,6 +27,31 @@ export const DATA_SOURCE_CANDIDATES = [PAGES_EXPORT_BASE, RAW_EXPORT_BASE];
 
 export const SAFE_RATINGS = ["safe", "suggestive"] as const;
 export const DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS = [4, 180, 41, 10];
+export const DEFAULT_TAG_WEIGHT_TYPES: TagWeightType[] = [...TAG_WEIGHT_TYPES];
+export const DEFAULT_TAG_FEED_WEIGHT_TYPES: TagWeightType[] = ["core", "defining"];
+const ALL_WEIGHT_TAG_FEED_NAMES = new Set(["political", "female empowerment", "second chance", "non-human"]);
+
+function normalizedFeedName(name: string) {
+  return name.trim().toLocaleLowerCase().replace(/\s+/g, " ");
+}
+
+export function isNovelBasedFeed(feed: Pick<Feed, "name">) {
+  return /^(?:based on )?(?:a )?(?:web )?novel$/.test(normalizedFeedName(feed.name));
+}
+
+export function defaultTagWeightTypesForBuiltInFeed(feed: Pick<Feed, "name" | "filters">): TagWeightType[] | null {
+  if ((feed.filters.includeTagIds?.length ?? 0) === 0) return null;
+  if (isNovelBasedFeed(feed) || ALL_WEIGHT_TAG_FEED_NAMES.has(normalizedFeedName(feed.name))) {
+    return [...DEFAULT_TAG_WEIGHT_TYPES];
+  }
+  return [...DEFAULT_TAG_FEED_WEIGHT_TYPES];
+}
+
+export function normalizeTagWeightTypes(values?: readonly TagWeightType[] | null): TagWeightType[] {
+  if (values == null) return [...DEFAULT_TAG_WEIGHT_TYPES];
+  const allowed = new Set<TagWeightType>(TAG_WEIGHT_TYPES);
+  return [...new Set(values.filter((value): value is TagWeightType => allowed.has(value)))];
+}
 
 export const DEFAULT_VISIBLE_TITLE_FIELDS: VisibleTitleFields = {
   cover: true,
@@ -87,6 +114,7 @@ export const DEFAULT_FILTERS: FeedFilters = {
   includeTagIds: [],
   excludeTagIds: [...DEFAULT_SENSITIVE_EXCLUDE_TAG_IDS],
   tagMatch: "any",
+  tagWeightTypes: [...DEFAULT_TAG_WEIGHT_TYPES],
   contentRatings: ["safe", "suggestive"],
   statuses: [],
   minChapters: null,

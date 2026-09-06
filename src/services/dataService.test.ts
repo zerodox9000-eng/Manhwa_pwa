@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CATALOG_NORMALIZATION_VERSION, detailSourceCandidates, needsCatalogNormalizationRepair } from "./dataService";
+import { applyTagWeightExport, CATALOG_NORMALIZATION_VERSION, detailSourceCandidates, needsCatalogNormalizationRepair } from "./dataService";
 
 describe("detailSourceCandidates", () => {
   it("keeps the preferred detail source first and falls back to configured sources", () => {
@@ -21,5 +21,51 @@ describe("catalog normalization repair", () => {
     expect(needsCatalogNormalizationRepair(null)).toBe(true);
     expect(needsCatalogNormalizationRepair({ catalogNormalizationVersion: CATALOG_NORMALIZATION_VERSION - 1 })).toBe(true);
     expect(needsCatalogNormalizationRepair({ catalogNormalizationVersion: CATALOG_NORMALIZATION_VERSION })).toBe(false);
+  });
+});
+
+describe("tag weight export", () => {
+  it("adds valid exported weights without removing existing catalog weights", () => {
+    const catalog = [{
+      id: 7,
+      display_title: "Weighted title",
+      cover: null,
+      year: 2024,
+      status: "releasing",
+      content_rating: "safe",
+      total_chapters: "10",
+      tag_ids: [1, 2],
+      tag_weights: { 1: "core" },
+      stats: { popularity: null, favourites: null, meanScore: null },
+      analytics: {},
+      source: { anilist: { id: 7 } },
+    }];
+
+    const enriched = applyTagWeightExport(catalog, [
+      { id: 7, tag_weights: { "2": "defining", "bad": { value: "ignored" } } },
+      { id: "bad", tag_weights: { "3": "incidental" } },
+    ]);
+
+    expect(enriched[0].tag_weights).toEqual({ 1: "core", 2: "defining" });
+  });
+
+  it("does not attach the AniList weight export to non-AniList records", () => {
+    const catalog = [{
+      id: 8,
+      display_title: "Non-AniList title",
+      cover: null,
+      year: 2024,
+      status: "releasing",
+      content_rating: "safe",
+      total_chapters: "10",
+      tag_ids: [1],
+      stats: { popularity: null, favourites: null, meanScore: null },
+      analytics: {},
+      source: { mangaupdates: { id: "8", url: null } },
+    }];
+
+    const enriched = applyTagWeightExport(catalog, [{ id: 8, tag_weights: { "1": "incidental" } }]);
+
+    expect(enriched[0].tag_weights).toBeUndefined();
   });
 });

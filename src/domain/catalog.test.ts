@@ -49,6 +49,15 @@ describe("catalog normalization", () => {
     expect(normalized.history[String(normalized.catalog[0].id)]).toHaveLength(2);
   });
 
+  it("keeps tag weights when duplicate records are normalized together", () => {
+    const normalized = normalizeCatalog([
+      { ...base, id: 1, tag_weights: { 1: "core" } },
+      { ...base, id: 2, display_title: "Duplicate", tag_weights: { 2: "defining" } },
+    ], history);
+
+    expect(normalized.catalog[0].tag_weights).toEqual({ 1: "core", 2: "defining" });
+  });
+
   it("keeps an estimated release date instead of using the first history date", () => {
     const normalized = normalizeCatalog([base], history);
     expect(normalized.catalog[0].published?.start_date).toBe("2020-01-01");

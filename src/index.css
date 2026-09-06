@@ -432,6 +432,25 @@ a {
   cursor: pointer;
 }
 
+.tag-weight-filter {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.tag-weight-options {
+  gap: 6px;
+}
+
+.tag-weight-chip {
+  min-height: 30px;
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.045);
+}
+
 .label-chips {
   gap: 5px;
 }

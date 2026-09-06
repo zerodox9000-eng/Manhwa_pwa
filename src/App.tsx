@@ -52,7 +52,7 @@ import {
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { checkCoverResponse, ResilientCoverImage } from "./components/ResilientCoverImage";
-import { createCustomFeed, createFeed, DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS, metricSlotsToRestoreForFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
+import { createCustomFeed, createFeed, DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS, isNovelBasedFeed, metricSlotsToRestoreForFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
 import {
   CHAPTER_PRESETS,
   FAN_RANK_PRESETS,
@@ -85,6 +85,7 @@ import { formatMetricValue, historyDeltaForWindow, isGrowthMetric, METRIC_DEFINI
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
 import { decodeSharePayload, makeShareUrl, makeTitleShareUrl, type SharePayload } from "./domain/share";
+import { TAG_WEIGHT_TYPES } from "./domain/types";
 import type {
   AppSettings,
   AppStateSnapshot,
@@ -102,6 +103,7 @@ import type {
   SeriesDetail,
   SourceMode,
   TagNode,
+  TagWeightType,
   UserLabel,
 } from "./domain/types";
 import { fetchSeriesDetail } from "./services/dataService";
@@ -3111,6 +3113,7 @@ function FeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (f
 function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Feed) => void; onCancel: () => void }) {
   const isDesktop = useDesktopLayout();
   const [view, setView] = useState<FeedViewSettings>(() => structuredClone(feed.view));
+  const [tagWeightTypes, setTagWeightTypes] = useState<TagWeightType[]>(() => feed.filters.tagWeightTypes ?? [...TAG_WEIGHT_TYPES]);
   const [statuses, setStatuses] = useState<string[]>(() =>
     feed.filters.statuses.filter((status) => status === "completed" || status === "hiatus"),
   );
@@ -3186,6 +3189,14 @@ function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onS
         value={requireOfficialEnglishLink}
         onChange={setRequireOfficialEnglishLink}
       />
+      {feed.filters.includeTagIds.length > 0 && !isNovelBasedFeed(feed) ? (
+        <>
+          <h2 className="section-title">Tags</h2>
+          <TagWeightToggles activeTypes={tagWeightTypes} onToggle={(type) => setTagWeightTypes((current) => current.includes(type)
+            ? current.filter((item) => item !== type)
+            : [...current, type])} />
+        </>
+      ) : null}
       <div className="toolbar feed-editor-actions">
         <button className="button" type="button" onClick={onCancel}>
           Cancel
@@ -3197,7 +3208,7 @@ function DefaultFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onS
           onClick={() => onSave({
             ...feed,
             view,
-            filters: { ...feed.filters, statuses, requireOfficialEnglishLink },
+            filters: { ...feed.filters, statuses, requireOfficialEnglishLink, tagWeightTypes },
           })}
         >
           Save
@@ -3563,6 +3574,39 @@ function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSa
   );
 }
 
+function TagWeightToggles({
+  activeTypes,
+  onToggle,
+}: {
+  activeTypes?: TagWeightType[];
+  onToggle: (type: TagWeightType) => void;
+}) {
+  const active = new Set(activeTypes ?? TAG_WEIGHT_TYPES);
+
+  return (
+    <div className="tag-weight-filter">
+      <span className="small-label">Tag weights</span>
+      <div className="chips tag-weight-options" role="group" aria-label="Tag weight types">
+        {TAG_WEIGHT_TYPES.map((type) => {
+          const enabled = active.has(type);
+          return (
+            <button
+              className={`chip chipbutton tag-weight-chip ${enabled ? "active" : ""}`}
+              type="button"
+              key={type}
+              aria-pressed={enabled}
+              onClick={() => onToggle(type)}
+            >
+              {type[0].toUpperCase() + type.slice(1)}
+            </button>
+          );
+        })}
+      </div>
+      <p className="muted tiny">Included tags use the enabled weights. Excluded tags always stay excluded.</p>
+    </div>
+  );
+}
+
 function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Feed) => void; onCancel: () => void }) {
   const store = useAppStore();
   const [draft, setDraft] = useState<Feed>(() => structuredClone(feed));
@@ -3589,6 +3633,15 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
 
   const updateFilters = (patch: Partial<Feed["filters"]>) => {
     setDraft((current) => ({ ...current, filters: { ...current.filters, ...patch } }));
+  };
+  const toggleTagWeightType = (type: TagWeightType) => {
+    setDraft((current) => {
+      const activeTypes = current.filters.tagWeightTypes ?? [...TAG_WEIGHT_TYPES];
+      const tagWeightTypes = activeTypes.includes(type)
+        ? activeTypes.filter((item) => item !== type)
+        : [...activeTypes, type];
+      return { ...current, filters: { ...current.filters, tagWeightTypes } };
+    });
   };
   const updateView = (patch: Partial<FeedViewSettings>) => {
     setDraft((current) => ({ ...current, view: { ...current.view, ...patch } }));
@@ -3682,6 +3735,10 @@ function FeedEditor({ feed, onSave, onCancel }: { feed: Feed; onSave: (feed: Fee
       />
 
       <h2 className="section-title">Tags</h2>
+      <TagWeightToggles
+        activeTypes={draft.filters.tagWeightTypes}
+        onToggle={toggleTagWeightType}
+      />
       {showMoreTags ? (
         <div className="field">
           <label>Tag search</label>

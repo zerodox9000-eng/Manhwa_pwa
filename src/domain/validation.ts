@@ -8,6 +8,7 @@ import type {
   SeriesDetail,
   TagNode,
 } from "./types";
+import { TAG_WEIGHT_TYPES } from "./types";
 
 const stringNull = z.union([z.string(), z.null(), z.undefined()]).transform((value) => (value == null ? null : value));
 const booleanNull = z.union([z.boolean(), z.null(), z.undefined()]).transform((value) => (value == null ? null : value));
@@ -187,6 +188,7 @@ const feedFiltersSchema = z
     includeTagIds: z.array(z.number()).optional(),
     excludeTagIds: z.array(z.number()).optional(),
     tagMatch: z.enum(["any", "all"]).optional(),
+    tagWeightTypes: z.array(z.enum(TAG_WEIGHT_TYPES)).optional(),
     contentRatings: z.array(z.enum(["safe", "suggestive", "erotica", "pornographic"])).optional(),
     statuses: z.array(z.string()).optional(),
     minChapters: numberNull.optional(),

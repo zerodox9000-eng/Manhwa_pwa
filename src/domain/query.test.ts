@@ -236,6 +236,103 @@ describe("runFeedQuery", () => {
     expect(result.items.map((item) => item.id)).toEqual([45]);
   });
 
+  it("filters selected tag rules by the enabled MangaBaka weight types", () => {
+    const feed = createFeed("weighted tags");
+    feed.filters.sourceModes = ["anilist"];
+    feed.filters.includeTagIds = [1];
+    feed.filters.excludeTagIds = [];
+    const weightedSeries = [
+      { ...baseSeries[0], id: 101, source: { anilist: { id: 101 } }, tag_weights: { 1: "core" } },
+      { ...baseSeries[0], id: 102, source: { anilist: { id: 102 } }, tag_weights: { 1: "incidental" } },
+      { ...baseSeries[0], id: 103, source: { anilist: { id: 103 } } },
+    ];
+    const query = () => runFeedQuery({
+      feed,
+      series: weightedSeries,
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+      metaHistoryFirst: "2024-05-01",
+      metaHistoryLast: "2024-05-10",
+    });
+
+    expect(query().items.map((item) => item.id).sort()).toEqual([101, 102, 103]);
+
+    feed.filters.tagWeightTypes = ["core"];
+    expect(query().items.map((item) => item.id)).toEqual([101]);
+
+    feed.filters.tagWeightTypes = ["incidental"];
+    expect(query().items.map((item) => item.id)).toEqual([102]);
+
+    feed.filters.tagWeightTypes = [];
+    expect(query().items).toEqual([]);
+  });
+
+  it("does not apply AniList tag weights to non-AniList or OEL records", () => {
+    const feed = createFeed("weighted non-AniList tags");
+    feed.filters.sourceMode = "mixed";
+    feed.filters.sourceModes = ["non-anilist", "oel"];
+    feed.filters.includeTagIds = [1];
+    feed.filters.tagWeightTypes = ["core"];
+    feed.sort = [{ id: "year", metric: "year", direction: "desc" }];
+    feed.view.metricSlots = ["year"];
+
+    const result = runFeedQuery({
+      feed,
+      series: [
+        {
+          ...baseSeries[0],
+          id: 501,
+          display_title: "Non-AniList tagged",
+          stats: { popularity: null, favourites: null, meanScore: null },
+          source: { mangaupdates: { id: "non-anilist", url: null } },
+          tag_ids: [1],
+          tag_weights: { 1: "incidental" },
+        },
+        {
+          ...baseSeries[0],
+          id: 502,
+          display_title: "OEL tagged",
+          type: "oel",
+          stats: { popularity: null, favourites: null, meanScore: null },
+          source: { mangaupdates: { id: "oel", url: null } },
+          tag_ids: [1],
+          tag_weights: { 1: "incidental" },
+        },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+    });
+
+    expect(result.items.map((item) => item.id).sort()).toEqual([501, 502]);
+  });
+
+  it("keeps excluded tags excluded regardless of the enabled weights", () => {
+    const feed = createFeed("weighted exclusions");
+    feed.filters.sourceModes = ["anilist"];
+    feed.filters.includeTagIds = [];
+    feed.filters.excludeTagIds = [1];
+    feed.filters.tagWeightTypes = ["incidental"];
+    const result = runFeedQuery({
+      feed,
+      series: [
+        { ...baseSeries[0], id: 111, source: { anilist: { id: 111 } }, tag_weights: { 1: "core" } },
+        { ...baseSeries[0], id: 112, source: { anilist: { id: 112 } }, tag_weights: { 1: "incidental" } },
+      ],
+      tags,
+      history,
+      labels: [],
+      settings: DEFAULT_SETTINGS,
+      metaHistoryFirst: "2024-05-01",
+      metaHistoryLast: "2024-05-10",
+    });
+
+    expect(result.items).toEqual([]);
+  });
+
   it("does not hide child-only tags when a sensitive parent is excluded", () => {
     const feed = createFeed("exact sensitive");
     const result = runFeedQuery({

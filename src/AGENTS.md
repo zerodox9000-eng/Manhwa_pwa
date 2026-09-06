@@ -15,6 +15,7 @@ Owns the frontend application source: React routes, UI, domain rules, data loadi
 
 - Read the root AGENTS.md first.
 - Keep frontend data consumption compatible with `manhwa_db/db/exports/frontend`.
+- The optional frontend-safe `meta/mangabaka-tag-weights.safe-suggestive-anilist.json` dataset may enrich AniList-backed catalogue records with MangaBaka tag weights. Weight filters are saved per feed; new feeds enable all five types, built-in tag feeds default to `core` and `defining`, Novel Based feeds do not use the weight filter, and Political, Female Empowerment, Second Chance, and Non-Human default to all five. Missing weight data must preserve the all-types tag behavior for AniList entries, and weight filters must never weaken excluded-tag rules or affect non-AniList/OEL entries.
 - Prefer the optional chunked `weeklyHistory` dataset for runtime growth and fall back to full `history` for older manifests. Recommendation descriptors are optional; recommendations remain suspended and must not be downloaded during normal sync.
 - Do not make the frontend read backend raw, processed, enrichment, cache, or state files.
 - Release-date sorting and date-window filters use only `published.start_date`. Estimated start dates remain in their estimated chronological position; titles without a start date are excluded, and discovery/update timestamps are never substituted. A catalogue-normalization version may trigger one deliberate cache repair when a shipped rule previously stored incorrect date values; it must not become a general app-version sync trigger.

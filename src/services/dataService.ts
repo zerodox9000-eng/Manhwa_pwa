@@ -6,7 +6,8 @@ import { parseCatalogList, parseDetail, parseHistory, parseTags } from "../domai
 import { decodeJsonBytes, fetchChunkedFrontendData, parseFrontendDataManifest } from "./chunkedData";
 
 // Bump only when stored catalogue records need a one-time repair after a frontend rule change.
-export const CATALOG_NORMALIZATION_VERSION = 3;
+export const CATALOG_NORMALIZATION_VERSION = 4;
+const TAG_WEIGHT_EXPORT_PATH = "meta/mangabaka-tag-weights.safe-suggestive-anilist.json";
 
 export function needsCatalogNormalizationRepair(meta: Pick<SyncMeta, "catalogNormalizationVersion"> | null | undefined) {
   return meta?.catalogNormalizationVersion !== CATALOG_NORMALIZATION_VERSION;
@@ -60,6 +61,64 @@ function indexCatalog(catalog: SeriesCatalog[] | null | undefined) {
   return index;
 }
 
+function isAniListBacked(item: SeriesCatalog) {
+  return item.source?.anilist?.id != null;
+}
+
+function parseTagWeightExport(value: unknown) {
+  const weightsBySeriesId = new Map<number, Record<number, number | string>>();
+  if (!Array.isArray(value)) return weightsBySeriesId;
+
+  for (const row of value) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+    const seriesId = Number((row as { id?: unknown }).id);
+    const rawWeights = (row as { tag_weights?: unknown }).tag_weights;
+    if (!Number.isSafeInteger(seriesId) || !rawWeights || typeof rawWeights !== "object" || Array.isArray(rawWeights)) continue;
+
+    const tagWeights: Record<number, number | string> = {};
+    for (const [rawTagId, weight] of Object.entries(rawWeights)) {
+      const tagId = Number(rawTagId);
+      if (Number.isSafeInteger(tagId) && (typeof weight === "number" || typeof weight === "string")) {
+        tagWeights[tagId] = weight;
+      }
+    }
+    if (Object.keys(tagWeights).length > 0) weightsBySeriesId.set(seriesId, tagWeights);
+  }
+
+  return weightsBySeriesId;
+}
+
+export function applyTagWeightExport(catalog: SeriesCatalog[], value: unknown) {
+  const weightsBySeriesId = parseTagWeightExport(value);
+  return catalog.map((item) => {
+    if (!isAniListBacked(item)) return item;
+    const exportedWeights = weightsBySeriesId.get(item.id);
+    if (!exportedWeights) return item;
+    return {
+      ...item,
+      tag_weights: {
+        ...(item.tag_weights ?? {}),
+        ...exportedWeights,
+      },
+    };
+  });
+}
+
+async function fetchOptionalTagWeightExport(preferredSource: string) {
+  const candidates = DATA_SOURCE_CANDIDATES.includes(preferredSource)
+    ? detailSourceCandidates(preferredSource)
+    : [preferredSource];
+  for (const candidate of candidates) {
+    try {
+      const value = await fetchJson<unknown>(candidate, TAG_WEIGHT_EXPORT_PATH, true);
+      if (parseTagWeightExport(value).size > 0) return value;
+    } catch {
+      // Older or custom frontend exports may not include the optional weight dataset.
+    }
+  }
+  return null;
+}
+
 function mergeLiveCatalog(
   liveCatalog: SeriesCatalog[],
   previousCatalog: SeriesCatalog[] | null,
@@ -73,6 +132,9 @@ function mergeLiveCatalog(
     return {
       ...catalog,
       anilist_first_seen_at: fixedLive.anilist_first_seen_at ?? previous?.anilist_first_seen_at ?? null,
+      // Weight exports are optional and authoritative for the current sync. Do not
+      // carry old classifications into a newer catalogue/export.
+      tag_weights: fixedLive.tag_weights ?? null,
     };
   });
 }
@@ -181,12 +243,18 @@ export async function syncFrontendData(
     chunkedData?.catalog ??
     await fetchJsonValidated(source, "series/all.json", parseCatalogList, true);
 
+  onProgress?.("Loading tag weights");
+  const liveCatalogWithWeights = applyTagWeightExport(
+    liveCatalog,
+    await fetchOptionalTagWeightExport(source),
+  );
+
   onProgress?.("Preparing search fields");
 
   const cachedCatalog = parseCatalogList(await db.catalog.toArray());
   const cachedIndex = indexCatalog(cachedCatalog);
 
-  const mergedCatalog = mergeLiveCatalog(liveCatalog, cachedCatalog);
+  const mergedCatalog = mergeLiveCatalog(liveCatalogWithWeights, cachedCatalog);
 
   onProgress?.("Downloading tags");
 
