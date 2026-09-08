@@ -2313,6 +2313,56 @@ function GenreChips({ series, tagsById }: { series: SeriesCatalog; tagsById: Map
   );
 }
 
+const DETAIL_TAG_GROUPS: ReadonlyArray<{
+  key: string;
+  label: string;
+  weights: readonly TagWeightType[];
+}> = [
+  { key: "core-defining", label: "Core & defining", weights: ["core", "defining"] },
+  { key: "recurrent-incidental", label: "Recurrent & incidental", weights: ["recurrent", "incidental"] },
+  { key: "unweighted", label: "Unweighted", weights: ["unweighted"] },
+];
+
+function detailTagWeight(value: number | string | null | undefined): TagWeightType {
+  const normalized = String(value ?? "").trim().toLocaleLowerCase();
+  return TAG_WEIGHT_TYPES.includes(normalized as TagWeightType)
+    ? normalized as TagWeightType
+    : "unweighted";
+}
+
+function DetailTagGroups({ series, tagsById }: { series: SeriesCatalog; tagsById: Map<number, TagNode> }) {
+  const tags = series.tag_ids
+    .map((tagId) => {
+      const tag = tagsById.get(tagId);
+      return tag ? { tag, weight: detailTagWeight(series.tag_weights?.[tagId]) } : null;
+    })
+    .filter((entry): entry is { tag: TagNode; weight: TagWeightType } => Boolean(entry));
+
+  return (
+    <div className="detail-tag-groups">
+      {DETAIL_TAG_GROUPS.map((group) => {
+        const groupTags = tags.filter((entry) => group.weights.includes(entry.weight));
+        if (groupTags.length === 0) return null;
+        return (
+          <div className={`detail-tag-group detail-tag-group-${group.key}`} key={group.key}>
+            <h3 className="detail-tag-group-title">
+              <span>{group.label}</span>
+              <span className="detail-tag-group-count">{groupTags.length}</span>
+            </h3>
+            <div className="chips">
+              {groupTags.map(({ tag }) => (
+                <span className="chip" key={tag.id}>
+                  {tag.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function TitleCard({
   series,
   rank,
@@ -5263,6 +5313,7 @@ function TitleDetailPage() {
           authors: catalogItem.authors?.length ? catalogItem.authors : detail.authors,
           artists: catalogItem.artists?.length ? catalogItem.artists : detail.artists,
           links: { ...(detail.links ?? {}), ...(catalogItem.links ?? {}) },
+          tag_weights: { ...(detail.tag_weights ?? {}), ...(catalogItem.tag_weights ?? {}) },
         }
       : { ...detail, display_title: localTitle };
   }, [catalogItem, detail, id]);
@@ -5331,16 +5382,7 @@ function TitleDetailPage() {
   const detailAllTags = series && visible.allTags ? (
     <section className="detail-block detail-all-tags">
       <h2 className="section-title">Tags</h2>
-      <div className="chips">
-        {series.tag_ids
-          .map((tagId) => tagsById.get(tagId))
-          .filter(Boolean)
-          .map((tag) => (
-            <span className="chip" key={tag!.id}>
-              {tag!.name}
-            </span>
-          ))}
-      </div>
+      <DetailTagGroups series={series} tagsById={tagsById} />
     </section>
   ) : null;
   const detailIdentityPrimary = series ? (
