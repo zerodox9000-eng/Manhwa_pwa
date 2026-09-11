@@ -84,6 +84,7 @@ import { matchesSearchTextWords, rankedDirectSearchMatches, searchTextWordPositi
 import { formatMetricValue, historyDeltaForWindow, isGrowthMetric, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
+import { readingPlatformName } from "./domain/readingPlatforms";
 import { decodeSharePayload, makeShareUrl, makeTitleShareUrl, type SharePayload } from "./domain/share";
 import { TAG_WEIGHT_TYPES } from "./domain/types";
 import type {
@@ -478,35 +479,6 @@ function faviconForUrl(href: string) {
     return `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=32`;
   } catch {
     return "";
-  }
-}
-
-const READING_PLATFORM_NAMES: Record<string, string> = {
-  "comics.inkr.com": "INKR Comics",
-  "daycomics.com": "DAYcomics",
-  "global.toomics.com": "Toomics",
-  "lezhin.com": "Lezhin Comics",
-  "lezhinus.com": "Lezhin Comics",
-  "lezhinx.com": "Lezhin X",
-  "m.tapas.io": "Tapas",
-  "m.webnovel.com": "WebNovel",
-  "mangaplaza.com": "MangaPlaza",
-  "mangatoon.mobi": "MangaToon",
-  "manta.net": "Manta",
-  "tapas.io": "Tapas",
-  "tappytoon.com": "Tappytoon",
-  "toomics.com": "Toomics",
-  "webcomicsapp.com": "WebComics",
-  "webnovel.com": "WebNovel",
-  "webtoons.com": "WEBTOON",
-};
-
-function readingPlatformName(href: string) {
-  try {
-    const hostname = new URL(href).hostname.toLowerCase().replace(/^www\./, "");
-    return READING_PLATFORM_NAMES[hostname] ?? hostname;
-  } catch {
-    return "Official English";
   }
 }
 
