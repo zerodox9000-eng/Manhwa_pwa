@@ -90,11 +90,19 @@ export function historyDeltaForWindow(seriesId: number, metric: MetricId, histor
     if (metric.includes("discoveryScore")) return entry.ds;
     return null;
   };
-  const a = read(start);
+  const a = isNewCurrentObservation(entries, to) && isRawCountGrowthMetric(metric) ? 0 : read(start);
   const b = read(end);
   if (a == null || b == null) return null;
   if (metric.includes("Percent") && a !== 0) return ((b - a) / a) * 100;
   return b - a;
+}
+
+function isRawCountGrowthMetric(metric: MetricId) {
+  return metric === "popularityGrowth" || metric === "favouritesGrowth";
+}
+
+function isNewCurrentObservation(entries: HistoryMap[string], currentDate?: string | null) {
+  return entries.length === 1 && Boolean(currentDate) && entries[0]?.d === currentDate;
 }
 
 export function metricValue(series: SeriesCatalog, metric: MetricId, history: HistoryMap = {}, latestDate?: string | null) {
@@ -147,9 +155,10 @@ export function metricValue(series: SeriesCatalog, metric: MetricId, history: Hi
     ds: analytics.fanFavouriteDiscoveryScore ?? latestHistory?.ds,
     dp: analytics.fanFavouriteDiscoveryPercentile ?? latestHistory?.dp,
   };
-  if (metric === "popularityGrowth") return delta(current.p, earliest.p);
+  const isNewObservation = isNewCurrentObservation(entries, latestDate);
+  if (metric === "popularityGrowth") return isNewObservation ? current.p ?? -Infinity : delta(current.p, earliest.p);
   if (metric === "popularityGrowthPercent") return percent(current.p, earliest.p);
-  if (metric === "favouritesGrowth") return delta(current.f, earliest.f);
+  if (metric === "favouritesGrowth") return isNewObservation ? current.f ?? -Infinity : delta(current.f, earliest.f);
   if (metric === "favouritesGrowthPercent") return percent(current.f, earliest.f);
   if (metric === "meanScoreDelta") return delta(current.s, earliest.s);
   if (metric === "fanFavouriteDelta") return delta(current.r, earliest.r);

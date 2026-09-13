@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatMetricValue, metricValue } from "./metrics";
+import { formatMetricValue, historyDeltaForWindow, metricValue } from "./metrics";
 import type { SeriesCatalog } from "./types";
 
 const series: SeriesCatalog = {
@@ -86,4 +86,21 @@ describe("metrics", () => {
     expect(metricValue(missingReleaseDate, "releaseDate")).toBe(-Infinity);
     expect(formatMetricValue(missingReleaseDate, "releaseDate")).toBe("n/a");
   });
+
+  it("uses zero as the baseline for raw count growth with one AniList observation", () => {
+    const newlyObserved: SeriesCatalog = {
+      ...series,
+      id: 6,
+      stats: { popularity: 260, favourites: 3, meanScore: 71 },
+    };
+    const oneObservation = {
+      "6": [{ d: "2026-09-13", p: 260, f: 3, s: 71, r: 1.1538, rp: 50, pp: 56.7, ds: 47.7, dp: 56.1 }],
+    };
+
+    expect(metricValue(newlyObserved, "popularityGrowth", oneObservation, "2026-09-13")).toBe(260);
+    expect(metricValue(newlyObserved, "favouritesGrowth", oneObservation, "2026-09-13")).toBe(3);
+    expect(historyDeltaForWindow(6, "popularityGrowth", oneObservation, "2026-09-06", "2026-09-13")).toBe(260);
+    expect(historyDeltaForWindow(6, "favouritesGrowth", oneObservation, "2026-09-06", "2026-09-13")).toBe(3);
+  });
+
 });
