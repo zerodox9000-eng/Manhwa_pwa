@@ -60,6 +60,7 @@ import {
   WEEKLY_GROWTH_PERIOD,
   PERIOD_PRESETS,
   PERIOD_PURPOSES,
+  PRE_2014_RELEASE_YEAR_PRESET,
   POPULARITY_PRESETS,
   releaseYearPresets,
   selectPeriodPreset,
@@ -3495,7 +3496,7 @@ function ReleaseYearPresetControl({ filters, onChange }: { filters: Feed["filter
             aria-pressed={selected.has(year)}
             onClick={() => onChange(toggleReleaseYearPreset(filters, year))}
           >
-            <span>{year}</span>
+            <span>{year === PRE_2014_RELEASE_YEAR_PRESET ? "Pre-2014" : year}</span>
           </button>
         ))}
       </div>

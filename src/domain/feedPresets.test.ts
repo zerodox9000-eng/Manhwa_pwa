@@ -4,6 +4,7 @@ import {
   CHAPTER_PRESETS,
   FAN_RANK_PRESETS,
   PERIOD_PRESETS,
+  PRE_2014_RELEASE_YEAR_PRESET,
   POPULARITY_PRESETS,
   releaseYearPresets,
   selectPeriodPreset,
@@ -152,12 +153,29 @@ describe("feed presets", () => {
     feed.filters = toggleReleaseYearPreset(feed.filters, 2026);
     feed.filters = toggleReleaseYearPreset(feed.filters, 2024);
 
-    expect(releaseYearPresets(2026)).toEqual([2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015, 2014]);
+    expect(releaseYearPresets(2026)).toEqual([2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015, 2014, PRE_2014_RELEASE_YEAR_PRESET]);
     expect(selectedReleaseYearPresets(feed.filters)).toEqual([2026, 2024]);
     expect(feed.filters).toMatchObject({ minYear: null, maxYear: null });
     expect(feed.filters.metricRanges).toMatchObject([
       { metric: "year", min: 2026, max: 2026 },
       { metric: "year", min: 2024, max: 2024 },
+    ]);
+  });
+
+  it("selects the Pre-2014 range as one independent release-year preset", () => {
+    const feed = createFeed();
+    feed.filters = toggleReleaseYearPreset(feed.filters, PRE_2014_RELEASE_YEAR_PRESET);
+
+    expect(selectedReleaseYearPresets(feed.filters)).toEqual([PRE_2014_RELEASE_YEAR_PRESET]);
+    expect(feed.filters).toMatchObject({ minYear: null, maxYear: null });
+    expect(feed.filters.metricRanges).toEqual([
+      { id: "preset:release-year:pre-2014", metric: "year", min: null, max: 2013 },
+    ]);
+
+    feed.filters = toggleReleaseYearPreset(feed.filters, 2014);
+    expect(feed.filters.metricRanges).toEqual([
+      { id: "preset:release-year:2014", metric: "year", min: 2014, max: 2014 },
+      { id: "preset:release-year:pre-2014", metric: "year", min: null, max: 2013 },
     ]);
   });
 });

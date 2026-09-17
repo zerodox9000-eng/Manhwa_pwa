@@ -88,8 +88,10 @@ const optionsByGroup: Record<PresetGroup, FeedPresetOption[]> = {
   chapters: CHAPTER_PRESETS,
 };
 
+export const PRE_2014_RELEASE_YEAR_PRESET = "pre-2014" as const;
+export type ReleaseYearPreset = number | typeof PRE_2014_RELEASE_YEAR_PRESET;
 const presetId = (group: PresetGroup, id: string) => `preset:${group}:${id}`;
-const releaseYearPresetId = (year: number) => `preset:release-year:${year}`;
+const releaseYearPresetId = (year: ReleaseYearPreset) => `preset:release-year:${year}`;
 
 export function isFeedPresetRange(range: MetricRange) {
   return range.id.startsWith("preset:");
@@ -101,25 +103,37 @@ export function selectedFeedPresetIds(filters: FeedFilters, group: PresetGroup) 
 }
 
 export function releaseYearPresets(currentYear = new Date().getFullYear()) {
-  return Array.from({ length: Math.max(0, currentYear - 2013) }, (_, index) => currentYear - index);
+  return [
+    ...Array.from({ length: Math.max(0, currentYear - 2013) }, (_, index) => currentYear - index),
+    PRE_2014_RELEASE_YEAR_PRESET,
+  ];
 }
 
 export function selectedReleaseYearPresets(filters: FeedFilters) {
   return (filters.metricRanges ?? [])
-    .filter((range) => range.id.startsWith("preset:release-year:") && range.metric === "year" && range.min === range.max)
-    .map((range) => range.min)
-    .filter((year): year is number => year != null);
+    .filter((range) => range.id.startsWith("preset:release-year:") && range.metric === "year")
+    .map((range): ReleaseYearPreset | null => {
+      if (range.id === releaseYearPresetId(PRE_2014_RELEASE_YEAR_PRESET)) return PRE_2014_RELEASE_YEAR_PRESET;
+      return range.min != null && range.min === range.max ? range.min : null;
+    })
+    .filter((year): year is ReleaseYearPreset => year != null);
 }
 
-export function toggleReleaseYearPreset(filters: FeedFilters, year: number) {
+export function toggleReleaseYearPreset(filters: FeedFilters, year: ReleaseYearPreset) {
   const selected = new Set(selectedReleaseYearPresets(filters));
   if (selected.has(year)) selected.delete(year);
   else selected.add(year);
   const metricRanges = [
     ...(filters.metricRanges ?? []).filter((range) => range.metric !== "year"),
     ...[...selected]
-      .sort((left, right) => right - left)
-      .map((value) => ({ id: releaseYearPresetId(value), metric: "year" as const, min: value, max: value })),
+      .sort((left, right) => {
+        if (left === PRE_2014_RELEASE_YEAR_PRESET) return 1;
+        if (right === PRE_2014_RELEASE_YEAR_PRESET) return -1;
+        return right - left;
+      })
+      .map((value) => value === PRE_2014_RELEASE_YEAR_PRESET
+        ? { id: `preset:release-year:${PRE_2014_RELEASE_YEAR_PRESET}`, metric: "year" as const, min: null, max: 2013 }
+        : { id: releaseYearPresetId(value), metric: "year" as const, min: value, max: value }),
   ];
   return { ...filters, minYear: null, maxYear: null, metricRanges };
 }
