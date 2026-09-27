@@ -17,6 +17,11 @@ const series: SeriesCatalog = {
 };
 
 describe("metrics", () => {
+  it("exposes an optional recent chapter increase date as a sortable value", () => {
+    expect(metricValue({ ...series, last_chapter_increase_date: "2026-09-27" }, "lastChapterIncreaseDate")).toBe("2026-09-27");
+    expect(metricValue(series, "lastChapterIncreaseDate")).toBeNull();
+  });
+
   it("does not expose future release or end dates as active metric values", () => {
     expect(metricValue(series, "releaseDate")).toBe(-Infinity);
     expect(metricValue(series, "endDate")).toBe(-Infinity);

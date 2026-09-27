@@ -113,6 +113,7 @@ const seriesCatalogSchema = z
     created_at: stringNull.default(null),
     added_at: stringNull.default(null),
     last_updated_at: stringNull.default(null),
+    last_chapter_increase_date: z.string().optional(),
     mangabaka_latest_rank: numberNull.default(null),
     mangabaka_latest_snapshot_at: stringNull.default(null),
     authors: z.array(z.string()).optional(),

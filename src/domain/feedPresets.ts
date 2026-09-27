@@ -65,6 +65,11 @@ export const SORT_PRESETS: ReadonlyArray<{ id: string; label: string; metric: Me
   { id: "fan-rank-growth", label: "Fan Rank Growth", metric: "discoveryPercentileDelta" },
 ];
 
+export const CUSTOM_SORT_PRESETS = [
+  ...SORT_PRESETS,
+  { id: "chapter-increase", label: "Chapter increase", metric: "lastChapterIncreaseDate" as const },
+];
+
 export const PERIOD_PRESETS = [
   { id: "week", label: "1 Week", amount: 1, unit: "weeks" },
   { id: "month", label: "1 Month", amount: 1, unit: "months" },
@@ -186,18 +191,29 @@ export function selectStatusPreset(filters: FeedFilters, id: string) {
   return { ...filters, statuses: option.value == null ? [] : [option.value] };
 }
 
-export function selectedSortPresetId(sort: SortRule[]) {
+export function selectedSortPresetId(
+  sort: SortRule[],
+  presets: ReadonlyArray<{ id: string; label: string; metric: MetricId }> = SORT_PRESETS,
+) {
   if (sort.length !== 1) return null;
-  return SORT_PRESETS.find((option) => option.metric === sort[0].metric)?.id ?? null;
+  return presets.find((option) => option.metric === sort[0].metric)?.id ?? null;
 }
 
-export function selectSortPreset(sort: SortRule[], id: string): SortRule[] {
-  const option = SORT_PRESETS.find((item) => item.id === id);
+export function selectSortPreset(
+  sort: SortRule[],
+  id: string,
+  presets: ReadonlyArray<{ id: string; label: string; metric: MetricId }> = SORT_PRESETS,
+): SortRule[] {
+  const option = presets.find((item) => item.id === id);
   if (!option) return sort;
   return [{
     id: sort[0]?.id ?? `sort:preset:${id}`,
     metric: option.metric,
-    direction: option.metric === "mangabakaLatestRank" ? "asc" : sort[0]?.direction ?? "desc",
+    direction: option.metric === "mangabakaLatestRank"
+      ? "asc"
+      : option.metric === "lastChapterIncreaseDate"
+        ? "desc"
+        : sort[0]?.direction ?? "desc",
   }];
 }
 

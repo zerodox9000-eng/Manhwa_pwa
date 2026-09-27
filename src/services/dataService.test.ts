@@ -3,17 +3,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("../db/appDb", () => ({
   db: {
     details: { get: vi.fn(async () => undefined), put: vi.fn(async () => undefined) },
-    catalog: { get: vi.fn(async () => undefined) },
+    catalog: { get: vi.fn(async () => undefined), toArray: vi.fn(async () => []), bulkPut: vi.fn(async () => undefined) },
+    tags: { toArray: vi.fn(async () => []) },
+    history: { toArray: vi.fn(async () => []) },
     meta: { get: vi.fn(async () => undefined), put: vi.fn(async () => undefined) },
   },
+  loadSyncMeta: vi.fn(async () => null),
   saveSyncMeta: vi.fn(),
 }));
 
-import { applyTagWeightExport, CATALOG_NORMALIZATION_VERSION, detailSourceCandidates, fetchSeriesDetail, loadCachedUpdatesSnapshot, mergeLiveCatalog, needsCatalogNormalizationRepair } from "./dataService";
-import { db } from "../db/appDb";
+import { applyChapterIncreaseDates, applyTagWeightExport, CATALOG_NORMALIZATION_VERSION, detailSourceCandidates, fetchSeriesDetail, loadCachedData, loadCachedUpdatesSnapshot, mergeLiveCatalog, needsCatalogNormalizationRepair } from "./dataService";
+import { db, loadSyncMeta } from "../db/appDb";
 import { normalizeCatalog } from "../domain/catalog";
 import { parseCatalogList } from "../domain/validation";
-import type { SeriesCatalog } from "../domain/types";
+import type { SeriesCatalog, SyncMeta } from "../domain/types";
+import type { UpdatesExport } from "../domain/trends";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -70,7 +74,7 @@ describe("bounded detail requests", () => {
 });
 
 describe("versioned Updates snapshots", () => {
-  const payload = (generatedAt: string) => ({
+  const payload = (generatedAt: string): UpdatesExport => ({
     schemaVersion: 1 as const,
     generatedAt,
     latestDate: new Date().toISOString().slice(0, 10),
@@ -101,6 +105,89 @@ describe("versioned Updates snapshots", () => {
     });
 
     await expect(loadCachedUpdatesSnapshot("chunked-current")).resolves.toBeNull();
+  });
+
+  it("uses fresh Updates chapter dates in the cached catalogue and saves them for later sorts", async () => {
+    const catalog: SeriesCatalog[] = [{
+      id: 3036,
+      display_title: "Manager Kim",
+      cover: null,
+      year: 2016,
+      status: "releasing",
+      content_rating: "safe",
+      total_chapters: "260",
+      tag_ids: [],
+      stats: { popularity: 10_152, favourites: null, meanScore: null },
+      analytics: {},
+    }];
+    const updates = payload(new Date().toISOString());
+    updates.chapters.push({ id: 3036, date: "2026-09-22", from: 259, to: 260 });
+    vi.mocked(db.catalog.toArray).mockResolvedValueOnce(catalog);
+    vi.mocked(loadSyncMeta).mockResolvedValueOnce({
+      lastSync: new Date().toISOString(),
+      totalSeries: 1,
+      historyFirstDate: null,
+      historyLastDate: null,
+      versionHash: "chunked-current",
+      source: "test",
+    } satisfies SyncMeta);
+    vi.mocked(db.meta.get).mockResolvedValueOnce({
+      key: "updates-snapshot",
+      value: { versionHash: "chunked-current", payload: updates },
+    });
+
+    const result = await loadCachedData();
+
+    expect(result.catalog[0].last_chapter_increase_date).toBe("2026-09-22");
+    expect(db.catalog.bulkPut).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 3036, last_chapter_increase_date: "2026-09-22" }),
+    ]);
+  });
+});
+
+describe("chapter increase sort dates", () => {
+  const record = (overrides: Partial<SeriesCatalog>): SeriesCatalog => ({
+    id: 101,
+    display_title: "Series",
+    cover: null,
+    year: null,
+    status: "releasing",
+    content_rating: "safe",
+    total_chapters: null,
+    tag_ids: [],
+    stats: { popularity: null, favourites: null, meanScore: null },
+    analytics: {},
+    ...overrides,
+  });
+
+  it("attaches the latest Updates event through merged IDs and retains a newer cached date", () => {
+    const current = [
+      record({ id: 101, merged_ids: [101, 100] }),
+      record({ id: 202, last_chapter_increase_date: "2026-09-27" }),
+    ];
+    const previous = [record({ id: 202, last_chapter_increase_date: "2026-09-27" })];
+    const updates = {
+      schemaVersion: 1 as const,
+      generatedAt: new Date().toISOString(),
+      latestDate: "2026-09-27",
+      windowDays: 365,
+      statusWindowDays: 90,
+      chapterWindowDays: 7,
+      eligibleTitleCount: 2,
+      popularity: [],
+      statuses: [],
+      chapters: [
+        { id: 100, date: "2026-09-26", from: 20, to: 21 },
+        { id: 202, date: "2026-09-22", from: 259, to: 260 },
+      ],
+    };
+
+    const enriched = applyChapterIncreaseDates(current, updates, previous);
+
+    expect(enriched.map((item) => item.last_chapter_increase_date)).toEqual([
+      "2026-09-26",
+      "2026-09-27",
+    ]);
   });
 });
 

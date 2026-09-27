@@ -75,6 +75,7 @@ export interface SeriesCatalog {
   created_at?: string | null;
   added_at?: string | null;
   last_updated_at?: string | null;
+  last_chapter_increase_date?: string;
   mangabaka_latest_rank?: number | null;
   mangabaka_latest_snapshot_at?: string | null;
   authors?: string[];
@@ -152,6 +153,7 @@ export type MetricId =
   | "releaseDate"
   | "endDate"
   | "mangabakaLatestRank"
+  | "lastChapterIncreaseDate"
   | "popularityGrowth"
   | "popularityGrowthPercent"
   | "favouritesGrowth"

@@ -297,6 +297,8 @@ export function runFeedQuery(args: {
   const includeTagIds = [...new Set(filters.includeTagIds)];
   const activeTagWeightTypes = new Set(filters.tagWeightTypes ?? TAG_WEIGHT_TYPES);
   const usesLatestAddedSort = feed.sort.some((rule) => rule.metric === "mangabakaLatestRank");
+  const usesChapterIncreaseSort = feed.kind === "custom"
+    && feed.sort.some((rule) => rule.metric === "lastChapterIncreaseDate");
   const excludeTagIds = feed.kind === "logic" && usesLatestAddedSort
     ? [...new Set([...filters.excludeTagIds, ...DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS])]
     : filters.excludeTagIds;
@@ -433,10 +435,10 @@ export function runFeedQuery(args: {
   const sorted = [...result].sort((a, b) => {
     const aAni = hasAniList(a);
     const bAni = hasAniList(b);
-    if (feed.kind === "custom" && aAni !== bAni) {
+    if (feed.kind === "custom" && !usesChapterIncreaseSort && aAni !== bAni) {
       return feed.nonAniListPlacement === "top" ? (aAni ? 1 : -1) : aAni ? -1 : 1;
     }
-    if (!usesLatestAddedSort && (filters.sourceModes?.length ?? 0) > 1 && aAni !== bAni && settings.nonAniListPlacement !== "mixed") {
+    if (!usesLatestAddedSort && !usesChapterIncreaseSort && (filters.sourceModes?.length ?? 0) > 1 && aAni !== bAni && settings.nonAniListPlacement !== "mixed") {
       return settings.nonAniListPlacement === "top" ? (aAni ? 1 : -1) : aAni ? -1 : 1;
     }
 
@@ -453,10 +455,14 @@ export function runFeedQuery(args: {
         if (aMissing && bMissing) continue;
         return aMissing ? 1 : -1;
       }
+      if (av == null || bv == null) continue;
       if (av === bv) continue;
       const direction = rule.direction === "asc" ? 1 : -1;
       return av > bv ? direction : -direction;
     }
+    // With this sort selected, equal or absent increase dates keep the saved MY LIST order;
+    // do not silently replace the requested date sort with AniList popularity as a tie-breaker.
+    if (usesChapterIncreaseSort) return 0;
     const fallbackMetrics: Array<"popularity" | "fanFavouriteRaw" | "favourites"> = ["popularity", "fanFavouriteRaw", "favourites"];
     for (const metric of fallbackMetrics) {
       const av = metricValue(a, metric, history, metaHistoryLast);

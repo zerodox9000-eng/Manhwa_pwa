@@ -55,6 +55,7 @@ import { checkCoverResponse, ResilientCoverImage } from "./components/ResilientC
 import { createCustomFeed, createFeed, DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS, isNovelBasedFeed, metricSlotsToRestoreForFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
 import {
   CHAPTER_PRESETS,
+  CUSTOM_SORT_PRESETS,
   FAN_RANK_PRESETS,
   isFeedPresetRange,
   WEEKLY_GROWTH_PERIOD,
@@ -122,14 +123,31 @@ const NAV_ITEMS = [
   { id: "settings", to: "/settings", label: "Settings", icon: Settings },
 ];
 
-const SORT_OPTIONS: MetricId[] = METRIC_DEFINITIONS.map((definition) => definition.id);
+const SORT_OPTIONS: MetricId[] = METRIC_DEFINITIONS
+  .filter((definition) => definition.id !== "lastChapterIncreaseDate")
+  .map((definition) => definition.id);
+const CUSTOM_SORT_OPTIONS: MetricId[] = [...SORT_OPTIONS, "lastChapterIncreaseDate"];
 const RANGE_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.filterable);
-const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) => definition.id !== "title" && definition.id !== "mangabakaLatestRank");
+const COVER_STAT_METRICS = METRIC_DEFINITIONS.filter((definition) =>
+  definition.id !== "title" && definition.id !== "mangabakaLatestRank" && definition.id !== "lastChapterIncreaseDate",
+);
 const RECOMMENDATION_DEFAULT_RESULTS = 6;
 const RECOMMENDATION_MAX_RESULTS = 18;
 const HOME_FEED_INITIAL_RENDER_RADIUS = 0;
 const SEARCH_OPENED_HISTORY_KEY = "manhwa-search-opened-title-ids";
 const SEARCH_OPENED_HISTORY_LIMIT = 99;
+function sortDirectionForMetric(metric: MetricId, fallback: "asc" | "desc") {
+  if (metric === "mangabakaLatestRank") return "asc";
+  if (metric === "lastChapterIncreaseDate") return "desc";
+  return fallback;
+}
+
+function sortDirectionLabel(metric: MetricId, direction: "asc" | "desc") {
+  if (metric === "mangabakaLatestRank") return direction === "desc" ? "Oldest first" : "Newest first";
+  if (metric === "lastChapterIncreaseDate") return direction === "desc" ? "Newest first" : "Oldest first";
+  return direction === "desc" ? "High first" : "Low first";
+}
+
 type SegmentPalette = { colors: [RgbColor, RgbColor, RgbColor]; dark: RgbColor };
 const APPROVED_SEGMENT_PALETTES: SegmentPalette[] = [
   { colors: [[135, 245, 245], [165, 161, 185], [233, 202, 163]], dark: [70, 80, 83] }, // Top 1% Trending
@@ -3298,6 +3316,7 @@ function FeedPresetControls({
   onCustomSort,
   customSortActive = false,
   applyLatestAddedRules = false,
+  customFeedSort = false,
 }: {
   filters: Feed["filters"];
   sort: Feed["sort"];
@@ -3305,15 +3324,18 @@ function FeedPresetControls({
   onCustomSort?: () => void;
   customSortActive?: boolean;
   applyLatestAddedRules?: boolean;
+  customFeedSort?: boolean;
 }) {
   const popularity = new Set(selectedFeedPresetIds(filters, "popularity"));
   const fanRank = new Set(selectedFeedPresetIds(filters, "fan-rank"));
   const chapters = new Set(selectedFeedPresetIds(filters, "chapters"));
   const status = selectedStatusPresetId(filters);
-  const sorting = selectedSortPresetId(sort);
+  const sortPresets = customFeedSort ? CUSTOM_SORT_PRESETS : SORT_PRESETS;
+  const sorting = selectedSortPresetId(sort, sortPresets);
   const customSorting = customSortActive || (!sorting && sort.length > 0);
   const sortDirection = sort[0]?.direction ?? "desc";
   const isLatestAddedSort = sort[0]?.metric === "mangabakaLatestRank";
+  const isRecentChapterIncreaseSort = sort[0]?.metric === "lastChapterIncreaseDate";
   const period = selectedPeriodPresetId(filters);
   const periodPurpose = PERIOD_PURPOSES.find((option) => option.dateField === filters.dateField)?.id ?? "growth";
   const periodOptions = periodPurpose === "growth" ? [WEEKLY_GROWTH_PERIOD] : PERIOD_PRESETS;
@@ -3372,12 +3394,12 @@ function FeedPresetControls({
       </div>
       <div className="field">
         <span className="small-label">Sort by</span>
-        {renderOptions(onCustomSort ? [...SORT_PRESETS, { id: "custom", label: "Custom" }] : SORT_PRESETS, new Set(customSorting ? ["custom"] : sorting ? [sorting] : []), (id) => {
+        {renderOptions(onCustomSort ? [...sortPresets, { id: "custom", label: "Custom" }] : sortPresets, new Set(customSorting ? ["custom"] : sorting ? [sorting] : []), (id) => {
           if (id === "custom") {
             onCustomSort?.();
             return;
           }
-          const option = SORT_PRESETS.find((item) => item.id === id);
+          const option = sortPresets.find((item) => item.id === id);
           const usesGrowth = option?.metric === "popularityGrowthPercent" || option?.metric === "discoveryPercentileDelta";
           const baseFilters = usesGrowth && filters.rolling.mode === "none"
             ? { ...filters, dateField: "none" as const, rolling: { ...filters.rolling, mode: "last" as const, amount: 1, unit: "weeks" as const } }
@@ -3388,7 +3410,7 @@ function FeedPresetControls({
               excludeTagIds: [...new Set([...baseFilters.excludeTagIds, ...DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS])],
             }
             : baseFilters;
-          onChange(nextFilters, selectSortPreset(sort, id));
+          onChange(nextFilters, selectSortPreset(sort, id, sortPresets));
         }, "wide-labels")}
       </div>
       {!customSorting && sorting && (
@@ -3396,8 +3418,8 @@ function FeedPresetControls({
           <span className="small-label">Order</span>
           {renderOptions(
             [
-              { id: "desc", label: isLatestAddedSort ? "Oldest first" : "High first" },
-              { id: "asc", label: isLatestAddedSort ? "Newest first" : "Low first" },
+              { id: "desc", label: isLatestAddedSort ? "Oldest first" : isRecentChapterIncreaseSort ? "Newest first" : "High first" },
+              { id: "asc", label: isLatestAddedSort ? "Newest first" : isRecentChapterIncreaseSort ? "Oldest first" : "Low first" },
             ],
             new Set([sortDirection]),
             (direction) => onChange(filters, sort.map((rule) => ({
@@ -3539,6 +3561,7 @@ function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSa
       <FeedPresetControls
         filters={draft.filters}
         sort={draft.sort}
+        customFeedSort
         customSortActive={draft.orderMode === "manual"}
         onCustomSort={() => setAdvanced(true)}
         onChange={(filters, sort) => setDraft((current) => ({
@@ -3577,8 +3600,8 @@ function CustomFeedSettingsEditor({ feed, onSave, onCancel }: { feed: Feed; onSa
           <div className="settings-list">
             {draft.sort.map((rule, index) => <div className="setting-row" key={rule.id}>
               <div className="sort-editor">
-                <div className="metric-choice">{SORT_OPTIONS.map((option) => <button className={`metric-option ${rule.metric === option ? "active" : ""}`} type="button" key={option} onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.map((item) => item.id === rule.id ? { ...item, metric: option, direction: option === "mangabakaLatestRank" ? "asc" : item.direction } : item) }))}>{metricDefinition(option).shortLabel}</button>)}</div>
-                <div className="segmented compact-segments">{(["desc", "asc"] as const).map((direction) => <button className={`segment ${rule.direction === direction ? "active" : ""}`} type="button" key={direction} onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.map((item) => item.id === rule.id ? { ...item, direction } : item) }))}>{rule.metric === "mangabakaLatestRank" ? (direction === "desc" ? "Oldest first" : "Newest first") : direction === "desc" ? "High first" : "Low first"}</button>)}</div>
+                <div className="metric-choice">{CUSTOM_SORT_OPTIONS.map((option) => <button className={`metric-option ${rule.metric === option ? "active" : ""}`} type="button" key={option} onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.map((item) => item.id === rule.id ? { ...item, metric: option, direction: sortDirectionForMetric(option, item.direction) } : item) }))}>{metricDefinition(option).shortLabel}</button>)}</div>
+                <div className="segmented compact-segments">{(["desc", "asc"] as const).map((direction) => <button className={`segment ${rule.direction === direction ? "active" : ""}`} type="button" key={direction} onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.map((item) => item.id === rule.id ? { ...item, direction } : item) }))}>{sortDirectionLabel(rule.metric, direction)}</button>)}</div>
               </div>
               <button className="icon-button" type="button" onClick={() => setDraft((current) => ({ ...current, orderMode: "automatic", sort: current.sort.filter((item) => item.id !== rule.id) }))} aria-label={`Remove sort ${index + 1}`}><Trash2 size={16} /></button>
             </div>)}

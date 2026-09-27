@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createCustomFeed, createFeed } from "./defaults";
 import {
   CHAPTER_PRESETS,
+  CUSTOM_SORT_PRESETS,
   FAN_RANK_PRESETS,
   PERIOD_PRESETS,
   PRE_2014_RELEASE_YEAR_PRESET,
@@ -102,6 +103,16 @@ describe("feed presets", () => {
     feed.sort = selectSortPreset(feed.sort, "popularity");
     expect(selectedSortPresetId(feed.sort)).toBe("popularity");
     expect(feed.sort).toMatchObject([{ metric: "popularity", direction: "asc" }]);
+  });
+
+  it("keeps chapter-increase sorting exclusive to custom lists and defaults newest first", () => {
+    const custom = createCustomFeed();
+    const sort = selectSortPreset(custom.sort, "chapter-increase", CUSTOM_SORT_PRESETS);
+
+    expect(sort).toMatchObject([{ metric: "lastChapterIncreaseDate", direction: "desc" }]);
+    expect(selectedSortPresetId(sort)).toBeNull();
+    expect(selectedSortPresetId(sort, CUSTOM_SORT_PRESETS)).toBe("chapter-increase");
+    expect(selectSortPreset(custom.sort, "chapter-increase")).toEqual(custom.sort);
   });
 
   it("starts new logic and custom feeds with Fan Rank sorting", () => {

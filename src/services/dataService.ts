@@ -1,4 +1,4 @@
-import { db, saveSyncMeta } from "../db/appDb";
+import { db, loadSyncMeta, saveSyncMeta } from "../db/appDb";
 import { DATA_SOURCE_CANDIDATES } from "../domain/defaults";
 import { catalogMergeKeys, mergeCatalogRecords, normalizeCatalog } from "../domain/catalog";
 import { parseUpdatesExport, type UpdatesExport } from "../domain/trends";
@@ -241,6 +241,48 @@ export function mergeLiveCatalog(
   });
 }
 
+function isIsoDate(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    && Number.isFinite(Date.parse(`${value}T00:00:00Z`));
+}
+
+export function applyChapterIncreaseDates(
+  catalog: SeriesCatalog[],
+  updates?: UpdatesExport | null,
+  previousCatalog: SeriesCatalog[] = [],
+) {
+  const latestById = new Map<number, string>();
+  const remember = (id: number, date: unknown) => {
+    if (!Number.isSafeInteger(id) || !isIsoDate(date)) return;
+    const previous = latestById.get(id);
+    if (!previous || date > previous) latestById.set(id, date);
+  };
+
+  for (const item of previousCatalog) {
+    if (!isIsoDate(item.last_chapter_increase_date)) continue;
+    for (const id of [item.id, ...(item.merged_ids ?? [])]) {
+      remember(id, item.last_chapter_increase_date);
+    }
+  }
+  for (const item of catalog) {
+    if (isIsoDate(item.last_chapter_increase_date)) {
+      for (const id of [item.id, ...(item.merged_ids ?? [])]) {
+        remember(id, item.last_chapter_increase_date);
+      }
+    }
+  }
+  for (const event of updates?.chapters ?? []) remember(event.id, event.date);
+
+  return catalog.map((item) => {
+    const date = [item.id, ...(item.merged_ids ?? [])]
+      .map((id) => latestById.get(id))
+      .filter((value): value is string => Boolean(value))
+      .sort((left, right) => right.localeCompare(left))[0];
+    if (!date || date === item.last_chapter_increase_date) return item;
+    return { ...item, last_chapter_increase_date: date };
+  });
+}
+
 export async function resolveDataSource(preferred?: string) {
   const candidates = [preferred, ...DATA_SOURCE_CANDIDATES].filter(Boolean) as string[];
   const seen = new Set<string>();
@@ -375,7 +417,11 @@ export async function syncFrontendData(
   onProgress?.("Saving offline data");
 
   const normalized = normalizeCatalog(catalogWithWeights, rawHistory, cachedIndex, syncTimestamp);
-  const catalog = normalized.catalog;
+  const catalog = applyChapterIncreaseDates(
+    normalized.catalog,
+    chunkedData?.updates,
+    [...cachedCatalog, ...catalogWithWeights],
+  );
   const history = normalized.history;
 
   const historyDates = [
@@ -436,16 +482,22 @@ export async function syncFrontendData(
 }
 
 export async function loadCachedData() {
-  const [catalog, tags, historyRows] = await Promise.all([
+  const [catalog, tags, historyRows, syncMeta] = await Promise.all([
     db.catalog.toArray(),
     db.tags.toArray(),
     db.history.toArray(),
+    loadSyncMeta(),
   ]);
 
   const history = parseHistory(Object.fromEntries(historyRows.map((row) => [row.id, row.entries])));
+  const parsedCatalog = parseCatalogList(catalog);
+  const cachedUpdates = await loadCachedUpdatesSnapshot(syncMeta?.versionHash);
+  const catalogWithChapterDates = applyChapterIncreaseDates(parsedCatalog, cachedUpdates, parsedCatalog);
+  const changedRows = catalogWithChapterDates.filter((item, index) => item !== parsedCatalog[index]);
+  if (changedRows.length > 0) await db.catalog.bulkPut(changedRows);
 
   return {
-    catalog: parseCatalogList(catalog),
+    catalog: catalogWithChapterDates,
     tags: parseTags(tags),
     history,
     recommendationFeatures: [],

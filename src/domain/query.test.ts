@@ -204,6 +204,70 @@ describe("runFeedQuery", () => {
     const result = runFeedQuery({ feed, series: baseSeries, tags, history, labels: [], settings: DEFAULT_SETTINGS });
     expect(result.items.map((item) => item.id)).toEqual([3, 2, 1]);
   });
+
+  it("sorts custom-list titles by latest observed chapter increase and leaves undated titles after them", () => {
+    const feed = createCustomFeed("Chapter increases");
+    feed.titleIds = [1, 2, 3];
+    feed.orderMode = "automatic";
+    feed.sort = [{ id: "chapter-increase", metric: "lastChapterIncreaseDate", direction: "desc" }];
+    const series = [
+      { ...baseSeries[0], last_chapter_increase_date: "2026-09-25" },
+      { ...baseSeries[1], stats: { popularity: 1, favourites: 1, meanScore: 70 }, last_chapter_increase_date: "2026-09-27" },
+      { ...baseSeries[2], stats: { popularity: 1000, favourites: 100, meanScore: 80 } },
+    ];
+
+    const result = runFeedQuery({ feed, series, tags, history, labels: [], settings: DEFAULT_SETTINGS });
+    expect(result.items.map((item) => item.id)).toEqual([2, 1, 3]);
+    expect(feed.titleIds).toEqual([1, 2, 3]);
+  });
+
+  it("orders the observed Why I Quit and Manager Kim increases by date, not popularity or insertion order", () => {
+    const feed = createCustomFeed("Chapter increases");
+    feed.titleIds = [3036, 45];
+    feed.orderMode = "automatic";
+    feed.sort = [{ id: "chapter-increase", metric: "lastChapterIncreaseDate", direction: "desc" }];
+    const datedSeries = [
+      {
+        ...baseSeries[0],
+        id: 45,
+        display_title: "Why I Quit Being the Demon King",
+        source: { anilist: { id: 174386 } },
+        stats: { popularity: 4786, favourites: 100, meanScore: 80 },
+        last_chapter_increase_date: "2026-09-27",
+      },
+      {
+        ...baseSeries[1],
+        id: 3036,
+        display_title: "Manager Kim",
+        source: { anilist: { id: 141626 } },
+        stats: { popularity: 10152, favourites: 200, meanScore: 80 },
+        last_chapter_increase_date: "2026-09-22",
+      },
+    ];
+
+    expect(runFeedQuery({ feed, series: datedSeries, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id))
+      .toEqual([45, 3036]);
+
+    feed.titleIds = [45, 3036];
+    const undatedSeries = datedSeries.map((item) => ({ ...item, last_chapter_increase_date: undefined }));
+    expect(runFeedQuery({ feed, series: undatedSeries, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id))
+      .toEqual([45, 3036]);
+  });
+
+  it("lets chapter-increase dates outrank custom-list AniList/non-AniList placement", () => {
+    const feed = createCustomFeed("Mixed-source chapter increases");
+    feed.titleIds = [1, 3];
+    feed.orderMode = "automatic";
+    feed.nonAniListPlacement = "bottom";
+    feed.sort = [{ id: "chapter-increase", metric: "lastChapterIncreaseDate", direction: "desc" }];
+    const series = [
+      { ...baseSeries[0], last_chapter_increase_date: "2026-09-22" },
+      { ...baseSeries[2], last_chapter_increase_date: "2026-09-27" },
+    ];
+
+    expect(runFeedQuery({ feed, series, tags, history, labels: [], settings: DEFAULT_SETTINGS }).items.map((item) => item.id))
+      .toEqual([3, 1]);
+  });
   it("treats no selected statuses as all and combines selected statuses with OR", () => {
     const feed = createFeed("statuses");
     const hiatusTitle = { ...baseSeries[0], id: 4, display_title: "Paused Action", status: "hiatus" };
