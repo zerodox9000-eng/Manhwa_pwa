@@ -57,6 +57,7 @@ export interface SeriesCatalog {
   native_title?: string | null;
   romanized_title?: string | null;
   titles?: SeriesTitle[];
+  description?: string | null;
   tag_weights?: Record<number, number | string> | null;
   anilist_first_seen_at?: string | null;
   cover: string | null;
@@ -88,7 +89,6 @@ export interface SeriesCatalog {
 
 export interface SeriesDetail extends SeriesCatalog {
   state?: string;
-  description?: string | null;
   is_licensed?: boolean;
 }
 

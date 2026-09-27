@@ -82,6 +82,7 @@ import { isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments
 import { resolveRollingWindow, WEEKLY_GROWTH_WINDOW } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot, toggleFeedSourceModeForEditor } from "./domain/query";
 import { matchesSearchTextWords, rankedDirectSearchMatches, searchTextWordPosition, searchWords, seriesSearchText } from "./domain/search";
+import { mergeDetailWithCatalog } from "./domain/catalog";
 import { formatMetricValue, historyDeltaForWindow, isGrowthMetric, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
@@ -5232,6 +5233,7 @@ function TitleDetailPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     setDetail(null);
     setLoading(true);
     setStatus("Loading detail");
@@ -5242,7 +5244,7 @@ function TitleDetailPage() {
     }
     void fetchSeriesDetail(store.settings.dataSourceUrl, id, (freshDetail) => {
       if (!cancelled && freshDetail.id === id) setDetail(freshDetail);
-    })
+    }, controller.signal)
       .then((value) => {
         if (!cancelled) {
           setDetail(value);
@@ -5253,9 +5255,11 @@ function TitleDetailPage() {
       .catch((error) => {
         if (!cancelled) {
           if (catalogItem) {
-            setDetail({ ...catalogItem, description: null });
+            setDetail({ ...catalogItem, description: catalogItem.description ?? null });
             setLoading(false);
-            setStatus(error instanceof Error ? error.message : "Could not load detail");
+            setStatus(catalogItem.description?.trim()
+              ? ""
+              : error instanceof Error ? error.message : "Could not load detail");
             return;
           }
           setStatus(error instanceof Error ? error.message : "Could not load detail");
@@ -5264,31 +5268,23 @@ function TitleDetailPage() {
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [catalogItem, id, invalidRoute, store.settings.dataSourceUrl]);
 
   const series = useMemo(() => {
-    if (!detail || detail.id !== id) return null;
+    const currentDetail = detail?.id === id
+      ? detail
+      : catalogItem
+        ? { ...catalogItem, description: catalogItem.description ?? null } as SeriesDetail
+        : null;
+    if (!currentDetail) return null;
     // Detail responses are the current record for this route. Cached details are
     // reconciled to the catalogue in fetchSeriesDetail, so an older catalogue
     // fallback must not overwrite a corrected backend display title here.
-    const localTitle = resolveVisibleTitle(detail);
     return catalogItem
-      ? {
-          ...detail,
-          display_title: localTitle,
-          cover: catalogItem.cover ?? detail.cover,
-          stats: catalogItem.stats,
-          analytics: catalogItem.analytics,
-          source: catalogItem.source ?? detail.source,
-          published: catalogItem.published ?? detail.published,
-          last_updated_at: catalogItem.last_updated_at ?? detail.last_updated_at,
-          authors: catalogItem.authors?.length ? catalogItem.authors : detail.authors,
-          artists: catalogItem.artists?.length ? catalogItem.artists : detail.artists,
-          links: { ...(detail.links ?? {}), ...(catalogItem.links ?? {}) },
-          tag_weights: { ...(detail.tag_weights ?? {}), ...(catalogItem.tag_weights ?? {}) },
-        }
-      : { ...detail, display_title: localTitle };
+      ? mergeDetailWithCatalog(currentDetail, catalogItem)
+      : { ...currentDetail, display_title: resolveVisibleTitle(currentDetail) };
   }, [catalogItem, detail, id]);
   const creatorLine = series ? uniqueNames(series.authors, series.artists).join(" / ") || "Creator unavailable" : "";
   const detailFitKey = series
@@ -5329,10 +5325,15 @@ function TitleDetailPage() {
       showHeading={isDesktop}
     />
   ) : null;
-  const detailDescription = visible.description && detail?.description ? (
+  const detailDescription = visible.description && series?.description?.trim() ? (
     <section className="detail-block detail-description">
       <h2 className="section-title">Description</h2>
-      <RichDescription text={detail.description} />
+      <RichDescription text={series.description!} />
+    </section>
+  ) : visible.description && loading ? (
+    <section className="detail-block detail-description">
+      <h2 className="section-title">Description</h2>
+      <p className="muted">Loading description…</p>
     </section>
   ) : visible.description && status ? (
     <section className="detail-block detail-description">
@@ -5411,7 +5412,7 @@ function TitleDetailPage() {
           <EllipsisVertical size={20} />
         </button>
       </div>
-      {loadingDetail ? (
+      {loadingDetail && !series ? (
         <DetailSkeleton series={catalogItem ?? null} />
       ) : series ? (
         <div className="detail-content-grid">

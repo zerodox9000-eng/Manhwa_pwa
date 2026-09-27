@@ -4,12 +4,13 @@ import { inflate } from "pako";
 import { useLocation } from "react-router-dom";
 import { ResilientCoverImage } from "./components/ResilientCoverImage";
 import { POPULARITY_BANDS } from "./domain/popularityBands";
-import { formatTrendDuration, type ChapterChangeEvent, type StatusChangeEvent, type TrendBuildResult, type TrendEvent, type TrendEventBandId, type UpdatesExport } from "./domain/trends";
+import { formatTrendDuration, parseUpdatesExport, type ChapterChangeEvent, type StatusChangeEvent, type TrendBuildResult, type TrendEvent, type TrendEventBandId, type UpdatesExport } from "./domain/trends";
 import { matchesSearchWords } from "./domain/search";
 import type { SeriesCatalog } from "./domain/types";
 import { resolveVisibleTitle } from "./domain/displayTitle";
 import { useAppStore } from "./store/useAppStore";
 import { useTitleSelection } from "./titleSelection";
+import { isFreshUpdatesSnapshot, loadCachedUpdatesSnapshot, saveCachedUpdatesSnapshot } from "./services/dataService";
 
 const TREND_CACHE_VERSION = 7;
 const INITIAL_SECTION_COUNT = 60;
@@ -45,25 +46,19 @@ async function readUpdatesResponse(response: Response): Promise<UpdatesExport> {
   const json = firstContentByte === 123
     ? new TextDecoder().decode(bytes)
     : inflate(bytes, { to: "string" });
-  const value = JSON.parse(json);
-  if (value?.schemaVersion !== 1 || !Array.isArray(value.popularity) || !Array.isArray(value.statuses) || !Array.isArray(value.chapters)) {
-    throw new Error("Invalid Updates data");
-  }
-  return value as UpdatesExport;
+  return parseUpdatesExport(JSON.parse(json));
 }
 
 async function loadUpdates(source: string, version: string) {
-  try {
-    return await readUpdatesResponse(await fetch(`${source}/stats/updates.json?v=${encodeURIComponent(version)}`, {
-      cache: "no-cache",
-      signal: AbortSignal.timeout(3_500),
-    }));
-  } catch {
-    return readUpdatesResponse(await fetch(
-      `${import.meta.env.BASE_URL}data/updates-bootstrap.json.gz?v=${encodeURIComponent(`${version}-${TREND_CACHE_VERSION}`)}`,
-      { cache: "no-cache" },
-    ));
-  }
+  const cached = await loadCachedUpdatesSnapshot(version);
+  if (cached) return cached;
+  const payload = await readUpdatesResponse(await fetch(`${source}/stats/updates.json?v=${encodeURIComponent(version)}`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(3_500),
+  }));
+  if (!isFreshUpdatesSnapshot(payload)) throw new Error("Updates snapshot is older than 48 hours.");
+  await saveCachedUpdatesSnapshot(version, payload);
+  return payload;
 }
 
 function bandLabel(band: TrendEventBandId | null) {
@@ -243,15 +238,16 @@ function ChapterChangeCard({ event, series, latestDate, onOpen }: {
 export function TrendsPage() {
   const store = useAppStore();
   const location = useLocation();
-  const cacheKey = `trends:${TREND_CACHE_VERSION}:${store.syncMeta?.historyLastDate ?? "none"}:${store.catalog.length}`;
+  const cacheKey = `trends:${TREND_CACHE_VERSION}:${store.syncMeta?.versionHash ?? "none"}:${store.syncMeta?.historyLastDate ?? "none"}:${store.catalog.length}`;
   const cachedUpdates = updatesMemoryCache.get(cacheKey);
-  const [result, setResult] = useState<TrendBuildResult | null>(() => cachedUpdates ? { latestDate: cachedUpdates.latestDate, events: cachedUpdates.popularity } : null);
+  const initialUpdates = cachedUpdates && isFreshUpdatesSnapshot(cachedUpdates) ? cachedUpdates : null;
+  const [result, setResult] = useState<TrendBuildResult | null>(() => initialUpdates ? { latestDate: initialUpdates.latestDate, events: initialUpdates.popularity } : null);
   const [error, setError] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(() => sessionStorage.getItem(TREND_SEARCH_OPEN_KEY) === "1");
   const [searchQuery, setSearchQuery] = useState(() => sessionStorage.getItem(TREND_SEARCH_KEY) ?? "");
   const [activeView, setActiveView] = useState<UpdatesView>(savedUpdatesView);
-  const [statusChanges, setStatusChanges] = useState<StatusChangeEvent[]>(() => cachedUpdates?.statuses ?? []);
-  const [chapterChanges, setChapterChanges] = useState<ChapterChangeEvent[]>(() => cachedUpdates?.chapters ?? []);
+  const [statusChanges, setStatusChanges] = useState<StatusChangeEvent[]>(() => initialUpdates?.statuses ?? []);
+  const [chapterChanges, setChapterChanges] = useState<ChapterChangeEvent[]>(() => initialUpdates?.chapters ?? []);
   const [popularityLimit, setPopularityLimit] = useState(() => savedUpdatesLimit("popularity"));
   const [statusLimit, setStatusLimit] = useState(() => savedUpdatesLimit("status"));
   const [chapterLimit, setChapterLimit] = useState(() => savedUpdatesLimit("chapters"));

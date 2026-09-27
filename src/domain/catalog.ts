@@ -1,4 +1,4 @@
-import type { HistoryEntry, HistoryMap, SeriesCatalog } from "./types";
+import type { HistoryEntry, HistoryMap, SeriesCatalog, SeriesDetail } from "./types";
 
 const PLACEHOLDER_TITLE = /^(unknown title|untitled|no title|n\/a|-)?$/i;
 
@@ -357,6 +357,13 @@ export function mergeCatalogRecords(left: SeriesCatalog, right: SeriesCatalog) {
     native_title: preferred.native_title ?? secondary.native_title ?? null,
     romanized_title: preferred.romanized_title ?? secondary.romanized_title ?? null,
     titles,
+    description: preferred.description?.trim()
+      ? preferred.description
+      : secondary.description?.trim()
+        ? secondary.description
+        : preferred.description !== undefined || secondary.description !== undefined
+          ? null
+          : undefined,
     anilist_first_seen_at: chooseDate(left.anilist_first_seen_at, right.anilist_first_seen_at),
     display_title: resolveDisplayTitle(
       { ...secondary, titles } satisfies SeriesCatalog,
@@ -390,6 +397,17 @@ export function mergeCatalogRecords(left: SeriesCatalog, right: SeriesCatalog) {
     first_seen_at_is_trusted: Boolean(left.first_seen_at_is_trusted || right.first_seen_at_is_trusted),
     last_updated_at: chooseDate(left.last_updated_at, right.last_updated_at, "latest"),
   } satisfies SeriesCatalog;
+}
+
+export function mergeDetailWithCatalog(detail: SeriesDetail, catalog: SeriesCatalog): SeriesDetail {
+  const merged = { ...detail, ...catalog };
+  return {
+    ...merged,
+    display_title: resolveDisplayTitle(merged),
+    // Older manifests did not include descriptions. Keep a cached detail's copy
+    // only when the current catalogue truly omitted the field.
+    description: catalog.description !== undefined ? catalog.description : detail.description ?? null,
+  };
 }
 
 function mergeHistoryEntries(groups: HistoryEntry[][]) {

@@ -18,6 +18,7 @@ async function fixture() {
     catalog: [{
       id: 1,
       display_title: "Example",
+      description: "This description arrives with the initial catalogue download.",
       cover: null,
       year: 2026,
       status: "releasing",
@@ -44,6 +45,18 @@ async function fixture() {
       "1": [{ d: "2026-06-28", p: 11, f: 1, s: 70, r: 10, rp: 50, pp: 50, ds: 50, dp: 50 }],
     },
     recommendations: [{ id: 1, context: {} }],
+    updates: {
+      schemaVersion: 1,
+      generatedAt: "2026-06-28T00:00:00.000Z",
+      latestDate: "2026-06-28",
+      windowDays: 365,
+      statusWindowDays: 90,
+      chapterWindowDays: 7,
+      eligibleTitleCount: 1,
+      popularity: [],
+      statuses: [],
+      chapters: [],
+    },
   };
   const files = new Map<string, Uint8Array>();
   const datasets: Record<string, unknown> = {};
@@ -95,10 +108,12 @@ describe("chunked frontend data", () => {
     const data = await fetchChunkedFrontendData(base);
     expect(data.buildId).toBe(manifest.buildId);
     expect(data.catalog.map((item) => item.id)).toEqual([1]);
+    expect(data.catalog[0].description).toBe("This description arrives with the initial catalogue download.");
     expect(data.tags.map((tag) => tag.id)).toEqual([10]);
     expect(Object.keys(data.history)).toEqual(["1"]);
     expect(data.history["1"]?.[0]?.p).toBe(11);
     expect(data.recommendationFeatures.map((item) => item.id)).toEqual([1]);
+    expect(data.updates?.latestDate).toBe("2026-06-28");
   });
 
   it("falls back to full history and accepts a manifest without recommendations", async () => {
@@ -138,6 +153,24 @@ describe("chunked frontend data", () => {
     const data = await fetchChunkedFrontendData(base, undefined, { includeRecommendations: false });
     expect(data.history["1"]?.[0]?.p).toBe(11);
     expect(data.recommendationFeatures).toEqual([]);
+  });
+
+  it("accepts an older manifest without a packaged Updates dataset", async () => {
+    const { files, manifest } = await fixture();
+    delete manifest.datasets.updates;
+    vi.stubGlobal("fetch", vi.fn(async (url: string | URL) => {
+      const href = String(url);
+      if (href.endsWith("/meta/data-manifest.json")) {
+        return new Response(JSON.stringify(manifest), { status: 200 });
+      }
+      const body = files.get(href);
+      return body
+        ? new Response(new Uint8Array(body).buffer, { status: 200 })
+        : new Response("missing", { status: 404 });
+    }));
+
+    const data = await fetchChunkedFrontendData(base, undefined, { includeRecommendations: false });
+    expect(data.updates).toBeNull();
   });
 
   it("skips recommendation chunks when the feature is suspended", async () => {

@@ -93,6 +93,7 @@ const seriesCatalogSchema = z
     native_title: stringNull.default(null),
     romanized_title: stringNull.default(null),
     titles: z.array(seriesTitleSchema).optional(),
+    description: stringNull.optional(),
     // Older local syncs wrote null when a title had no exported weight data.
     // Accept that cache shape so a refresh never drops the catalogue row.
     tag_weights: z.record(z.string(), z.union([z.number(), z.string()])).nullable().optional(),

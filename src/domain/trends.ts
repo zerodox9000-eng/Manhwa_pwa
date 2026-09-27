@@ -50,6 +50,24 @@ export interface UpdatesExport {
   chapters: ChapterChangeEvent[];
 }
 
+export function parseUpdatesExport(value: unknown): UpdatesExport {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Invalid Updates data");
+  }
+  const updates = value as Partial<UpdatesExport>;
+  if (
+    updates.schemaVersion !== 1 ||
+    typeof updates.generatedAt !== "string" || Number.isNaN(Date.parse(updates.generatedAt)) ||
+    typeof updates.latestDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(updates.latestDate) ||
+    !Array.isArray(updates.popularity) ||
+    !Array.isArray(updates.statuses) ||
+    !Array.isArray(updates.chapters)
+  ) {
+    throw new Error("Invalid Updates data");
+  }
+  return updates as UpdatesExport;
+}
+
 export interface HistoryRow {
   id: string;
   entries: HistoryEntry[];

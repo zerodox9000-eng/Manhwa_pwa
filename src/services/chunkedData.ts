@@ -1,5 +1,6 @@
 import { inflate } from "pako";
 import type { HistoryMap, RecommendationFeature, SeriesCatalog, TagNode } from "../domain/types";
+import { parseUpdatesExport, type UpdatesExport } from "../domain/trends";
 import { parseCatalogList, parseHistory, parseRecommendationFeatures, parseTags } from "../domain/validation";
 
 const DATA_CONTRACT = "manhwa-frontend-data";
@@ -8,9 +9,9 @@ const MAX_CHUNK_BYTES = 20 * 1024 * 1024;
 const DOWNLOAD_CONCURRENCY = 4;
 
 type DatasetKind = "array" | "object";
-type DatasetName = "catalog" | "tags" | "history" | "weeklyHistory" | "recommendations";
+type DatasetName = "catalog" | "tags" | "history" | "weeklyHistory" | "recommendations" | "updates";
 type RequiredDatasetName = "catalog" | "tags";
-type OptionalDatasetName = "history" | "weeklyHistory" | "recommendations";
+type OptionalDatasetName = "history" | "weeklyHistory" | "recommendations" | "updates";
 
 interface ChunkDescriptor {
   path: string;
@@ -39,6 +40,7 @@ export interface ChunkedFrontendData {
   tags: TagNode[];
   history: HistoryMap;
   recommendationFeatures: RecommendationFeature[];
+  updates: UpdatesExport | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -123,6 +125,9 @@ export function parseFrontendDataManifest(value: unknown): FrontendDataManifest 
   const recommendations = value.datasets.recommendations == null
     ? undefined
     : parseDataset(value.datasets.recommendations, "recommendations", buildId);
+  const updates = value.datasets.updates == null
+    ? undefined
+    : parseDataset(value.datasets.updates, "updates", buildId);
   return {
     contract: DATA_CONTRACT,
     schemaVersion: SUPPORTED_SCHEMA_VERSION,
@@ -134,6 +139,7 @@ export function parseFrontendDataManifest(value: unknown): FrontendDataManifest 
       ...(history ? { history } : {}),
       ...(weeklyHistory ? { weeklyHistory } : {}),
       ...(recommendations ? { recommendations } : {}),
+      ...(updates ? { updates } : {}),
     },
   };
 }
@@ -259,6 +265,7 @@ export async function fetchChunkedFrontendData(
   if (options.includeRecommendations !== false && manifest.datasets.recommendations) {
     requestedDatasets.push("recommendations");
   }
+  if (manifest.datasets.updates) requestedDatasets.push("updates");
   const totalBytes = requestedDatasets.reduce(
     (sum, name) => sum + manifest.datasets[name]!.chunks.reduce((chunkSum, chunk) => chunkSum + chunk.bytes, 0),
     0,
@@ -303,11 +310,24 @@ export async function fetchChunkedFrontendData(
     }
   }
 
+  let updates: UpdatesExport | null = null;
+  const updatesDescriptor = manifest.datasets.updates;
+  if (updatesDescriptor) {
+    onProgress?.("Downloading Updates snapshot");
+    try {
+      updates = parseUpdatesExport(await loadDataset(base, "updates", updatesDescriptor, reportChunk));
+    } catch {
+      // Updates are secondary to the library. Keep a bad optional snapshot from
+      // blocking the catalogue; the Updates page can request a fresh copy.
+    }
+  }
+
   return {
     buildId: manifest.buildId,
     catalog,
     tags,
     history,
     recommendationFeatures,
+    updates,
   };
 }

@@ -1,6 +1,7 @@
 import { db, saveSyncMeta } from "../db/appDb";
 import { DATA_SOURCE_CANDIDATES } from "../domain/defaults";
 import { catalogMergeKeys, mergeCatalogRecords, normalizeCatalog } from "../domain/catalog";
+import { parseUpdatesExport, type UpdatesExport } from "../domain/trends";
 import type { RecommendationFeature, SeriesCatalog, SeriesDetail, SyncMeta } from "../domain/types";
 import { parseCatalogList, parseDetail, parseHistory, parseTags } from "../domain/validation";
 import { decodeJsonBytes, fetchChunkedFrontendData, parseFrontendDataManifest } from "./chunkedData";
@@ -8,9 +9,39 @@ import { decodeJsonBytes, fetchChunkedFrontendData, parseFrontendDataManifest } 
 // Bump only when stored catalogue records need a one-time repair after a frontend rule change.
 export const CATALOG_NORMALIZATION_VERSION = 5;
 const TAG_WEIGHT_EXPORT_PATH = "meta/mangabaka-tag-weights.safe-suggestive-anilist.json";
+const UPDATES_SNAPSHOT_META_KEY = "updates-snapshot";
+const UPDATES_SNAPSHOT_MAX_AGE_MS = 48 * 60 * 60 * 1_000;
+const DETAIL_SOURCE_TIMEOUT_MS = 1_800;
+const DETAIL_TOTAL_TIMEOUT_MS = 5_500;
+const DETAIL_RETRY_DELAY_MS = 150;
 
 export function needsCatalogNormalizationRepair(meta: Pick<SyncMeta, "catalogNormalizationVersion"> | null | undefined) {
   return meta?.catalogNormalizationVersion !== CATALOG_NORMALIZATION_VERSION;
+}
+
+export async function loadCachedUpdatesSnapshot(versionHash: string | null | undefined) {
+  if (!versionHash) return null;
+  const row = await db.meta.get(UPDATES_SNAPSHOT_META_KEY);
+  if (!row?.value || typeof row.value !== "object") return null;
+  const snapshot = row.value as { versionHash?: unknown; payload?: unknown };
+  if (snapshot.versionHash !== versionHash) return null;
+  try {
+    const payload = parseUpdatesExport(snapshot.payload);
+    return isFreshUpdatesSnapshot(payload) ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isFreshUpdatesSnapshot(payload: UpdatesExport, now = Date.now()) {
+  return now - Date.parse(payload.generatedAt) <= UPDATES_SNAPSHOT_MAX_AGE_MS;
+}
+
+export async function saveCachedUpdatesSnapshot(versionHash: string, payload: UpdatesExport) {
+  await db.meta.put({
+    key: UPDATES_SNAPSHOT_META_KEY,
+    value: { versionHash, payload },
+  });
 }
 
 async function fetchJson<T>(base: string, path: string, preferGzip = true): Promise<T> {
@@ -195,6 +226,11 @@ export function mergeLiveCatalog(
     });
     return {
       ...liveWithContinuity,
+      // Old catalogues omit descriptions; keep the last cached copy until the
+      // backend begins shipping this field. A current explicit null is retained.
+      description: fixedLive.description !== undefined
+        ? fixedLive.description
+        : previous?.description?.trim() ? previous.description : undefined,
       ...(carriedMergedIds.length > 0 ? { merged_ids: uniqueIds([live.id, ...carriedMergedIds]) } : {}),
       anilist_first_seen_at: fixedLive.anilist_first_seen_at ?? previous?.anilist_first_seen_at ?? null,
       // Weight exports are optional and authoritative for the current sync. Do not
@@ -352,7 +388,7 @@ export async function syncFrontendData(
 
   await db.transaction(
     "rw",
-    [db.catalog, db.tags, db.recommendationFeatures, db.history],
+    [db.catalog, db.tags, db.recommendationFeatures, db.history, db.meta],
     async () => {
       await db.catalog.clear();
       await db.tags.clear();
@@ -370,6 +406,15 @@ export async function syncFrontendData(
           entries,
         }))
       );
+      if (chunkedData?.updates) {
+        await db.meta.put({
+          key: UPDATES_SNAPSHOT_META_KEY,
+          value: {
+            versionHash: `chunked-${chunkedData.buildId}`,
+            payload: chunkedData.updates,
+          },
+        });
+      }
     }
   );
 
@@ -415,44 +460,125 @@ function delay(ms: number) {
   return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
 
-async function fetchRawDetail(source: string, id: number, attempt: number) {
-  const suffix = attempt > 0 ? `?detailRetry=${Date.now()}-${attempt}` : "";
-  const response = await fetch(`${source}/details/${id}.json${suffix}`, { cache: "no-store" });
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-  return response.json() as Promise<unknown>;
+function abortError() {
+  const error = new Error("Detail request cancelled");
+  error.name = "AbortError";
+  return error;
 }
 
-async function fetchFreshSeriesDetail(source: string, id: number, attempts = 3, requireDescription = false) {
+function isAbortError(error: unknown) {
+  return Boolean(error && typeof error === "object" && "name" in error && error.name === "AbortError");
+}
+
+function isTransientDetailError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const status = "status" in error ? Number(error.status) : null;
+  if (status !== null) return status === 408 || status === 425 || status === 429 || status >= 500;
+  return error instanceof TypeError || ("message" in error && error.message === "Detail request timed out");
+}
+
+async function fetchRawDetail(source: string, id: number, attempt: number, timeoutMs: number, signal?: AbortSignal) {
+  if (signal?.aborted) throw abortError();
+  const suffix = attempt > 0 ? `?detailRetry=${Date.now()}-${attempt}` : "";
+  const controller = new AbortController();
+  let timedOut = false;
+  let rejectDeadline: ((reason: Error) => void) | undefined;
+  const deadline = new Promise<never>((_, reject) => { rejectDeadline = reject; });
+  const onAbort = () => {
+    controller.abort();
+    rejectDeadline?.(abortError());
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
+  if (signal?.aborted) onAbort();
+  const timeout = globalThis.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+    rejectDeadline?.(new Error("Detail request timed out"));
+  }, timeoutMs);
+
+  try {
+    const request = (async () => {
+      const response = await fetch(`${source}/details/${id}.json${suffix}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const error = new Error(`${response.status} ${response.statusText}`) as Error & { status: number };
+        error.status = response.status;
+        throw error;
+      }
+      return response.json() as Promise<unknown>;
+    })();
+    return await Promise.race([request, deadline]);
+  } catch (error) {
+    if (signal?.aborted) throw abortError();
+    if (timedOut) throw new Error("Detail request timed out", { cause: error });
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+async function fetchFreshSeriesDetail(source: string, id: number, attempts = 2, requireDescription = false, signal?: AbortSignal) {
   let lastError: unknown;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
+  let partialDetail: SeriesDetail | null = null;
+  const deadline = Date.now() + DETAIL_TOTAL_TIMEOUT_MS;
+  const maxAttempts = Math.min(Math.max(1, attempts), 2);
+  const permanentlyFailedSources = new Set<string>();
+
+  for (let attempt = 0; attempt < maxAttempts && Date.now() < deadline; attempt += 1) {
+    if (signal?.aborted) throw abortError();
     for (const candidate of detailSourceCandidates(source)) {
+      if (permanentlyFailedSources.has(candidate)) continue;
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) break;
       try {
-        const rawDetail = await fetchRawDetail(candidate, id, attempt);
+        const rawDetail = await fetchRawDetail(
+          candidate,
+          id,
+          attempt,
+          Math.min(DETAIL_SOURCE_TIMEOUT_MS, remainingMs),
+          signal,
+        );
         const detail = fixMangaBakaLink(parseDetail(rawDetail) ?? (rawDetail as SeriesDetail));
-        if (requireDescription && !hasDetailDescription(detail) && attempt < attempts - 1) {
-          lastError = new Error("Description missing from detail response");
+        if (requireDescription && !hasDetailDescription(detail)) {
+          partialDetail ??= detail;
           continue;
         }
+        if (signal?.aborted) throw abortError();
         await db.details.put(detail);
         return detail;
       } catch (error) {
+        if (signal?.aborted || isAbortError(error)) throw abortError();
         lastError = error;
+        if (!isTransientDetailError(error)) permanentlyFailedSources.add(candidate);
       }
     }
-    if (attempt < attempts - 1) await delay(attempt === 0 ? 250 : 700);
+    if (partialDetail) {
+      if (signal?.aborted) throw abortError();
+      await db.details.put(partialDetail);
+      return partialDetail;
+    }
+    if (attempt < maxAttempts - 1 && Date.now() < deadline) await delay(DETAIL_RETRY_DELAY_MS);
   }
-  throw lastError;
+  if (partialDetail) {
+    await db.details.put(partialDetail);
+    return partialDetail;
+  }
+  throw lastError ?? new Error("Detail request failed before a usable response arrived.");
 }
 
 export async function fetchSeriesDetail(
   source: string,
   id: number,
   onRefresh?: (detail: SeriesDetail) => void,
+  signal?: AbortSignal,
 ) {
   const cached = await db.details.get(id);
   if (cached) {
     if (!hasDetailDescription(cached)) {
-      return fetchFreshSeriesDetail(source, id, 3, true);
+      return fetchFreshSeriesDetail(source, id, 2, true, signal);
     }
     // Catalogues are refreshed before details. Keep a cached detail's title aligned
     // with the catalogue instead of letting an old detail response win indefinitely.
@@ -461,12 +587,12 @@ export async function fetchSeriesDetail(
       ? { ...cached, display_title: catalogRecord.display_title }
       : cached;
     if (detail !== cached) await db.details.put(detail);
-    void fetchFreshSeriesDetail(source, id, 1)
+    void fetchFreshSeriesDetail(source, id, 1, false, signal)
       .then((freshDetail) => onRefresh?.(freshDetail))
       .catch(() => {
         // Cached detail keeps route changes instant; refresh failures can wait for the next sync.
       });
     return detail;
   }
-  return fetchFreshSeriesDetail(source, id, 3, true);
+  return fetchFreshSeriesDetail(source, id, 2, true, signal);
 }

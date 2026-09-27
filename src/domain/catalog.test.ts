@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mergeCatalogLinks, normalizeCatalog, resolveDisplayTitle } from "./catalog";
+import { mergeCatalogLinks, mergeCatalogRecords, mergeDetailWithCatalog, normalizeCatalog, resolveDisplayTitle } from "./catalog";
 import { resolveVisibleTitle } from "./displayTitle";
 import { formatMetricValue, metricValue } from "./metrics";
-import type { HistoryMap, SeriesCatalog } from "./types";
+import type { HistoryMap, SeriesCatalog, SeriesDetail } from "./types";
 
 const base: SeriesCatalog = {
   id: 1,
@@ -35,6 +35,69 @@ const history: HistoryMap = {
 };
 
 describe("catalog normalization", () => {
+  it("prefers current catalogue fields over cached detail fields", () => {
+    const cachedDetail: SeriesDetail = {
+      ...base,
+      display_title: "Old title",
+      description: "Old synopsis",
+      year: 2018,
+      status: "releasing",
+      total_chapters: "12",
+      tag_ids: [1],
+      stats: { popularity: 10, favourites: 1, meanScore: 50 },
+      authors: ["Old author"],
+      links: { mangabaka: "https://mangabaka.org/old" },
+      state: "active",
+      is_licensed: true,
+    };
+    const currentCatalog: SeriesCatalog = {
+      ...base,
+      display_title: "Current title",
+      description: "Current synopsis",
+      year: 2025,
+      status: "completed",
+      total_chapters: "44",
+      tag_ids: [2],
+      stats: { popularity: 200, favourites: 30, meanScore: 80 },
+      authors: [],
+      links: {},
+    };
+
+    const merged = mergeDetailWithCatalog(cachedDetail, currentCatalog);
+
+    expect(merged.display_title).toBe("Current title");
+    expect(merged.description).toBe("Current synopsis");
+    expect(merged.year).toBe(2025);
+    expect(merged.status).toBe("completed");
+    expect(merged.total_chapters).toBe("44");
+    expect(merged.tag_ids).toEqual([2]);
+    expect(merged.stats.popularity).toBe(200);
+    expect(merged.authors).toEqual([]);
+    expect(merged.links).toEqual({});
+    expect(merged.state).toBe("active");
+    expect(merged.is_licensed).toBe(true);
+  });
+
+  it("uses an explicit current null but retains detail descriptions when an older catalogue omits them", () => {
+    const cachedDetail: SeriesDetail = { ...base, description: "Cached synopsis" };
+    const omitted = mergeDetailWithCatalog(cachedDetail, { ...base, description: undefined });
+    const explicitlyNull = mergeDetailWithCatalog(cachedDetail, { ...base, description: null });
+
+    expect(omitted.description).toBe("Cached synopsis");
+    expect(explicitlyNull.description).toBeNull();
+  });
+
+  it("keeps an omitted description distinguishable from an explicit null when merging records", () => {
+    expect(mergeCatalogRecords(
+      { ...base, description: undefined },
+      { ...base, id: 2, description: undefined },
+    ).description).toBeUndefined();
+    expect(mergeCatalogRecords(
+      { ...base, description: null },
+      { ...base, id: 2, description: undefined },
+    ).description).toBeNull();
+  });
+
   it("deduplicates same-cover placeholder records and keeps the real title", () => {
     const duplicate: SeriesCatalog = {
       ...base,

@@ -1,8 +1,25 @@
-import { describe, expect, it } from "vitest";
-import { applyTagWeightExport, CATALOG_NORMALIZATION_VERSION, detailSourceCandidates, mergeLiveCatalog, needsCatalogNormalizationRepair } from "./dataService";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../db/appDb", () => ({
+  db: {
+    details: { get: vi.fn(async () => undefined), put: vi.fn(async () => undefined) },
+    catalog: { get: vi.fn(async () => undefined) },
+    meta: { get: vi.fn(async () => undefined), put: vi.fn(async () => undefined) },
+  },
+  saveSyncMeta: vi.fn(),
+}));
+
+import { applyTagWeightExport, CATALOG_NORMALIZATION_VERSION, detailSourceCandidates, fetchSeriesDetail, loadCachedUpdatesSnapshot, mergeLiveCatalog, needsCatalogNormalizationRepair } from "./dataService";
+import { db } from "../db/appDb";
 import { normalizeCatalog } from "../domain/catalog";
 import { parseCatalogList } from "../domain/validation";
 import type { SeriesCatalog } from "../domain/types";
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
 
 describe("detailSourceCandidates", () => {
   it("keeps the preferred detail source first and falls back to configured sources", () => {
@@ -16,6 +33,74 @@ describe("detailSourceCandidates", () => {
     const sources = detailSourceCandidates("https://raw.githubusercontent.com/zerodox9000-eng/manhwa_db/main/db/exports/frontend");
 
     expect(sources.filter((source) => source.includes("raw.githubusercontent.com"))).toHaveLength(1);
+  });
+});
+
+describe("bounded detail requests", () => {
+  it("aborts a stalled first source and quickly tries the next configured source", async () => {
+    vi.useFakeTimers();
+    const detail = {
+      id: 1,
+      display_title: "Fast fallback",
+      description: "Loaded from the fallback source",
+    };
+    const fetchMock = vi.fn((input: string | URL, init?: RequestInit) => {
+      if (String(input).startsWith("https://slow.example/")) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          }, { once: true });
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => detail,
+      } as Response);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pending = fetchSeriesDetail("https://slow.example/frontend", 1);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(1_800);
+    await expect(pending).resolves.toMatchObject(detail);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect((fetchMock.mock.calls[0][1]?.signal as AbortSignal).aborted).toBe(true);
+  });
+});
+
+describe("versioned Updates snapshots", () => {
+  const payload = (generatedAt: string) => ({
+    schemaVersion: 1 as const,
+    generatedAt,
+    latestDate: new Date().toISOString().slice(0, 10),
+    windowDays: 365,
+    statusWindowDays: 90,
+    chapterWindowDays: 7,
+    eligibleTitleCount: 1,
+    popularity: [],
+    statuses: [],
+    chapters: [],
+  });
+
+  it("loads only a fresh Updates snapshot saved for the current manifest", async () => {
+    const current = payload(new Date().toISOString());
+    vi.mocked(db.meta.get).mockResolvedValueOnce({
+      key: "updates-snapshot",
+      value: { versionHash: "chunked-current", payload: current },
+    });
+
+    await expect(loadCachedUpdatesSnapshot("chunked-current")).resolves.toEqual(current);
+  });
+
+  it("rejects an old cached Updates snapshot instead of showing it as current", async () => {
+    const stale = payload(new Date(Date.now() - 72 * 60 * 60 * 1_000).toISOString());
+    vi.mocked(db.meta.get).mockResolvedValueOnce({
+      key: "updates-snapshot",
+      value: { versionHash: "chunked-current", payload: stale },
+    });
+
+    await expect(loadCachedUpdatesSnapshot("chunked-current")).resolves.toBeNull();
   });
 });
 
@@ -180,5 +265,34 @@ describe("live catalogue continuity", () => {
     expect(merged.links?.read_en).toBe("https://reader.example/old-title");
     expect(merged.source?.anilist?.url).toBe("https://anilist.co/manga/900");
     expect(merged.source?.mangaupdates?.id).toBe("old-slug");
+  });
+
+  it("uses descriptions from current exports and keeps them when older exports omit the field", () => {
+    const previous = [record({ id: 92, description: "Previously cached description" })];
+    const current = mergeLiveCatalog(
+      [record({ id: 92, description: "Current exported description" })],
+      previous,
+    );
+    const olderExport = mergeLiveCatalog(
+      [record({ id: 92, description: undefined })],
+      previous,
+    );
+
+    expect(current[0].description).toBe("Current exported description");
+    expect(olderExport[0].description).toBe("Previously cached description");
+  });
+
+  it("keeps a missing description undefined when neither the old nor current catalogue has one", () => {
+    const [merged] = mergeLiveCatalog(
+      [record({ id: 93, description: undefined })],
+      [record({ id: 93, description: undefined })],
+    );
+    const [oldNullMarker] = mergeLiveCatalog(
+      [record({ id: 94, description: undefined })],
+      [record({ id: 94, description: null })],
+    );
+
+    expect(merged.description).toBeUndefined();
+    expect(oldNullMarker.description).toBeUndefined();
   });
 });

@@ -51,7 +51,14 @@ export default defineConfig({
         runtimeCaching: [
           {
             urlPattern: ({ url }) =>
-              url.origin === 'https://raw.githubusercontent.com' || url.origin === 'https://zerodox9000-eng.github.io',
+              (url.origin === 'https://raw.githubusercontent.com' || url.origin === 'https://zerodox9000-eng.github.io') &&
+              (/\/details\/\d+\.json$/.test(url.pathname) || /\/stats\/updates\.json$/.test(url.pathname)),
+            handler: 'NetworkOnly',
+          },
+          {
+            urlPattern: ({ url }) =>
+              (url.origin === 'https://raw.githubusercontent.com' || url.origin === 'https://zerodox9000-eng.github.io') &&
+              !(/\/details\/\d+\.json$/.test(url.pathname) || /\/stats\/updates\.json$/.test(url.pathname)),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'manhwa-export-data-v2',
