@@ -18,11 +18,10 @@ globalThis.fetch = (url, options = {}) => originalFetch(url, {
     : AbortSignal.timeout(20000),
 });
 try {
-  const [{ fetchChunkedFrontendData }, { runFeedQuery }, { normalizeCatalog }, { DEFAULT_SETTINGS }] = await Promise.all([
+  const [{ fetchChunkedFrontendData }, { selectLoadingCoverTitles }, { normalizeCatalog }] = await Promise.all([
     server.ssrLoadModule('/src/services/chunkedData.ts'),
-    server.ssrLoadModule('/src/domain/query.ts'),
+    server.ssrLoadModule('/src/domain/loadingCoverSelection.ts'),
     server.ssrLoadModule('/src/domain/catalog.ts'),
-    server.ssrLoadModule('/src/domain/defaults.ts'),
   ]);
   const data = await fetchChunkedFrontendData(
     'https://raw.githubusercontent.com/zerodox9000-eng/manhwa_db/main/db/exports/frontend',
@@ -33,12 +32,9 @@ try {
   const pools = previous.pools.map(pool => {
     const feed = feeds.find(item => item.id === pool.feedId);
     if (!feed) throw new Error(`Missing shipped Discover feed: ${pool.feedId}`);
-    const result = runFeedQuery({
-      feed, series: normalized.catalog, history: normalized.history,
-      tags: data.tags, labels: [], settings: DEFAULT_SETTINGS,
-    });
+    const result = selectLoadingCoverTitles(feed, normalized.catalog, data.tags, normalized.history);
     // Do not silently substitute lower-ranked entries when a top cover is missing.
-    const picks = result.items.slice(0, 100).map((item, index) => {
+    const picks = result.items.map((item, index) => {
       if (!item.cover || !Number.isFinite(item.analytics?.fanFavouriteDiscoveryPercentile)) {
         throw new Error(`Invalid ranked cover in ${pool.id}: ${item.id}`);
       }
@@ -50,8 +46,9 @@ try {
     if (picks.length !== 100 || new Set(picks.map(pick => pick.id)).size !== 100) {
       throw new Error(`${pool.id} must contain exactly 100 distinct ranked titles`);
     }
-    console.log(`${feed.name}: ${result.items.length} entries, top 100 prepared`);
-    return { id: pool.id, name: feed.name, feedId: feed.id, feedCount: result.items.length, picks };
+    console.log(`${feed.name}: ${result.feedCount} eligible entries, top 100 safety-checked`);
+    console.log(`First five: ${picks.slice(0, 5).map(pick => pick.title).join(' | ')}`);
+    return { id: pool.id, name: feed.name, feedId: feed.id, feedCount: result.feedCount, picks };
   });
   await writeFile(snapshotPath, JSON.stringify({ generatedAt: new Date().toISOString(), buildId: data.buildId, pools }));
 } finally {
