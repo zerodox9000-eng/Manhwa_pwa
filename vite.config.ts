@@ -50,6 +50,15 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
         runtimeCaching: [
           {
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.includes('/loading-covers/'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'aeon-loading-covers',
+              expiration: { maxEntries: 600, maxAgeSeconds: 60 * 60 * 24 * 60 },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
             urlPattern: ({ url }) =>
               (url.origin === 'https://raw.githubusercontent.com' || url.origin === 'https://zerodox9000-eng.github.io') &&
               (/\/details\/\d+\.json$/.test(url.pathname) || /\/stats\/updates\.json$/.test(url.pathname)),

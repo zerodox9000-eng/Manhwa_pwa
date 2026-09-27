@@ -20,6 +20,7 @@ Owns static files served by the PWA, including icons, manifest assets, and bundl
 - `robots.txt` and `sitemap.xml` describe the canonical GitHub Pages app URL and must stay aligned with any future public URL change.
 - Updates data belongs in the backend's versioned frontend export and must not be copied into this repository as a dated fallback snapshot.
 - Keep large static data additions intentional; frontend catalog data normally comes from the backend export.
+- `loading-covers/` contains small generated WebP thumbnails for the loader's five ranked Discover sets. They use source-URL-hashed filenames and a separate runtime cache, not catalogue sync or full-cover precaching. The weekly frontend workflow refreshes the ranked snapshot, regenerates these through `scripts/build-loading-covers.mjs`, and removes only obsolete generator-owned thumbnails after success.
 
 ## Verification
 

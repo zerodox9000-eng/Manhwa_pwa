@@ -52,6 +52,8 @@ import {
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { checkCoverResponse, ResilientCoverImage } from "./components/ResilientCoverImage";
+import { AeonLoadingScreen, LOADING_BACKGROUNDS } from "./components/AeonLoadingScreen";
+import { InstallAppSettings } from "./components/InstallAppSettings";
 import { createCustomFeed, createFeed, DEFAULT_LATEST_LISTINGS_EXCLUDE_TAG_IDS, isNovelBasedFeed, metricSlotsToRestoreForFeed, DEFAULT_DETAIL_VISIBLE, DEFAULT_FILTERS, DEFAULT_SORT, makeId } from "./domain/defaults";
 import {
   CHAPTER_PRESETS,
@@ -756,7 +758,7 @@ function AppFrame() {
             error={store.syncError}
             onRetry={() => void store.refreshData({ force: true })}
             onVisualComplete={() => setLibraryLoaderVisualComplete(true)}
-            progressLabel={sharedFeedName ? "Shared feed library download in progress" : undefined}
+            progressLabel={sharedFeedName ? "Loading shared feed" : undefined}
             status={store.syncStatus || "Opening offline library"}
             title={sharedFeedName ? "Opening shared feed" : undefined}
           />
@@ -1055,9 +1057,7 @@ function LibraryLoadingState({
   error = false,
   onRetry,
   onVisualComplete,
-  progressLabel = "Library download in progress",
   status,
-  title = "Preparing your library",
 }: {
   complete: boolean;
   downloadProgress: number | null;
@@ -1068,85 +1068,17 @@ function LibraryLoadingState({
   status: string;
   title?: string;
 }) {
-  const fillRef = useRef<HTMLSpanElement>(null);
-  const actualTargetRef = useRef(20);
-  const visualTargetRef = useRef(20);
-  const finishingRef = useRef(false);
-  const completionAnimationRef = useRef<Animation | null>(null);
-
-  useEffect(() => {
-    const progress = Math.max(0, Math.min(1, downloadProgress ?? 0));
-    actualTargetRef.current = 20 + progress * 62;
-  }, [downloadProgress]);
-
-  useEffect(() => {
-    if (finishingRef.current || (!complete && !status.toLowerCase().includes("saving"))) return;
-    if (complete && downloadProgress === null && !status.toLowerCase().includes("saving")) {
-      finishingRef.current = true;
-      onVisualComplete?.();
-      return;
-    }
-    finishingRef.current = true;
-    const fill = fillRef.current;
-    if (!fill) {
-      onVisualComplete?.();
-      return;
-    }
-    const currentTransform = getComputedStyle(fill).transform;
-    fill.style.transition = "none";
-    const animation = fill.animate(
-      [{ transform: currentTransform }, { transform: "scaleX(1)" }],
-      { duration: 2400, easing: "cubic-bezier(0.22, 0.72, 0.2, 1)", fill: "forwards" },
-    );
-    completionAnimationRef.current = animation;
-    void animation.finished.then(() => {
-      fill.style.transform = "scaleX(1)";
-      onVisualComplete?.();
-    }).catch(() => undefined);
-  }, [complete, downloadProgress, onVisualComplete, status]);
-
-  useEffect(() => () => completionAnimationRef.current?.cancel(), []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (finishingRef.current) return;
-      const allowedTarget = Math.min(82, actualTargetRef.current + 3);
-      const remaining = allowedTarget - visualTargetRef.current;
-      visualTargetRef.current = Math.min(
-        allowedTarget,
-        visualTargetRef.current + Math.max(0.08, remaining * 0.12),
-      );
-      if (fillRef.current) {
-        fillRef.current.style.transform = `scaleX(${visualTargetRef.current / 100})`;
-      }
-    }, 160);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  return (
-    <div className="library-loading-state" role="status" aria-live="polite" aria-busy="true">
-      <div className="library-loading-panel">
-        <div className="library-loading-mark" aria-hidden="true">
-          <Database size={28} strokeWidth={1.8} />
-        </div>
-        <div className="library-loading-copy">
-          <strong>{title}</strong>
-          <span>{status}</span>
-        </div>
-        <div
-          className="library-loading-progress"
-          role="progressbar"
-          aria-label={progressLabel}
-          aria-valuetext={status}
-        >
-          <span ref={fillRef} />
-        </div>
-        {error && onRetry ? (
-          <button className="button primary" type="button" onClick={onRetry}>Retry</button>
-        ) : null}
-      </div>
-    </div>
-  );
+  const store = useAppStore();
+  return <AeonLoadingScreen
+    background={store.settings.loadingBackground}
+    appName={store.settings.appName}
+    complete={complete}
+    progress={downloadProgress}
+    error={error}
+    status={status}
+    onRetry={onRetry}
+    onVisualComplete={onVisualComplete}
+  />;
 }
 
 function CatalogLoadingPage() {
@@ -4807,6 +4739,7 @@ void [RecommendationsPage, RecommendationResults, recommendationItems, Recommend
 
 function SettingsPage() {
   const store = useAppStore();
+  const [loadingPreviewOpen, setLoadingPreviewOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [backupStatus, setBackupStatus] = useState("");
   const refreshLabel = store.syncInFlight
@@ -4860,6 +4793,29 @@ function SettingsPage() {
           </div>
         </div>
       </SettingsSection>
+
+      <SettingsSection title="Loading screen">
+        <div className="setting-stack">
+          <label htmlFor="loading-background"><strong>Cover background</strong></label>
+          <div className="muted tiny">Choose a fixed Discover set, or a different set each time Aeon loads.</div>
+          <select id="loading-background" className="input" value={store.settings.loadingBackground} onChange={event => store.updateSettings({ loadingBackground: event.target.value as AppSettings["loadingBackground"] })}>
+            {LOADING_BACKGROUNDS.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+          </select>
+          <button className="button" type="button" onClick={() => setLoadingPreviewOpen(true)}>Preview loading screen</button>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title="Install app"><InstallAppSettings /></SettingsSection>
+
+      <Dialog.Root open={loadingPreviewOpen} onOpenChange={setLoadingPreviewOpen}>
+        <Dialog.Portal>
+          <Dialog.Content className="app-library-loading-overlay" aria-describedby={undefined}>
+            <Dialog.Title className="visually-hidden">Loading screen preview</Dialog.Title>
+            {loadingPreviewOpen ? <AeonLoadingScreen key={store.settings.loadingBackground} background={store.settings.loadingBackground} appName={store.settings.appName} complete={false} progress={.5} /> : null}
+            <Dialog.Close className="button aeon-loading-preview-close"><X size={16} /> Close preview</Dialog.Close>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
       <SettingsSection title="Library">
         <div className="setting-row">

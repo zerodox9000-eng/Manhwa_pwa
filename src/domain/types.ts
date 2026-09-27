@@ -332,6 +332,7 @@ export interface DetailVisibleFields {
 
 export interface AppSettings {
   appName: string;
+  loadingBackground: "random" | "top-1" | "mainstream" | "upcoming" | "underground" | "deep-cut";
   themeMode: ThemeMode;
   accentColor: string;
   dataSourceUrl: string;

@@ -200,6 +200,8 @@ function mergeSettings(settings?: Partial<AppSettings>): AppSettings {
   return {
     ...DEFAULT_SETTINGS,
     ...settings,
+    loadingBackground: ["top-1", "mainstream", "upcoming", "underground", "deep-cut"].includes(settings?.loadingBackground ?? "")
+      ? settings!.loadingBackground! : "random",
     bottomNavItems,
     defaultFeedView: {
       ...DEFAULT_SETTINGS.defaultFeedView,

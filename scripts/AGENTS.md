@@ -17,6 +17,8 @@ Owns frontend maintenance and generation scripts.
 - `generate-icons.mjs` owns the platform icon outputs and uses `assets/aeon-icon-master.png` as the single visual source.
 - `generate-wiki-fan-rank-assets.mjs` reads the current sibling backend frontend-data manifest and every catalog chunk, plus `manhwa_db/db/exports/frontend/meta/tags.json.gz`. It writes chart data and SVGs to `%TEMP%/aeon-wiki-assets` by default, or a supplied `--output-dir` such as a temporary Wiki clone. It validates the manifest record count before writing and uses the tag hierarchy to keep sensitive-tagged titles out of safe-normal examples.
 - Keep destructive behavior opt-in and documented.
+- `refresh-loading-covers.mjs` reads the existing public versioned backend export and reuses the shipped normalization and feed-query modules through Vite SSR to select the five normal Discover feeds' exact top 100. It writes `assets/loading-cover-pools.json` only after validating every pool. Never duplicate ranking logic or trigger backend collection.
+- `build-loading-covers.mjs` reads that ranked snapshot, reuses/downloads cover images with bounded retries, and emits `public/loading-covers/` plus `src/assets/loadingCovers.generated.json`. Only real cover thumbnails are generated; do not add substitute preview posters. After success it removes only unreferenced generator-owned hashed WebP files. The frontend weekly workflow runs both scripts, checks the app, and deploys the validated assets.
 
 ## Verification
 

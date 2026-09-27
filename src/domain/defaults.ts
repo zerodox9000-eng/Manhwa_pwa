@@ -157,6 +157,7 @@ export const DEFAULT_RECOMMENDATION_SHELVES: RecommendationShelf[] = [
 
 export const DEFAULT_SETTINGS: AppSettings = {
   appName: "Aeon",
+  loadingBackground: "random",
   themeMode: "dark",
   accentColor: "#ff006e",
   dataSourceUrl: RAW_EXPORT_BASE,

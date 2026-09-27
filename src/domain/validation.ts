@@ -344,6 +344,7 @@ const labelSchema = z
 const appSettingsSchema = z
   .object({
     appName: z.string().optional(),
+    loadingBackground: z.enum(["random", "top-1", "mainstream", "upcoming", "underground", "deep-cut"]).optional(),
     themeMode: z.enum(["system", "dark", "light"]).optional(),
     accentColor: z.string().optional(),
     dataSourceUrl: z.string().optional(),
