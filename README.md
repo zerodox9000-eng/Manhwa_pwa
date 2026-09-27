@@ -12,6 +12,8 @@
   <a href="https://www.reddit.com/u/ZERO_DOX/"><img src="https://img.shields.io/badge/Creator-ZERO__DOX-20232a?style=flat-square&logo=reddit&logoColor=white" alt="Creator profile"></a>
 </p>
 
+<p align="center"><strong>App link:</strong> <a href="https://zerodox9000-eng.github.io/Manhwa_pwa/">https://zerodox9000-eng.github.io/Manhwa_pwa/</a></p>
+
 <p align="center">
   <img src="./docs/assets/aeon-home.jpg" width="360" alt="Aeon Home showing a focused manhwa feed">
 </p>
