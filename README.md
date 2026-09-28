@@ -2,8 +2,6 @@
   <img src="./docs/assets/aeon-social-preview.jpg" width="640" alt="Aeon loading screen with manhwa covers">
 </p>
 
-<h1 align="center">Aeon</h1>
-
 <p align="center"><strong>Open-source manhwa discovery app.</strong></p>
 
 <p align="center">
