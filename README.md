@@ -68,7 +68,7 @@ Tap a card to open its title details. Hold a card to select the title for MY LIS
 
 <p align="center"><img src="./docs/assets/aeon-details.jpg" width="300" alt="Aeon title details"><br>Title details</p>
 
-<p align="center"><img src="./docs/assets/aeon-settings.jpg" width="360" alt="Aeon settings"><br>Settings</p>
+<p align="center"><img src="./docs/assets/aeon-settings-2026-09.jpg" width="360" alt="Aeon settings"><br>Settings</p>
 
 ## Fan Rank
 
