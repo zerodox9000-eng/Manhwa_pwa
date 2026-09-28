@@ -200,7 +200,7 @@ export function mergeLiveCatalog(
     const previous = hasCurrentAliasSibling ? null : previousCandidate;
     const fixedLive = fixMangaBakaLink(live);
     const continuity = previous ? mergeCatalogRecords(previous, fixedLive) : fixedLive;
-    const { tag_weights: liveTagWeights, ...catalog } = fixedLive;
+    const { tag_weights: liveTagWeights, spoiler_tag_ids: liveSpoilerTagIds, ...catalog } = fixedLive;
     delete catalog.animeplanet_title;
     const carriedMergedIds = uniqueIds([
       ...(live.merged_ids ?? []),
@@ -237,6 +237,7 @@ export function mergeLiveCatalog(
       // carry old classifications into a newer catalogue/export. Omit the field
       // when no weights exist so older validators and caches keep the row intact.
       ...(liveTagWeights ? { tag_weights: liveTagWeights } : {}),
+      spoiler_tag_ids: liveSpoilerTagIds ?? [],
     };
   });
 }

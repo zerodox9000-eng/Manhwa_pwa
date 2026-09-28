@@ -2254,13 +2254,21 @@ function detailTagWeight(value: number | string | null | undefined): TagWeightTy
     : "unweighted";
 }
 
-function DetailTagGroups({ series, tagsById }: { series: SeriesCatalog; tagsById: Map<number, TagNode> }) {
+function DetailTagGroups({ series, tagsById, showSpoilers }: { series: SeriesCatalog; tagsById: Map<number, TagNode>; showSpoilers: boolean }) {
+  const spoilerIds = new Set(series.spoiler_tag_ids ?? []);
   const tags = series.tag_ids
+    .filter((tagId) => showSpoilers || !spoilerIds.has(tagId))
     .map((tagId) => {
       const tag = tagsById.get(tagId);
-      return tag ? { tag, weight: detailTagWeight(series.tag_weights?.[tagId]) } : null;
+      return tag ? { tag, weight: detailTagWeight(series.tag_weights?.[tagId]), spoiler: spoilerIds.has(tagId) } : null;
     })
-    .filter((entry): entry is { tag: TagNode; weight: TagWeightType } => Boolean(entry));
+    .filter((entry): entry is { tag: TagNode; weight: TagWeightType; spoiler: boolean } => Boolean(entry));
+
+  if (tags.length === 0) return (
+    <p className="detail-tags-empty">
+      {!showSpoilers && spoilerIds.size > 0 ? "All available tags are hidden as spoilers." : "No tags available."}
+    </p>
+  );
 
   return (
     <div className="detail-tag-groups">
@@ -2274,8 +2282,8 @@ function DetailTagGroups({ series, tagsById }: { series: SeriesCatalog; tagsById
               <span className="detail-tag-group-count">{groupTags.length}</span>
             </h3>
             <div className="chips">
-              {groupTags.map(({ tag }) => (
-                <span className="chip" key={tag.id}>
+              {groupTags.map(({ tag, spoiler }) => (
+                <span className={`chip${spoiler ? " detail-spoiler-tag" : ""}`} key={tag.id}>
                   {tag.name}
                 </span>
               ))}
@@ -5180,6 +5188,8 @@ function TitleDetailPage() {
   const [addToMyListOpen, setAddToMyListOpen] = useState(false);
   const [addToMyListStatus, setAddToMyListStatus] = useState("");
   const [titleCopyStatus, setTitleCopyStatus] = useState("");
+  const [spoilerToggle, setSpoilerToggle] = useState({ id, show: false });
+  const showSpoilers = spoilerToggle.id === id && spoilerToggle.show;
   const detailLayoutKey = `manhwa-detail-layout:${store.activeFeedId ?? "default"}`;
   const sharedLaunch = new URLSearchParams(location.search).get("shared") === "1";
   const [visible, setVisible] = useState(() => {
@@ -5271,7 +5281,7 @@ function TitleDetailPage() {
     : "loading";
   const { containerRef: detailCopyRef, contentRef: detailCopyContentRef } = useFitDetailIdentityText(detailFitKey);
   const { columnRef: detailMiddleRef, linksInMiddle } = useBalanceDesktopDetailMiddle(
-    series ? `${series.id}|${detail?.description ?? ""}|${series.tag_ids.join(",")}|${visible.description}|${visible.genreTags}|${visible.allTags}|${visible.links}` : "loading",
+    series ? `${series.id}|${detail?.description ?? ""}|${series.tag_ids.join(",")}|${showSpoilers}|${visible.description}|${visible.genreTags}|${visible.allTags}|${visible.links}` : "loading",
     visible.allTags,
   );
 
@@ -5334,8 +5344,20 @@ function TitleDetailPage() {
   ) : null;
   const detailAllTags = series && visible.allTags ? (
     <section className="detail-block detail-all-tags">
-      <h2 className="section-title">Tags</h2>
-      <DetailTagGroups series={series} tagsById={tagsById} />
+      <div className="detail-tags-header">
+        <h2 className="section-title">Tags</h2>
+        {(series.spoiler_tag_ids?.length ?? 0) > 0 && (
+          <button
+            type="button"
+            className={`detail-spoiler-toggle${showSpoilers ? " active" : ""}`}
+            aria-pressed={showSpoilers}
+            onClick={() => setSpoilerToggle({ id, show: !showSpoilers })}
+          >
+            {showSpoilers ? "Hide spoilers" : `Show spoilers (${series.spoiler_tag_ids?.length})`}
+          </button>
+        )}
+      </div>
+      <DetailTagGroups series={series} tagsById={tagsById} showSpoilers={showSpoilers} />
     </section>
   ) : null;
   const detailIdentityPrimary = series ? (

@@ -87,6 +87,12 @@ describe("catalog normalization", () => {
     expect(explicitlyNull.description).toBeNull();
   });
 
+  it("uses current spoiler tags instead of stale cached detail tags", () => {
+    const detail = { ...base, spoiler_tag_ids: [1] };
+    expect(mergeDetailWithCatalog(detail, { ...base, spoiler_tag_ids: [] }).spoiler_tag_ids).toEqual([]);
+    expect(mergeDetailWithCatalog(detail, { ...base, spoiler_tag_ids: [2] }).spoiler_tag_ids).toEqual([2]);
+  });
+
   it("keeps an omitted description distinguishable from an explicit null when merging records", () => {
     expect(mergeCatalogRecords(
       { ...base, description: undefined },
@@ -221,6 +227,15 @@ describe("catalog normalization", () => {
     ], history);
 
     expect(normalized.catalog[0].tag_weights).toEqual({ 1: "core", 2: "defining" });
+  });
+
+  it("keeps per-series spoiler classifications when duplicate records are normalized together", () => {
+    const normalized = normalizeCatalog([
+      { ...base, id: 1, tag_ids: [1], spoiler_tag_ids: [1] },
+      { ...base, id: 2, display_title: "Duplicate", tag_ids: [2], spoiler_tag_ids: [2] },
+    ], history);
+
+    expect(normalized.catalog[0].spoiler_tag_ids).toEqual([1, 2]);
   });
 
   it("keeps an estimated release date instead of using the first history date", () => {

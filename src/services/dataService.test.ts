@@ -200,6 +200,10 @@ describe("catalog normalization repair", () => {
 });
 
 describe("tag weight export", () => {
+  it("parses per-series spoiler tag IDs from the catalogue", () => {
+    const parsed = parseCatalogList([{ id: 7, display_title: "Series", tag_ids: [1, 2], spoiler_tag_ids: [2] }]);
+    expect(parsed[0].spoiler_tag_ids).toEqual([2]);
+  });
   it("keeps cached unweighted rows when the sync marker is null", () => {
     const parsed = parseCatalogList([{
       id: 588985,
@@ -367,6 +371,12 @@ describe("live catalogue continuity", () => {
 
     expect(current[0].description).toBe("Current exported description");
     expect(olderExport[0].description).toBe("Previously cached description");
+  });
+
+  it("does not carry outdated spoiler flags into a newer export", () => {
+    const previous = [record({ id: 92, tag_ids: [1], spoiler_tag_ids: [1] })];
+    expect(mergeLiveCatalog([record({ id: 92, tag_ids: [1] })], previous)[0].spoiler_tag_ids).toEqual([]);
+    expect(mergeLiveCatalog([record({ id: 92, tag_ids: [1], spoiler_tag_ids: [1] })], previous)[0].spoiler_tag_ids).toEqual([1]);
   });
 
   it("keeps a missing description undefined when neither the old nor current catalogue has one", () => {

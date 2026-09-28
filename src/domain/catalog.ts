@@ -376,6 +376,7 @@ export function mergeCatalogRecords(left: SeriesCatalog, right: SeriesCatalog) {
     },
     analytics: mergeAnalytics(left.analytics, right.analytics, rightIsNewer),
     tag_ids: unique([...(left.tag_ids ?? []), ...(right.tag_ids ?? [])]),
+    spoiler_tag_ids: unique([...(left.spoiler_tag_ids ?? []), ...(right.spoiler_tag_ids ?? [])]),
     ...(left.tag_weights || right.tag_weights
       ? {
           tag_weights: {
@@ -403,6 +404,7 @@ export function mergeDetailWithCatalog(detail: SeriesDetail, catalog: SeriesCata
   const merged = { ...detail, ...catalog };
   return {
     ...merged,
+    spoiler_tag_ids: catalog.spoiler_tag_ids ?? detail.spoiler_tag_ids ?? [],
     display_title: resolveDisplayTitle(merged),
     // Older manifests did not include descriptions. Keep a cached detail's copy
     // only when the current catalogue truly omitted the field.

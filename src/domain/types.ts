@@ -67,6 +67,7 @@ export interface SeriesCatalog {
   type?: string | null;
   total_chapters: string | number | null;
   tag_ids: number[];
+  spoiler_tag_ids?: number[];
   stats: AniListStats;
   analytics: AnalyticsStats;
   published?: PublishedDates | null;

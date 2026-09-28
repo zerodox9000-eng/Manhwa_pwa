@@ -105,6 +105,7 @@ const seriesCatalogSchema = z
     type: stringNull.optional(),
     total_chapters: z.union([z.string(), z.number(), z.null(), z.undefined()]).transform((value) => (value == null ? null : value)).default(null),
     tag_ids: z.array(z.number()).default([]),
+    spoiler_tag_ids: z.array(z.number()).optional(),
     stats: statsSchema.default({ popularity: null, favourites: null, meanScore: null }),
     analytics: analyticsSchema.default({}),
     published: publishedDatesSchema.optional(),
