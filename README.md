@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/assets/aeon-round.png" width="160" alt="Aeon">
+  <img src="./docs/assets/aeon-social-preview.jpg" width="640" alt="Aeon loading screen with manhwa covers">
 </p>
 
 <h1 align="center">Aeon</h1>
