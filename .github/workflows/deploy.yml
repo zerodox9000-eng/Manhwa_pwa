@@ -6,6 +6,9 @@ env:
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
   workflow_dispatch:
   workflow_call:
     inputs:

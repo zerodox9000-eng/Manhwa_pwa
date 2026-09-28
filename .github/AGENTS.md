@@ -11,6 +11,7 @@ Owns GitHub Actions workflows and repository automation for the frontend.
 - Read the root AGENTS.md first.
 - Do not weaken live deployment checks without explicit user approval.
 - Keep workflow paths aligned with the Vite/GitHub Pages base path.
+- The Pages push trigger skips README- and docs-only changes. Manual dispatch and the weekly cover refresh's reusable deployment remain available.
 
 ## Work Guidance
 
