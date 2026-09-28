@@ -2,7 +2,7 @@
   <img src="./docs/assets/aeon-social-preview.jpg" width="640" alt="Aeon loading screen with manhwa covers">
 </p>
 
-<p align="center"><strong>Open-source manhwa discovery app.</strong></p>
+<p align="center"><strong>Discover Manhwa Through Focused Feeds</strong><br>Use Fan Rank to see which series stand out and decide what to read next.</p>
 
 <p align="center">
   <a href="https://zerodox9000-eng.github.io/Manhwa_pwa/"><img src="https://img.shields.io/badge/Open%20App-00a9bd?style=flat-square" alt="Open app"></a>
