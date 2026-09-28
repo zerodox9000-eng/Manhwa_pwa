@@ -17,11 +17,11 @@ type Props = {
 
 export const LOADING_BACKGROUNDS = [
   { id: "random", name: "Random each time" },
-  { id: "top-1", name: "Discover Top 1%" },
-  { id: "mainstream", name: "Discover Mainstream" },
-  { id: "upcoming", name: "Discover Upcoming" },
-  { id: "underground", name: "Discover Underground" },
-  { id: "deep-cut", name: "Discover Deep Cut" },
+  { id: "top-1", name: "Top 1% Trending" },
+  { id: "mainstream", name: "Trending Mainstream" },
+  { id: "upcoming", name: "Trending Upcoming" },
+  { id: "underground", name: "Trending Underground" },
+  { id: "deep-cut", name: "Trending Deep Cut" },
 ] as const;
 
 export function chooseLoadingPool(background: Props["background"], previous: string | null, random = Math.random): Pool {
@@ -37,6 +37,18 @@ function initialPool(background: Props["background"]) {
   return chooseLoadingPool(background, previous);
 }
 
+export function chooseLoadingStartIndex(count: number, previous: number | null, random = Math.random) {
+  if (count <= 1) return 0;
+  const validPrevious = previous != null && previous >= 0 && previous < count ? previous : null;
+  const choices = validPrevious === null ? count : count - 1;
+  const slot = Math.min(choices - 1, Math.floor(random() * choices));
+  return validPrevious !== null && slot >= validPrevious ? slot + 1 : slot;
+}
+
+export function loadingCoverOrder<T>(picks: readonly T[], startIndex: number): T[] {
+  return picks.map((_, slot) => picks[(startIndex + slot) % picks.length]);
+}
+
 export function loadingProgressTarget(progress: number | null, elapsedMs: number, complete: boolean) {
   if (complete) return 1;
   return Math.min(.95, Math.max(.12 + Math.max(0, Math.min(1, progress ?? 0)) * .78, .8 * (1 - Math.exp(-elapsedMs / 16000))));
@@ -44,6 +56,14 @@ export function loadingProgressTarget(progress: number | null, elapsedMs: number
 
 export function AeonLoadingScreen(props: Props) {
   const [pool] = useState(() => initialPool(props.background));
+  const [startIndex] = useState(() => {
+    let previous: number | null = null;
+    try {
+      const saved = sessionStorage.getItem(`aeon-loading-start-${pool.id}`);
+      if (saved !== null) previous = Number(saved);
+    } catch { /* Storage is optional. */ }
+    return chooseLoadingStartIndex(pool.picks.length, previous);
+  });
   const frameRef = useRef<HTMLDivElement>(null);
   const planeRef = useRef<HTMLDivElement>(null);
   const fillRef = useRef<HTMLSpanElement>(null);
@@ -53,6 +73,7 @@ export function AeonLoadingScreen(props: Props) {
 
   useEffect(() => {
     try { sessionStorage.setItem("aeon-loading-feed", pool.id); } catch { /* Storage is optional. */ }
+    try { sessionStorage.setItem(`aeon-loading-start-${pool.id}`, String(startIndex)); } catch { /* Storage is optional. */ }
     const frame = frameRef.current!;
     const plane = planeRef.current!;
     const flow = [2, 1, 0, 6, 5, 4, 3];
@@ -70,43 +91,49 @@ export function AeonLoadingScreen(props: Props) {
     let nextTransferDistance = 0;
     let laneAnimations: Animation[] = [];
     let coverPaint = 0;
-    let settled = 0;
-    const timers: number[] = [];
-    const cards = pool.picks.map((pick, rank) => {
+    let loaded = 0;
+    const orderedPicks = loadingCoverOrder(pool.picks, startIndex);
+    const sequence = [...orderedPicks, ...orderedPicks];
+    const cards = sequence.map(pick => {
       const tile = document.createElement("div");
       tile.className = "aeon-loading-cover";
       tile.dataset.title = pick.title;
-      tile.dataset.rank = String(rank + 1);
+      tile.dataset.rank = String(pick.feedRank);
       const image = document.createElement("img");
       image.alt = "";
       image.decoding = "async";
       let finished = false;
-      const finish = () => {
-        if (finished || disposed) return;
-        finished = true;
-        settled++;
-        if (settled === pool.picks.length) {
-          coverPaint = requestAnimationFrame(() => {
-            if (disposed) return;
-            frame.classList.add("covers-ready");
-          });
-        }
-      };
-      const timeout = window.setTimeout(finish, 12000);
-      timers.push(timeout);
-      image.onload = async () => {
-        try {
-          await image.decode();
-          if (!disposed) tile.classList.add("has-cover");
-        } catch { /* An unavailable real cover leaves its space empty. */ }
+      let attempt = 0;
+      let timeout = 0;
+      const src = `${import.meta.env.BASE_URL}${pick.cover}`;
+      const load = () => {
+        const current = ++attempt;
         window.clearTimeout(timeout);
-        finish();
+        const retry = () => {
+          if (disposed || finished || current !== attempt) return;
+          window.clearTimeout(timeout);
+          timeout = window.setTimeout(load, attempt <= 2 ? 250 : 2000);
+        };
+        image.onload = async () => {
+          try { await image.decode(); } catch { retry(); return; }
+          if (disposed || finished || current !== attempt) return;
+          finished = true;
+          window.clearTimeout(timeout);
+          tile.classList.add("has-cover");
+          if (++loaded === sequence.length) {
+            coverPaint = requestAnimationFrame(() => {
+              if (!disposed) frame.classList.add("covers-ready");
+            });
+          }
+        };
+        image.onerror = retry;
+        image.src = current === 1 ? src : `${src}?retry=${current - 1}`;
+        timeout = window.setTimeout(load, attempt <= 2 ? 3000 : 10000);
       };
-      image.onerror = () => { window.clearTimeout(timeout); finish(); };
-      image.src = `${import.meta.env.BASE_URL}${pick.cover}`;
       tile.appendChild(image);
       lanes[0].appendChild(tile);
-      return { tile, image, lane: 0 };
+      load();
+      return { tile, image, lane: 0, cancel: () => window.clearTimeout(timeout) };
     });
     function startLaneMotion(targetLanes: HTMLDivElement[], previous: Animation[]) {
       previous.forEach(animation => animation.cancel());
@@ -125,14 +152,14 @@ export function AeonLoadingScreen(props: Props) {
       const length = pitch * cards.length;
       const distance = (elapsed % (cards.length * 8.8)) * pitch / 8.8;
       // Only rebase the static cover positions when one crosses a lane edge.
-      // Between transfers, seven composited lane transforms move all covers.
-      // Do not interleave layout reads and style writes for 100 cards per frame.
+      // Between transfers, the composited lane transforms move every cover.
+      // Do not interleave layout reads and style writes for every card per frame.
       if (baseDistance < 0 || distance >= nextTransferDistance || distance < baseDistance) {
         baseDistance = distance;
         let untilNextTransfer = laneLength;
         cards.forEach((card, rank) => {
           const position = ((laneLength / 2 - rank * pitch + distance) % length + length) % length;
-          const flowIndex = Math.min(6, Math.floor(position / laneLength));
+          const flowIndex = Math.min(flow.length - 1, Math.floor(position / laneLength));
           const lane = flow[flowIndex];
           const progress = position - flowIndex * laneLength;
           const y = (planeHeight + laneLength - cardHeight) / 2 - progress;
@@ -165,7 +192,7 @@ export function AeonLoadingScreen(props: Props) {
       plane.style.height = `${Math.ceil(halfHeight * 2 + 12)}px`;
       cardHeight = cards[0].tile.offsetHeight;
       pitch = cardHeight + 2;
-      laneLength = cards.length * pitch / 7;
+      laneLength = cards.length * pitch / flow.length;
       planeHeight = plane.clientHeight;
       baseDistance = -1;
       render();
@@ -202,16 +229,15 @@ export function AeonLoadingScreen(props: Props) {
       cancelAnimationFrame(coverPaint);
       observer.disconnect();
       laneAnimations.forEach(animation => animation.cancel());
-      timers.forEach(timer => window.clearTimeout(timer));
-      cards.forEach(({ image }) => { image.onload = null; image.onerror = null; image.removeAttribute("src"); });
+      cards.forEach(({ image, cancel }) => { cancel(); image.onload = null; image.onerror = null; image.removeAttribute("src"); });
       frame.classList.remove("covers-ready");
       plane.parentElement?.style.removeProperty("filter");
       plane.replaceChildren();
     };
-  }, [pool]);
+  }, [pool, startIndex]);
 
   return (
-    <div ref={frameRef} className="aeon-loading-screen" data-cover-feed={pool.id}>
+    <div ref={frameRef} className="aeon-loading-screen" data-cover-feed={pool.id} data-start-rank={pool.picks[startIndex].feedRank}>
       <div className="aeon-loading-background" aria-hidden="true" onTransitionEnd={event => {
         if (event.propertyName === "filter" && frameRef.current?.classList.contains("covers-ready")) event.currentTarget.style.filter = "none";
       }}><div ref={planeRef} className="aeon-loading-plane" /></div>

@@ -16,7 +16,7 @@ Owns GitHub Actions workflows and repository automation for the frontend.
 
 - Prefer small workflow edits with clear trigger and permission scope.
 - If changing deploy behavior, verify the workflow after push.
-- `refresh-loading-covers.yml` refreshes the five normal Discover top-100 sets every Monday at 03:30 UTC, also manually dispatchable. It reads existing public backend exports, runs the shipped frontend query, generates bounded small cover assets, and commits only those generated files after lint, tests, and build pass. It never triggers backend collection. Because GITHUB_TOKEN pushes do not start another workflow, it explicitly calls the reusable Pages deployment with the validated new commit SHA. A failed refresh leaves the deployed assets unchanged.
+- `refresh-loading-covers.yml` refreshes the five normal Trending top-50 sets every Friday at 03:30 UTC, also manually dispatchable. It reads existing public backend exports, runs the shipped frontend query, generates bounded small cover assets, and commits only those generated files after lint, tests, and build pass. It never triggers backend collection. Because GITHUB_TOKEN pushes do not start another workflow, it explicitly calls the reusable Pages deployment with the validated new commit SHA. A failed refresh leaves the deployed assets unchanged.
 
 ## Verification
 

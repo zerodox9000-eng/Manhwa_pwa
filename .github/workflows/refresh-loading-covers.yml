@@ -2,7 +2,7 @@ name: Refresh loading covers weekly
 
 on:
   schedule:
-    - cron: '30 3 * * 1'
+    - cron: '30 3 * * 5'
   workflow_dispatch:
 
 env:
@@ -51,7 +51,7 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'Refresh weekly Discover loading covers'
+          git commit -m 'Refresh weekly Trending loading covers'
           git push origin HEAD:main
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"

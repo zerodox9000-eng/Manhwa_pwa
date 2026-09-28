@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import sharp from 'sharp';
 
-// Offline input is the verified top 100 from each normal Discover feed.
+// Offline input is the verified top 50 from each corresponding normal Trending feed.
 // This builds display assets only. It never calls a catalog pipeline.
 const root = path.resolve(import.meta.dirname, '..');
 const snapshot = JSON.parse(await readFile(path.join(root, 'scripts/assets/loading-cover-pools.json'), 'utf8'));

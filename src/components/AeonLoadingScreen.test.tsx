@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AeonLoadingScreen, chooseLoadingPool, loadingProgressTarget, LOADING_BACKGROUNDS } from "./AeonLoadingScreen";
+import { AeonLoadingScreen, chooseLoadingPool, chooseLoadingStartIndex, loadingCoverOrder, loadingProgressTarget, LOADING_BACKGROUNDS } from "./AeonLoadingScreen";
 import { parseSettings } from "../domain/validation";
 import data from "../assets/loadingCovers.generated.json";
 import rankedSnapshot from "../../scripts/assets/loading-cover-pools.json";
@@ -28,12 +28,12 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); Reflect.deleteProperty(HTMLElement.prototype, "animate"); });
 
 describe("loading cover sets and settings", () => {
-  it("has exactly 100 unique sequentially ranked titles in every set", () => {
+  it("has exactly 50 unique sequentially ranked titles in every Trending set", () => {
     expect(data.pools).toHaveLength(5);
     for (const pool of data.pools) {
-      expect(pool.picks).toHaveLength(100);
-      expect(new Set(pool.picks.map(pick => pick.id)).size).toBe(100);
-      expect(pool.picks.map(pick => pick.feedRank)).toEqual(Array.from({ length: 100 }, (_, i) => i + 1));
+      expect(pool.picks).toHaveLength(50);
+      expect(new Set(pool.picks.map(pick => pick.id)).size).toBe(50);
+      expect(pool.picks.map(pick => pick.feedRank)).toEqual(Array.from({ length: 50 }, (_, i) => i + 1));
       expect(pool.picks.every(pick => pick.cover.startsWith("loading-covers/"))).toBe(true);
       expect("preview" in pool).toBe(false);
     }
@@ -56,6 +56,13 @@ describe("loading cover sets and settings", () => {
     expect(loadingProgressTarget(0, 10000, false)).toBeGreaterThan(loadingProgressTarget(0, 0, false));
     expect(loadingProgressTarget(null, 0, true)).toBe(1);
   });
+  it("can start from any of the 50 ranks without breaking the closed ranked sequence", () => {
+    const starts = Array.from({ length: 50 }, (_, index) => chooseLoadingStartIndex(50, null, () => (index + .01) / 50));
+    expect(new Set(starts).size).toBe(50);
+    expect(chooseLoadingStartIndex(50, 24, () => 24 / 49)).not.toBe(24);
+    const order = loadingCoverOrder(Array.from({ length: 50 }, (_, i) => i + 1), 24);
+    expect(order).toEqual([...Array.from({ length: 26 }, (_, i) => i + 25), ...Array.from({ length: 24 }, (_, i) => i + 1)]);
+  });
 });
 
 describe("background reveal", () => {
@@ -64,9 +71,18 @@ describe("background reveal", () => {
     expect(container.querySelector(".aeon-loading-poster")).toBeNull();
     expect(container.querySelector(".aeon-loading-ghost")).toBeNull();
     expect(container.querySelectorAll(".aeon-loading-cover")).toHaveLength(100);
+    expect(new Set(Array.from(container.querySelectorAll(".aeon-loading-cover")).map(tile => tile.getAttribute("data-title"))).size).toBe(50);
     expect(container.querySelectorAll(".has-cover")).toHaveLength(0);
     expect(Array.from(container.querySelectorAll<HTMLImageElement>(".aeon-loading-cover img")).every(image => image.src.includes("/loading-covers/"))).toBe(true);
     expect(motionAnimations).toHaveLength(7);
+  });
+  it("places a randomly selected ranked title at the center-left starting lane", () => {
+    vi.spyOn(Math, "random").mockReturnValue(.49);
+    const { container } = render(<AeonLoadingScreen background="top-1" appName="Aeon" complete={false} progress={.2} />);
+    const frame = container.querySelector<HTMLElement>(".aeon-loading-screen")!;
+    expect(frame.dataset.startRank).toBe("25");
+    expect(frame.querySelectorAll(".aeon-loading-lane")).toHaveLength(7);
+    expect(frame.querySelectorAll(".aeon-loading-lane")[2].querySelector("[data-rank='25']")).not.toBeNull();
   });
   it("keeps the requested app-owned conveyor moving even with a device reduced-motion setting", () => {
     vi.stubGlobal("matchMedia", () => ({ matches: true }));
@@ -97,13 +113,39 @@ describe("background reveal", () => {
     expect(motionAnimations[0]).toBe(originalAnimation);
     expect(originalAnimation.cancel).not.toHaveBeenCalled();
   });
-  it("uses fallbacks for slow covers and does not complete the app because covers settled", () => {
+  it("retries stalled covers instead of revealing gaps or completing the app", () => {
     const complete = vi.fn();
     const { container } = render(<AeonLoadingScreen background="top-1" appName="Aeon" complete={false} progress={1} onVisualComplete={complete} />);
-    act(() => vi.advanceTimersByTime(12020));
-    expect(container.querySelector(".covers-ready")).not.toBeNull();
+    const image = container.querySelector<HTMLImageElement>(".aeon-loading-cover img")!;
+    const originalUrl = image.src;
+    act(() => vi.advanceTimersByTime(3020));
+    expect(image.src).not.toBe(originalUrl);
+    expect(image.src).toContain("?retry=1");
+    expect(container.querySelector(".covers-ready")).toBeNull();
     expect(complete).not.toHaveBeenCalled();
     expect(container.querySelectorAll(".has-cover")).toHaveLength(0);
+  });
+  it("retries failed covers quickly and reveals only after every cover decodes", async () => {
+    const { container } = render(<AeonLoadingScreen background="top-1" appName="Aeon" complete={false} progress={.2} />);
+    const images = Array.from(container.querySelectorAll<HTMLImageElement>(".aeon-loading-cover img"));
+    const failed = images[0];
+    const originalUrl = failed.src;
+    act(() => fireEvent.error(failed));
+    act(() => vi.advanceTimersByTime(270));
+    expect(failed.src).not.toBe(originalUrl);
+    for (const image of images.slice(1)) {
+      image.decode = () => Promise.resolve();
+      fireEvent.load(image);
+    }
+    await act(async () => { await Promise.resolve(); });
+    expect(container.querySelectorAll(".has-cover")).toHaveLength(99);
+    expect(container.querySelector(".covers-ready")).toBeNull();
+    failed.decode = () => Promise.resolve();
+    fireEvent.load(failed);
+    await act(async () => { await Promise.resolve(); });
+    act(() => vi.advanceTimersByTime(20));
+    expect(container.querySelectorAll(".has-cover")).toHaveLength(100);
+    expect(container.querySelector(".covers-ready")).not.toBeNull();
   });
   it("finishes on real readiness even if no cover loaded", () => {
     const complete = vi.fn();

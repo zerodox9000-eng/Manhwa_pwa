@@ -4797,7 +4797,7 @@ function SettingsPage() {
       <SettingsSection title="Loading screen">
         <div className="setting-stack">
           <label htmlFor="loading-background"><strong>Cover background</strong></label>
-          <div className="muted tiny">Choose a fixed Discover set, or a different set each time Aeon loads.</div>
+          <div className="muted tiny">Choose a fixed Trending set, or a different set each time Aeon loads.</div>
           <select id="loading-background" className="input" value={store.settings.loadingBackground} onChange={event => store.updateSettings({ loadingBackground: event.target.value as AppSettings["loadingBackground"] })}>
             {LOADING_BACKGROUNDS.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
           </select>
