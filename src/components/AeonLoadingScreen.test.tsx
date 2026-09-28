@@ -84,6 +84,27 @@ describe("background reveal", () => {
     expect(frame.querySelectorAll(".aeon-loading-lane")).toHaveLength(7);
     expect(frame.querySelectorAll(".aeon-loading-lane")[2].querySelector("[data-rank='25']")).not.toBeNull();
   });
+  it("adds upward-moving lanes and repeat slots only on desktop", () => {
+    vi.stubGlobal("innerWidth", 1920);
+    vi.stubGlobal("innerHeight", 1080);
+    const { container } = render(<AeonLoadingScreen background="top-1" appName="Aeon" complete={false} progress={.2} />);
+    const frame = container.querySelector<HTMLElement>(".aeon-loading-screen")!;
+    expect(frame.dataset.coverLayout).toBe("desktop");
+    expect(frame.querySelectorAll(".aeon-loading-lane")).toHaveLength(13);
+    expect(frame.querySelectorAll(".aeon-loading-cover")).toHaveLength(200);
+    expect(new Set(Array.from(frame.querySelectorAll(".aeon-loading-cover")).map(tile => tile.getAttribute("data-title"))).size).toBe(50);
+    expect(motionAnimations).toHaveLength(13);
+  });
+  it("keeps the original seven-lane mobile layout", () => {
+    vi.stubGlobal("innerWidth", 393);
+    vi.stubGlobal("innerHeight", 873);
+    const { container } = render(<AeonLoadingScreen background="top-1" appName="Aeon" complete={false} progress={.2} />);
+    const frame = container.querySelector<HTMLElement>(".aeon-loading-screen")!;
+    expect(frame.dataset.coverLayout).toBe("mobile");
+    expect(frame.querySelectorAll(".aeon-loading-lane")).toHaveLength(7);
+    expect(frame.querySelectorAll(".aeon-loading-cover")).toHaveLength(100);
+    expect(motionAnimations).toHaveLength(7);
+  });
   it("keeps the requested app-owned conveyor moving even with a device reduced-motion setting", () => {
     vi.stubGlobal("matchMedia", () => ({ matches: true }));
     render(<AeonLoadingScreen background="top-1" appName="Aeon" complete={false} progress={.2} />);

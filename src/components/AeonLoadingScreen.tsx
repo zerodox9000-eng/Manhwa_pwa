@@ -54,8 +54,11 @@ export function loadingProgressTarget(progress: number | null, elapsedMs: number
   return Math.min(.95, Math.max(.12 + Math.max(0, Math.min(1, progress ?? 0)) * .78, .8 * (1 - Math.exp(-elapsedMs / 16000))));
 }
 
+const isDesktopViewport = () => window.innerWidth >= 1180 && window.innerHeight >= 650;
+
 export function AeonLoadingScreen(props: Props) {
   const [pool] = useState(() => initialPool(props.background));
+  const [desktop, setDesktop] = useState(isDesktopViewport);
   const [startIndex] = useState(() => {
     let previous: number | null = null;
     try {
@@ -70,13 +73,20 @@ export function AeonLoadingScreen(props: Props) {
   const progressRef = useRef<HTMLDivElement>(null);
   const liveRef = useRef(props);
   useEffect(() => { liveRef.current = props; });
+  useEffect(() => {
+    const update = () => setDesktop(isDesktopViewport());
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   useEffect(() => {
     try { sessionStorage.setItem("aeon-loading-feed", pool.id); } catch { /* Storage is optional. */ }
     try { sessionStorage.setItem(`aeon-loading-start-${pool.id}`, String(startIndex)); } catch { /* Storage is optional. */ }
     const frame = frameRef.current!;
     const plane = planeRef.current!;
-    const flow = [2, 1, 0, 6, 5, 4, 3];
+    const flow = desktop
+      ? [5, 4, 3, 2, 1, 0, 12, 11, 10, 9, 8, 7, 6]
+      : [2, 1, 0, 6, 5, 4, 3];
     const lanes = flow.map(() => document.createElement("div"));
     lanes.forEach(lane => { lane.className = "aeon-loading-lane"; plane.appendChild(lane); });
     let disposed = false;
@@ -93,7 +103,9 @@ export function AeonLoadingScreen(props: Props) {
     let coverPaint = 0;
     let loaded = 0;
     const orderedPicks = loadingCoverOrder(pool.picks, startIndex);
-    const sequence = [...orderedPicks, ...orderedPicks];
+    const sequence = desktop
+      ? [...orderedPicks, ...orderedPicks, ...orderedPicks, ...orderedPicks]
+      : [...orderedPicks, ...orderedPicks];
     const cards = sequence.map(pick => {
       const tile = document.createElement("div");
       tile.className = "aeon-loading-cover";
@@ -176,14 +188,15 @@ export function AeonLoadingScreen(props: Props) {
       }
     };
     const layout = () => {
-      const tilt = 20 * Math.PI / 180;
+      const tilt = (desktop ? 18 : 20) * Math.PI / 180;
       const angle = -9 * Math.PI / 180;
+      const perspective = desktop ? 2200 : 1400;
       let halfWidth = 0;
       let halfHeight = 0;
       for (const x of [-frame.clientWidth / 2, frame.clientWidth / 2]) {
         for (const y of [-frame.clientHeight / 2, frame.clientHeight / 2]) {
-          const v = y / (Math.cos(tilt) + y * Math.sin(tilt) / 1400);
-          const u = x * (1 - v * Math.sin(tilt) / 1400);
+          const v = y / (Math.cos(tilt) + y * Math.sin(tilt) / perspective);
+          const u = x * (1 - v * Math.sin(tilt) / perspective);
           halfWidth = Math.max(halfWidth, Math.abs(Math.cos(angle) * u + Math.sin(angle) * v));
           halfHeight = Math.max(halfHeight, Math.abs(-Math.sin(angle) * u + Math.cos(angle) * v));
         }
@@ -234,10 +247,10 @@ export function AeonLoadingScreen(props: Props) {
       plane.parentElement?.style.removeProperty("filter");
       plane.replaceChildren();
     };
-  }, [pool, startIndex]);
+  }, [pool, startIndex, desktop]);
 
   return (
-    <div ref={frameRef} className="aeon-loading-screen" data-cover-feed={pool.id} data-start-rank={pool.picks[startIndex].feedRank}>
+    <div ref={frameRef} className="aeon-loading-screen" data-cover-feed={pool.id} data-cover-layout={desktop ? "desktop" : "mobile"} data-start-rank={pool.picks[startIndex].feedRank}>
       <div className="aeon-loading-background" aria-hidden="true" onTransitionEnd={event => {
         if (event.propertyName === "filter" && frameRef.current?.classList.contains("covers-ready")) event.currentTarget.style.filter = "none";
       }}><div ref={planeRef} className="aeon-loading-plane" /></div>

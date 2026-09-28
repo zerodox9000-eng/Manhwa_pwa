@@ -2,6 +2,7 @@
 .aeon-loading-background{position:absolute;inset:-12px;overflow:hidden;filter:blur(12px);transition:filter .9s ease}
 .covers-ready .aeon-loading-background{filter:blur(0)}
 .aeon-loading-plane{position:absolute;left:50%;top:50%;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;transform:translate(-50%,-50%) perspective(1400px) rotateX(20deg) rotateZ(-9deg);transform-origin:center}
+.aeon-loading-screen[data-cover-layout="desktop"] .aeon-loading-plane{grid-template-columns:repeat(13,minmax(0,1fr));transform:translate(-50%,-50%) perspective(2200px) rotateX(18deg) rotateZ(-9deg)}
 .aeon-loading-lane{position:relative;min-width:0;overflow:visible;will-change:transform}
 .aeon-loading-cover{position:absolute;top:0;left:1px;width:calc(100% - 2px);aspect-ratio:.72;overflow:hidden;border:1px solid rgba(255,255,255,.12);border-radius:3px;opacity:0;box-shadow:0 2px 5px rgba(0,0,0,.2)}
 .aeon-loading-cover.has-cover{opacity:1}
