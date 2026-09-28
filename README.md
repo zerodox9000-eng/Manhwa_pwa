@@ -13,7 +13,7 @@
 <p align="center"><strong>App link:</strong> <a href="https://zerodox9000-eng.github.io/Manhwa_pwa/">https://zerodox9000-eng.github.io/Manhwa_pwa/</a></p>
 
 <p align="center">
-  <img src="./docs/assets/aeon-home.jpg" width="360" alt="Aeon Home showing a focused manhwa feed">
+  <img src="./docs/assets/aeon-home.jpg" width="360" alt="Aeon Home showing the Discover Top 1% feed">
 </p>
 
 <p align="center">Browse rule-based feeds, personal collections, and title details from one local catalogue.</p>
