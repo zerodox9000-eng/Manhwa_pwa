@@ -2,6 +2,7 @@ import smutSegmentJson from "./defaultSmutSegment.generated.json";
 import smutYuriYaoiSegmentJson from "./defaultSmutYuriYaoiSegment.generated.json";
 import yuriYaoiSegmentJson from "./defaultYuriYaoiSegment.generated.json";
 import type { Feed, FeedSegment } from "./types";
+import { TAG_WEIGHT_TYPES } from "./types";
 
 type SensitiveSegmentMode = "adult" | "relationship" | "combined";
 
@@ -19,6 +20,17 @@ const sensitiveSegmentSources: Array<{ mode: SensitiveSegmentMode; source: Sensi
 const sensitiveSegmentModeById = new Map(
   sensitiveSegmentSources.flatMap(({ mode, source }) => source.feedSegments.map((segment) => [segment.id, mode] as const)),
 );
+const sensitiveFeedIds = new Set(sensitiveSegmentSources.flatMap(({ source }) => source.feeds.map((feed) => feed.id)));
+
+export function isBuiltInSensitiveFeed(feed: Pick<Feed, "id">) {
+  return sensitiveFeedIds.has(feed.id);
+}
+
+export function correctBuiltInSensitiveTagWeights(feeds: Feed[]) {
+  return feeds.map((feed) => isBuiltInSensitiveFeed(feed)
+    ? { ...feed, filters: { ...feed.filters, tagWeightTypes: [...TAG_WEIGHT_TYPES] } }
+    : feed);
+}
 
 const builtInFeedNameMigrations = new Map([["0d3c8a76-188e-4cd8-b735-71c26d0b84ef", "EROTICA"]]);
 const builtInSegmentNameMigrations = new Map([["e362a18b-4a6c-42d7-85f8-f499ba2d195e", "SMUT/EROTICA"]]);

@@ -14,6 +14,7 @@ import type {
 import { TAG_WEIGHT_TYPES } from "./types";
 import defaultFeedsJson from "./defaultFeeds.generated.json";
 import { metricDefinition } from "./metrics";
+import { isBuiltInSensitiveFeed } from "./sensitiveFeedSegments";
 
 const DEFAULT_RAW_EXPORT_BASE =
   "https://raw.githubusercontent.com/zerodox9000-eng/manhwa_db/main/db/exports/frontend";
@@ -39,7 +40,8 @@ export function isNovelBasedFeed(feed: Pick<Feed, "name">) {
   return /^(?:based on )?(?:a )?(?:web )?novel$/.test(normalizedFeedName(feed.name));
 }
 
-export function defaultTagWeightTypesForBuiltInFeed(feed: Pick<Feed, "name" | "filters">): TagWeightType[] | null {
+export function defaultTagWeightTypesForBuiltInFeed(feed: Pick<Feed, "id" | "name" | "filters">): TagWeightType[] | null {
+  if (isBuiltInSensitiveFeed(feed)) return [...DEFAULT_TAG_WEIGHT_TYPES];
   if ((feed.filters.includeTagIds?.length ?? 0) === 0) return null;
   if (isNovelBasedFeed(feed) || ALL_WEIGHT_TAG_FEED_NAMES.has(normalizedFeedName(feed.name))) {
     return [...DEFAULT_TAG_WEIGHT_TYPES];

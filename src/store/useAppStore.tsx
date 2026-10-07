@@ -8,7 +8,7 @@ import { normalizeWeeklyGrowthFeed } from "../domain/feedPresets";
 import { CUSTOM_FEED_MAX_TITLES, insertCustomTitleIds, mergeReorderedVisibleIds, moveCustomTitleIds, normalizeCustomTitleIds } from "../domain/customFeeds";
 import { builtInCreatorFavouriteFeeds, builtInCreatorFavouriteSegments, mergeBuiltInCreatorFavourites, normalizeBuiltInCreatorFavouriteMetadata } from "../domain/creatorFavouritesDefaults";
 import { CURATED_DEFAULT_FEEDS_VERSION, mergeBuiltInCuratedDefaults } from "../domain/curatedFeedDefaults";
-import { builtInSensitiveFeeds, builtInSensitiveSegments, mergeBuiltInSensitiveDefaults, normalizeBuiltInSensitiveNames } from "../domain/sensitiveFeedSegments";
+import { builtInSensitiveFeeds, builtInSensitiveSegments, correctBuiltInSensitiveTagWeights, mergeBuiltInSensitiveDefaults, normalizeBuiltInSensitiveNames } from "../domain/sensitiveFeedSegments";
 import { parseAppStateSnapshot, parseSettings } from "../domain/validation";
 import type {
   AppSettings,
@@ -34,6 +34,8 @@ const DEFAULT_FEED_LIBRARY_VERSION_KEY = "manhwa-default-feed-library-version";
 const DEFAULT_FEED_LIBRARY_VERSION = "backup-4-segmented-v4";
 const SENSITIVE_FEED_SEGMENTS_VERSION_KEY = "manhwa-sensitive-feed-segments-version";
 const SENSITIVE_FEED_SEGMENTS_VERSION = "v3";
+const SENSITIVE_TAG_WEIGHT_FIX_VERSION_KEY = "manhwa-sensitive-tag-weight-fix";
+const SENSITIVE_TAG_WEIGHT_FIX_VERSION = "v1";
 const CREATOR_FAVOURITES_VERSION_KEY = "manhwa-creator-favourites-version";
 const CREATOR_FAVOURITES_VERSION = "v2";
 const CURATED_DEFAULT_FEEDS_VERSION_KEY = "manhwa-curated-default-feeds-version";
@@ -535,6 +537,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     () => hasSavedState && !replaceDefaultLikeSavedFeeds && localStorage.getItem(CREATOR_FAVOURITES_VERSION_KEY) !== CREATOR_FAVOURITES_VERSION,
     [hasSavedState, replaceDefaultLikeSavedFeeds],
   );
+  const shouldCorrectSensitiveTagWeights = useMemo(
+    () => hasSavedState && localStorage.getItem(SENSITIVE_TAG_WEIGHT_FIX_VERSION_KEY) !== SENSITIVE_TAG_WEIGHT_FIX_VERSION,
+    [hasSavedState],
+  );
   const shouldInstallCuratedDefaults = useMemo(
     () => hasSavedState && !replaceDefaultLikeSavedFeeds && localStorage.getItem(CURATED_DEFAULT_FEEDS_VERSION_KEY) !== CURATED_DEFAULT_FEEDS_VERSION,
     [hasSavedState, replaceDefaultLikeSavedFeeds],
@@ -567,7 +573,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const correctedFeeds = shouldCorrectDefaultFeedDescriptions ? correctDefaultFeedDescriptions(retiredFeedsRemoved) : retiredFeedsRemoved;
       const deepCutCorrectedFeeds = shouldCorrectDiscoverDeepCutExclusions ? correctDiscoverDeepCutExclusions(correctedFeeds) : correctedFeeds;
       const creatorCanonicalFeeds = normalizeBuiltInCreatorFavouriteMetadata(deepCutCorrectedFeeds);
-      const canonicalFeeds = normalizeBuiltInSensitiveNames(creatorCanonicalFeeds, local.feedSegments ?? []).feeds;
+      const sensitiveWeightCorrectedFeeds = shouldCorrectSensitiveTagWeights
+        ? correctBuiltInSensitiveTagWeights(creatorCanonicalFeeds)
+        : creatorCanonicalFeeds;
+      const canonicalFeeds = normalizeBuiltInSensitiveNames(sensitiveWeightCorrectedFeeds, local.feedSegments ?? []).feeds;
       const sensitiveMerged = shouldInstallSensitiveFeedSegments
         ? mergeBuiltInSensitiveDefaults(canonicalFeeds, local.feedSegments ?? []).feeds
         : canonicalFeeds;
@@ -582,7 +591,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         : latestListingsMerged;
       return curatedMerged.map((feed) => normalizeFeed(feed, { preserveMetricSlots: true, preserveFeedSettings: true }));
     },
-    [hasSavedState, local.feedSegments, local.feeds, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldCorrectDiscoverDeepCutExclusions, shouldInstallCreatorFavourites, shouldInstallCuratedDefaults, shouldInstallLatestListings, shouldInstallSensitiveFeedSegments, shouldMigrateOelSourceModes, shouldRemoveLatestListings],
+    [hasSavedState, local.feedSegments, local.feeds, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldCorrectDiscoverDeepCutExclusions, shouldCorrectSensitiveTagWeights, shouldInstallCreatorFavourites, shouldInstallCuratedDefaults, shouldInstallLatestListings, shouldInstallSensitiveFeedSegments, shouldMigrateOelSourceModes, shouldRemoveLatestListings],
   );
   const shouldMigrateFeedsToThreeColumns = useMemo(
     () => localStorage.getItem(THREE_COLUMN_FEEDS_MIGRATION_KEY) !== "1",
@@ -670,7 +679,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     if (shouldMigrateOelSourceModes || !hasSavedState) {
       localStorage.setItem(OEL_SOURCE_SPLIT_VERSION_KEY, OEL_SOURCE_SPLIT_VERSION);
     }
-  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldCorrectDiscoverDeepCutExclusions, shouldInstallCreatorFavourites, shouldInstallCuratedDefaults, shouldInstallLatestListings, shouldInstallSensitiveFeedSegments, shouldMigrateFeedsToThreeColumns, shouldMigrateOelSourceModes, shouldRemoveLatestListings]);
+    if (shouldCorrectSensitiveTagWeights || !hasSavedState) {
+      localStorage.setItem(SENSITIVE_TAG_WEIGHT_FIX_VERSION_KEY, SENSITIVE_TAG_WEIGHT_FIX_VERSION);
+    }
+  }, [hasSavedState, replaceDefaultLikeSavedFeeds, shouldCorrectDefaultFeedDescriptions, shouldCorrectDiscoverDeepCutExclusions, shouldCorrectSensitiveTagWeights, shouldInstallCreatorFavourites, shouldInstallCuratedDefaults, shouldInstallLatestListings, shouldInstallSensitiveFeedSegments, shouldMigrateFeedsToThreeColumns, shouldMigrateOelSourceModes, shouldRemoveLatestListings]);
 
   useEffect(() => {
     void (async () => {

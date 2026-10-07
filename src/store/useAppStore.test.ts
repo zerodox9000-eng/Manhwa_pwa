@@ -4,6 +4,8 @@ import defaultFeedsJson from "../domain/defaultFeeds.generated.json";
 import { createFeed } from "../domain/defaults";
 import type { Feed, FeedSegment } from "../domain/types";
 import { mergeBuiltInCuratedDefaults } from "../domain/curatedFeedDefaults";
+import { builtInSensitiveFeeds, correctBuiltInSensitiveTagWeights } from "../domain/sensitiveFeedSegments";
+import { TAG_WEIGHT_TYPES } from "../domain/types";
 import { addNewFeedToUnsegmentedSegment, correctDefaultFeedDescriptions, correctDiscoverDeepCutExclusions, mergeLatestListingsDefault, migrateLegacyOelSourceMode, MY_LIST_UNSEGMENTED_FEED_SEGMENT_ID, normalizeFeed, normalizeFeedSegments, removeRetiredDefaultFeeds, UNSEGMENTED_FEED_SEGMENT_ID } from "./useAppStore";
 
 const now = "2026-07-10T00:00:00.000Z";
@@ -99,6 +101,38 @@ describe("normalizeFeed", () => {
     const normalized = normalizeFeed(genderBender!);
 
     expect(normalized.filters.tagWeightTypes).toEqual(["core", "defining"]);
+  });
+
+  it("defaults every hidden sensitive built-in feed to all five weights, even after a rename", () => {
+    const feeds = builtInSensitiveFeeds();
+    expect(feeds).toHaveLength(8);
+    for (const feed of feeds) {
+      expect(normalizeFeed(feed).filters.tagWeightTypes).toEqual(TAG_WEIGHT_TYPES);
+      expect(normalizeFeed({ ...feed, name: "Renamed" }).filters.tagWeightTypes).toEqual(TAG_WEIGHT_TYPES);
+    }
+  });
+
+  it("repairs saved sensitive weights without touching any other feed fields or custom copies", () => {
+    const sensitiveFeeds = builtInSensitiveFeeds().map((feed) => normalizeFeed({
+      ...feed,
+      filters: { ...feed.filters, tagWeightTypes: ["core", "defining"] },
+    }));
+    const normalFeed = normalizeFeed((defaultFeedsJson as unknown as Feed[]).find((feed) => feed.name.trim() === "GENDER BENDER")!);
+    const customCopy = { ...sensitiveFeeds[0], id: "user-copy" };
+    const customList = { ...createFeed("MY LIST"), kind: "custom" as const, titleIds: [123, 456] };
+    const repaired = correctBuiltInSensitiveTagWeights([...sensitiveFeeds, normalFeed, customCopy, customList]);
+
+    sensitiveFeeds.forEach((feed, index) => {
+      expect(repaired[index]).toEqual({ ...feed, filters: { ...feed.filters, tagWeightTypes: [...TAG_WEIGHT_TYPES] } });
+      expect(normalizeFeed(repaired[index]).filters.tagWeightTypes).toEqual(TAG_WEIGHT_TYPES);
+    });
+    expect(repaired.slice(8)).toEqual([normalFeed, customCopy, customList]);
+    expect(repaired[8]).toBe(normalFeed);
+    expect(repaired[9]).toBe(customCopy);
+    expect(repaired[10]).toBe(customList);
+
+    const laterChoice = { ...repaired[0], filters: { ...repaired[0].filters, tagWeightTypes: ["recurrent" as const] } };
+    expect(normalizeFeed(laterChoice).filters.tagWeightTypes).toEqual(["recurrent"]);
   });
 
   it("leaves Novel Based feeds unfiltered by weight and keeps the named broad tag feeds fully enabled", () => {
