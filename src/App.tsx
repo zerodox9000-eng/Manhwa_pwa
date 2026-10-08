@@ -1774,7 +1774,6 @@ function CustomFeedReorderGrid({ feed, items, onDone }: { feed: Feed; items: Ser
   const [dragStartPoint, setDragStartPoint] = useState({ x: 0, y: 0 });
   const ghostRef = useRef<HTMLDivElement | null>(null);
   const draggingIdRef = useRef<number | null>(null);
-  const overIdRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
   const hoverTimerRef = useRef<number | null>(null);
   const hoverTargetIdRef = useRef<number | null>(null);
@@ -1829,22 +1828,22 @@ function CustomFeedReorderGrid({ feed, items, onDone }: { feed: Feed; items: Ser
 
   const finishDrag = useCallback(() => {
     const fromId = draggingIdRef.current;
-    const toId = overIdRef.current;
     clearHoverTimer();
     if (fromId != null) {
-      const next = toId != null ? moveDraggedId(orderedIdsRef.current, fromId, toId) : orderedIdsRef.current;
+      // The source placeholder already occupies the previewed slot. Do not
+      // move it a second time relative to a card displaced by that preview.
+      const next = orderedIdsRef.current;
       orderedIdsRef.current = next;
       setOrderedIds(next);
       store.reorderCustomFeedTitles(feed.id, next);
     }
     document.querySelectorAll(".custom-reorder-card.drag-over").forEach((element) => element.classList.remove("drag-over"));
     draggingIdRef.current = null;
-    overIdRef.current = null;
     hoverTargetIdRef.current = null;
     activePointerIdRef.current = null;
     setDragItem(null);
     stopAutoScroll();
-  }, [clearHoverTimer, feed.id, moveDraggedId, stopAutoScroll, store]);
+  }, [clearHoverTimer, feed.id, stopAutoScroll, store]);
 
   const moveDrag = useCallback((clientX: number, clientY: number) => {
     if (draggingIdRef.current == null) return;
@@ -1866,23 +1865,29 @@ function CustomFeedReorderGrid({ feed, items, onDone }: { feed: Feed; items: Ser
       document.querySelectorAll(".custom-reorder-card.drag-over").forEach((element) => element.classList.remove("drag-over"));
       return;
     }
-    const target = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>("[data-reorder-id]");
-    const targetId = Number(target?.dataset.reorderId);
-    if (!Number.isSafeInteger(targetId)) return;
+    // Resolve the whole grid cell, not a cover/handle child that may overlap
+    // another row or disappear when the source becomes a placeholder.
+    const target = Array.from(grid?.querySelectorAll<HTMLElement>("[data-reorder-id]") ?? []).find((card) => {
+      const rect = card.getBoundingClientRect();
+      return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+    });
+    const targetId = target ? Number(target.dataset.reorderId) : NaN;
+    if (!Number.isSafeInteger(targetId) || targetId === draggingIdRef.current) {
+      clearHoverTimer();
+      hoverTargetIdRef.current = null;
+      return;
+    }
     document.querySelectorAll(".custom-reorder-card.drag-over").forEach((element) => element.classList.remove("drag-over"));
     target?.classList.add("drag-over");
-    overIdRef.current = targetId;
     if (hoverTargetIdRef.current === targetId) return;
     hoverTargetIdRef.current = targetId;
     clearHoverTimer();
     hoverTimerRef.current = window.setTimeout(() => {
       const draggedId = draggingIdRef.current;
       if (draggedId == null) return;
-      setOrderedIds((current) => {
-        const next = moveDraggedId(current, draggedId, targetId);
-        orderedIdsRef.current = next;
-        return next;
-      });
+      const next = moveDraggedId(orderedIdsRef.current, draggedId, targetId);
+      orderedIdsRef.current = next;
+      setOrderedIds(next);
       hoverTimerRef.current = null;
     }, 420);
   }, [clearHoverTimer, feed.id, moveDraggedId, updateAutoScroll]);
@@ -1919,7 +1924,6 @@ function CustomFeedReorderGrid({ feed, items, onDone }: { feed: Feed; items: Ser
             event.preventDefault();
             activePointerIdRef.current = event.pointerId;
             draggingIdRef.current = series.id;
-            overIdRef.current = series.id;
             setDragStartPoint({ x: event.clientX + 12, y: event.clientY + 12 });
             setDragItem(series);
             updateAutoScroll(event.clientY);
