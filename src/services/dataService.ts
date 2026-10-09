@@ -7,7 +7,7 @@ import { parseCatalogList, parseDetail, parseHistory, parseTags } from "../domai
 import { decodeJsonBytes, fetchChunkedFrontendData, parseFrontendDataManifest } from "./chunkedData";
 
 // Bump only when stored catalogue records need a one-time repair after a frontend rule change.
-export const CATALOG_NORMALIZATION_VERSION = 5;
+export const CATALOG_NORMALIZATION_VERSION = 6;
 const TAG_WEIGHT_EXPORT_PATH = "meta/mangabaka-tag-weights.safe-suggestive-anilist.json";
 const UPDATES_SNAPSHOT_META_KEY = "updates-snapshot";
 const UPDATES_SNAPSHOT_MAX_AGE_MS = 48 * 60 * 60 * 1_000;

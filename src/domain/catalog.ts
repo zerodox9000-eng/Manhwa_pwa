@@ -115,7 +115,11 @@ function sourceKeys(item: SeriesCatalog) {
 }
 
 export function catalogMergeKeys(item: SeriesCatalog) {
-  const keys = sourceKeys(item);
+  // MangaBaka maps these distinct Tong parts to one MangaUpdates series.
+  // Ignore only that conflicting key; retain every other duplicate rule.
+  const keys = sourceKeys(item).filter((key) => !(
+    [26236, 26982, 26983].includes(item.id) && key === "mangaupdates:asi3nb4"
+  ));
   // A cover is only a safe duplicate key when there is no stronger source
   // identity. Different MangaBaka titles often reuse the same cover image.
   const cover = normalizedCover(item.cover);

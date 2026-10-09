@@ -35,6 +35,31 @@ const history: HistoryMap = {
 };
 
 describe("catalog normalization", () => {
+  it("keeps the three Tong parts and their histories separate despite the shared MangaUpdates mapping", () => {
+    const parts = [26236, 26982, 26983].map((id, index) => ({
+      ...base,
+      id,
+      source: { anilist: { id: [97680, 101837, 101838][index] }, mangaupdates: { id: "asi3nb4" } },
+      stats: { ...base.stats, popularity: [717, 304, 283][index] },
+    }));
+    const partHistory: HistoryMap = Object.fromEntries(parts.map((part) => [String(part.id), [
+      { ...history["1"][0], p: part.stats.popularity! },
+    ]]));
+    const result = normalizeCatalog(parts, partHistory);
+    expect(result.catalog.map((part) => part.id)).toEqual([26236, 26982, 26983]);
+    for (const part of parts) {
+      expect(result.history[String(part.id)]).toEqual(partHistory[String(part.id)]);
+      expect(result.catalog.find((item) => item.id === part.id)?.source?.anilist?.id).toBe(part.source.anilist.id);
+    }
+  });
+
+  it("still merges ordinary MangaUpdates duplicates and same-AniList Tong duplicates", () => {
+    const source = { mangaupdates: { id: "ordinary" } };
+    expect(normalizeCatalog([{ ...base, id: 50, source }, { ...base, id: 51, source }], {}).catalog).toHaveLength(1);
+    const tongSource = { anilist: { id: 97680 }, mangaupdates: { id: "asi3nb4" } };
+    expect(normalizeCatalog([{ ...base, id: 26236, source: tongSource }, { ...base, id: 52, source: tongSource }], {}).catalog).toHaveLength(1);
+  });
+
   it("prefers current catalogue fields over cached detail fields", () => {
     const cachedDetail: SeriesDetail = {
       ...base,
