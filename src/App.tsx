@@ -2509,12 +2509,8 @@ function TitleMetrics({
   useLayoutEffect(() => {
     const container = metricsRef.current;
     if (!compact || !container) return;
-    const poster = container.closest<HTMLElement>(".poster-shell");
     let frame = 0;
     const fit = () => {
-      // Reading off-screen text sizes would force a skipped cover to render.
-      if (container.closest(".route-cache-hidden")) return;
-      if (poster?.checkVisibility && !poster.checkVisibility({ contentVisibilityAuto: true, visibilityProperty: true })) return;
       const contents = container.querySelectorAll<HTMLElement>(".compact-metric-content");
       contents.forEach((content) => content.style.removeProperty("font-size"));
       const availableWidth = container.clientWidth;
@@ -2532,12 +2528,10 @@ function TitleMetrics({
     };
     fit();
     const resizeObserver = new ResizeObserver(scheduleFit);
-    resizeObserver.observe(poster ?? container);
-    poster?.addEventListener("contentvisibilityautostatechange", scheduleFit);
+    resizeObserver.observe(container.closest(".poster-shell") ?? container);
     return () => {
       window.cancelAnimationFrame(frame);
       resizeObserver.disconnect();
-      poster?.removeEventListener("contentvisibilityautostatechange", scheduleFit);
     };
   }, [compact, values, view.gridColumns]);
   if (metricSlots.length === 0) return null;
