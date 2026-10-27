@@ -4210,6 +4210,21 @@ textarea,
   overflow: hidden;
 }
 
+@supports (content-visibility: auto) {
+  @media (max-width: 1179px), (max-height: 649px) {
+    /* Reserve the exact cover geometry, including at a deep restored position.
+       Titles and grid rows retain their normal sizes when covers are skipped. */
+    .feed-pager .title-grid .poster-shell {
+      aspect-ratio: 0.72;
+      content-visibility: auto;
+    }
+
+    .route-cache-hidden {
+      content-visibility: hidden;
+    }
+  }
+}
+
 .feed-pager .title-grid .title-card-wrap {
   content-visibility: visible !important;
   contain-intrinsic-size: auto;
