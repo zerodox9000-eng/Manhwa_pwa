@@ -498,7 +498,9 @@ function formatStatusLabel(value: string | null | undefined) {
 function faviconForUrl(href: string) {
   try {
     const url = new URL(href);
-    return `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=32`;
+    const hostname = url.hostname.toLowerCase();
+    const faviconDomain = hostname === "global.toomics.com" ? "toomics.com" : hostname;
+    return `https://www.google.com/s2/favicons?domain=${faviconDomain}&sz=32`;
   } catch {
     return "";
   }

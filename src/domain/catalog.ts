@@ -212,6 +212,10 @@ function readingLinkKey(value: string, caseInsensitiveOtherLinks = false) {
     const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
     const webtoonId = hostname === "webtoons.com" ? url.searchParams.get("title_no") : null;
     if (webtoonId) return `webtoons:${webtoonId}`;
+    const isToomics = hostname === "toomics.com" || hostname.endsWith(".toomics.com")
+      || hostname === "toomics.net" || hostname.endsWith(".toomics.net");
+    const toomicsId = isToomics ? url.pathname.match(/\/toon\/(\d+)(?:\/|$)/)?.[1] : null;
+    if (toomicsId) return `toomics:${toomicsId}`;
   } catch {
     // Keep malformed or non-URL values distinct by their original text.
   }
@@ -229,6 +233,28 @@ function isEnglishWebtoonLink(value: string) {
   }
 }
 
+function toomicsRoute(value: string) {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    const isToomics = hostname === "toomics.com" || hostname.endsWith(".toomics.com")
+      || hostname === "toomics.net" || hostname.endsWith(".toomics.net");
+    if (!isToomics) return null;
+    const firstPathSegment = url.pathname.split("/").filter(Boolean)[0]?.toLowerCase() ?? "";
+    return {
+      isEnglish: firstPathSegment === "en" || firstPathSegment === "webtoon",
+      preference: (firstPathSegment === "en" ? 2 : 0) + (hostname === "global.toomics.com" ? 1 : 0),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readingLinkPreference(value: string) {
+  if (isEnglishWebtoonLink(value)) return 10;
+  return toomicsRoute(value)?.preference ?? 0;
+}
+
 export function uniqueReadingLinks(values: unknown[], caseInsensitiveOtherLinks = false) {
   const links: string[] = [];
   const indexByKey = new Map<string, number>();
@@ -236,14 +262,15 @@ export function uniqueReadingLinks(values: unknown[], caseInsensitiveOtherLinks 
     if (typeof value !== "string") continue;
     const link = value.trim();
     if (!link) continue;
+    const toomics = toomicsRoute(link);
+    if (toomics && !toomics.isEnglish) continue;
     const key = readingLinkKey(link, caseInsensitiveOtherLinks);
     const existingIndex = indexByKey.get(key);
     if (existingIndex == null) {
       indexByKey.set(key, links.length);
       links.push(link);
-    } else if (isEnglishWebtoonLink(link) && !isEnglishWebtoonLink(links[existingIndex])) {
-      // Old cached WEBTOON routes redirect to the localized route for the same
-      // title_no. Keep the current English route instead of displaying both.
+    } else if (readingLinkPreference(link) > readingLinkPreference(links[existingIndex])) {
+      // Keep the current English route for aliases with the same external ID.
       links[existingIndex] = link;
     }
   }
@@ -273,7 +300,8 @@ export function mergeCatalogLinks(
     typeof fallback?.read_en === "string" ? fallback.read_en : null,
   ) ?? readLinks[0] ?? null;
   const selectedReadLink = selectedReadCandidate
-    ? readLinks.find((link) => readingLinkKey(link, true) === readingLinkKey(selectedReadCandidate, true)) ?? selectedReadCandidate
+    ? readLinks.find((link) => readingLinkKey(link, true) === readingLinkKey(selectedReadCandidate, true))
+      ?? (toomicsRoute(selectedReadCandidate)?.isEnglish === false ? readLinks[0] ?? null : selectedReadCandidate)
     : null;
   const mangabaka = nonBlank(
     typeof primary?.mangabaka === "string" ? primary.mangabaka : null,
