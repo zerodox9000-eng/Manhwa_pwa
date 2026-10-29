@@ -161,20 +161,6 @@ function firstValue<T>(primary: T | null | undefined, fallback: T | null | undef
   return primary ?? fallback ?? null;
 }
 
-function uniqueStrings(values: unknown[]) {
-  const seen = new Set<string>();
-  const result: string[] = [];
-  for (const value of values) {
-    if (typeof value !== "string") continue;
-    const text = value.trim();
-    const key = text.toLocaleLowerCase();
-    if (!text || seen.has(key)) continue;
-    seen.add(key);
-    result.push(text);
-  }
-  return result;
-}
-
 function objectValue(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
@@ -220,6 +206,50 @@ function stringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+function readingLinkKey(value: string, caseInsensitiveOtherLinks = false) {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+    const webtoonId = hostname === "webtoons.com" ? url.searchParams.get("title_no") : null;
+    if (webtoonId) return `webtoons:${webtoonId}`;
+  } catch {
+    // Keep malformed or non-URL values distinct by their original text.
+  }
+  const trimmed = value.trim();
+  return caseInsensitiveOtherLinks ? trimmed.toLocaleLowerCase() : trimmed;
+}
+
+function isEnglishWebtoonLink(value: string) {
+  try {
+    const url = new URL(value);
+    return url.hostname.toLowerCase().replace(/^www\./, "") === "webtoons.com"
+      && url.pathname.split("/").filter(Boolean)[0]?.toLowerCase() === "en";
+  } catch {
+    return false;
+  }
+}
+
+export function uniqueReadingLinks(values: unknown[], caseInsensitiveOtherLinks = false) {
+  const links: string[] = [];
+  const indexByKey = new Map<string, number>();
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    const link = value.trim();
+    if (!link) continue;
+    const key = readingLinkKey(link, caseInsensitiveOtherLinks);
+    const existingIndex = indexByKey.get(key);
+    if (existingIndex == null) {
+      indexByKey.set(key, links.length);
+      links.push(link);
+    } else if (isEnglishWebtoonLink(link) && !isEnglishWebtoonLink(links[existingIndex])) {
+      // Old cached WEBTOON routes redirect to the localized route for the same
+      // title_no. Keep the current English route instead of displaying both.
+      links[existingIndex] = link;
+    }
+  }
+  return links;
+}
+
 export function mergeCatalogLinks(
   left: SeriesCatalog["links"],
   right: SeriesCatalog["links"],
@@ -231,17 +261,20 @@ export function mergeCatalogLinks(
   if (!leftObject && !rightObject) return undefined;
   const primary = preferRight ? rightObject : leftObject;
   const fallback = preferRight ? leftObject : rightObject;
-  const readLinks = uniqueStrings([
+  const readLinks = uniqueReadingLinks([
     ...stringArray(fallback?.read_en_all),
     fallback?.read_en,
     ...stringArray(primary?.read_en_all),
     primary?.read_en,
-  ]);
-  const selectedReadLink = nonBlank(
+  ], true);
+  const selectedReadCandidate = nonBlank(
     typeof primary?.read_en === "string" ? primary.read_en : null,
   ) ?? nonBlank(
     typeof fallback?.read_en === "string" ? fallback.read_en : null,
   ) ?? readLinks[0] ?? null;
+  const selectedReadLink = selectedReadCandidate
+    ? readLinks.find((link) => readingLinkKey(link, true) === readingLinkKey(selectedReadCandidate, true)) ?? selectedReadCandidate
+    : null;
   const mangabaka = nonBlank(
     typeof primary?.mangabaka === "string" ? primary.mangabaka : null,
   ) ?? nonBlank(
@@ -252,7 +285,7 @@ export function mergeCatalogLinks(
     ...(primary ?? {}),
     mangabaka: mangabaka && canonicalId != null ? `https://mangabaka.org/${canonicalId}` : mangabaka,
     read_en: selectedReadLink,
-    read_en_all: uniqueStrings([...readLinks, selectedReadLink]),
+    read_en_all: uniqueReadingLinks([...readLinks, selectedReadLink], true),
     official_en: nonBlank(
       typeof primary?.official_en === "string" ? primary.official_en : null,
     ) ?? nonBlank(

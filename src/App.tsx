@@ -85,7 +85,7 @@ import { isBuiltInSensitiveSegmentVisible } from "./domain/sensitiveFeedSegments
 import { resolveRollingWindow, WEEKLY_GROWTH_WINDOW } from "./domain/dates";
 import { buildSensitiveTagGroups, feedUsesAniListOnlyParameters, isGenreTag, isSearchVisible, runFeedQuery, sensitiveTagIdsForSearch, tagRoot, toggleFeedSourceModeForEditor } from "./domain/query";
 import { matchesSearchTextWords, rankedDirectSearchMatches, searchTextWordPosition, searchWords, seriesSearchText } from "./domain/search";
-import { mergeDetailWithCatalog } from "./domain/catalog";
+import { mergeDetailWithCatalog, uniqueReadingLinks } from "./domain/catalog";
 import { formatMetricValue, historyDeltaForWindow, isGrowthMetric, METRIC_DEFINITIONS, metricDefinition } from "./domain/metrics";
 import { rankRecommendations } from "./domain/recommendations";
 import { resolveVisibleTitle } from "./domain/displayTitle";
@@ -5882,11 +5882,11 @@ function DetailLinks({ series }: { series: SeriesCatalog }) {
     ["MangaUpdates", series.source?.mangaupdates?.url],
     ["Anime-Planet", series.source?.animeplanet?.url],
   ].filter(([, href]) => Boolean(href)) as [string, string][];
-  const officialEnglishUrls = [...new Set([
+  const officialEnglishUrls = uniqueReadingLinks([
     ...(series.links?.read_en_all ?? []),
     series.links?.read_en,
     series.links?.official_en,
-  ].filter((href): href is string => Boolean(href?.trim())))];
+  ]);
   const links = [
     ...sourceLinks,
     ...officialEnglishUrls.map((href) => [`Read on ${readingPlatformName(href)}`, href] as [string, string]),
